@@ -11,7 +11,7 @@ import OpenAI from 'openai';
 import { config } from '../../archive.config.js';
 import { answerQuestion } from '../answer.js';
 import { batchInputs, embedBatch } from '../embedding.js';
-import { judgeAnswerMode, judgeRetrieval, loadGold } from '../evaluate.js';
+import { judgeAnswer, judgeRetrieval, loadGold } from '../evaluate.js';
 import { assembleEvidence } from '../no-leak.js';
 import { retrieve } from '../retrieve.js';
 import { assertHomogeneousIndex, readIndexFile } from '../store.js';
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
           hits.notes.map((h) => h.note),
         );
         const answer = await answerQuestion(client, g.query, evidence, config);
-        issues.push(...judgeAnswerMode(g, answer.mode).issues);
+        issues.push(...judgeAnswer(g, answer).issues);
       } catch (err) {
         issues.push(`answer engine threw: ${err instanceof Error ? err.message : err}`);
       }

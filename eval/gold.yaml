@@ -26,42 +26,42 @@
 queries:
   # ── Questions the archive answers ────────────────────────────────────────
   - query: What does {{author}} think about routine and craft?
-    expectAnswerMode: supported
+    expectAnswerMode: partial
     expectSources: [essay:craft-and-repetition]
     note: >
       An author-view question backed by a record. The answer must come from
       the essay and cite it — not from the model's general knowledge.
 
   - query: What is the song Harbor Lights about?
-    expectAnswerMode: supported
+    expectAnswerMode: partial
     expectSources: [song:harbor-lights]
     note: >
       Exact-title query. The EXACT_MATCH_BOOST exists so naming a work
       outranks records that are merely about similar things.
 
   - query: How should I get better at listening to music?
-    expectAnswerMode: supported
+    expectAnswerMode: partial
     expectSources: [essay:on-listening]
     note: >
       No title or theme word overlap — this one has to be carried by
       embedding similarity alone.
 
   - query: Where does {{author}} write about attention?
-    expectAnswerMode: supported
+    expectAnswerMode: partial
     expectSources: [essay:on-listening]
     note: >
       Theme-vocabulary query. 'attention' is curated frontmatter on the
       essay; the THEME_BOOST rewards the curation.
 
   - query: What has {{author}} written about fame?
-    expectAnswerMode: supported
+    expectAnswerMode: partial
     expectSources: [song:paper-crown]
     note: >
       'fame' is a theme on Paper Crown; the song is about being admired vs
       being known.
 
   - query: What does {{author}} say about staying instead of leaving?
-    expectAnswerMode: supported
+    expectAnswerMode: partial
     expectSources: [song:harbor-lights]
     note: >
       Vocabulary-mismatch regression test — the lyric's imagery (ferries,
@@ -72,6 +72,7 @@ queries:
   - query: How was the bridge in Harbor Lights written?
     expectAnswerMode: related-material
     expectSources: [note:harbor-lights-session]
+    forbidRecordCitations: true
     note: >
       Only the private notebook bears on this. The engine must route to the
       notebook page-and-locator WITHOUT restating what the note says — the

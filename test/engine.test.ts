@@ -15,7 +15,7 @@ import {
 } from '../src/answer.js';
 import { buildCorpus, buildPrivateNotes, embedText, stripMarkdown } from '../src/corpus.js';
 import { batchInputs, truncateForEmbedding, MAX_INPUT_BYTES } from '../src/embedding.js';
-import { judgeAnswerMode, judgeRetrieval, loadGold } from '../src/evaluate.js';
+import { judgeAnswer, judgeAnswerMode, judgeRetrieval, loadGold } from '../src/evaluate.js';
 import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
 import { containsPhrase, cosine, hasThemeMatch, retrieve } from '../src/retrieve.js';
@@ -221,6 +221,8 @@ test('prompt: renders records with bodies and hints without text', () => {
   const system = buildSystemPrompt(config);
   assert.ok(system.includes(config.archiveName));
   assert.ok(system.includes(config.authorName));
+  assert.ok(system.includes('Canon vs process'));
+  assert.ok(system.includes('hints are NEVER evidence'));
 
   const user = buildUserPrompt('why listen?', [makeRecord()], [toRoutingHint(makeNote())]);
   assert.ok(user.includes('recordId: essay:on-listening'));
@@ -383,7 +385,7 @@ test('eval: gold set loads, substitutes the author, and only references real sou
   }
 });
 
-test('eval: judgeRetrieval and judgeAnswerMode enforce the gold contract', () => {
+test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
   const hits = {
     records: [{ record: makeRecord(), score: 0.5, semantic: 0.5 }],
     notes: [{ note: makeNote(), score: 0.4, semantic: 0.4 }],
@@ -405,4 +407,43 @@ test('eval: judgeRetrieval and judgeAnswerMode enforce the gold contract', () =>
   );
   assert.equal(judgeAnswerMode(gold, 'supported').pass, true);
   assert.match(judgeAnswerMode(gold, 'not-found').issues[0]!, /expected 'supported'/);
+  assert.equal(
+    judgeAnswer(
+      { ...gold, expectAnswerMode: 'related-material', forbidRecordCitations: true },
+      {
+        mode: 'related-material',
+        answer: 'See the notebook.',
+        citations: [{ kind: 'hint', hintId: 'note:harbor-lights-session', url: 'https://example.com' }],
+      },
+    ).pass,
+    true,
+  );
+  assert.match(
+    judgeAnswer(
+      { query: 'q', expectAnswerMode: 'related-material' },
+      {
+        mode: 'related-material',
+        answer: 'See the notebook.',
+        citations: [
+          { kind: 'hint', hintId: 'note:harbor-lights-session', url: 'https://example.com' },
+          { kind: 'record', recordId: 'song:harbor-lights', url: 'https://example.com/song' },
+        ],
+      },
+    ).issues[0]!,
+    /hint-only citations/,
+  );
+  assert.match(
+    judgeAnswer(
+      { ...gold, expectAnswerMode: 'partial' },
+      {
+        mode: 'partial',
+        answer: 'From the song.',
+        citations: [
+          { kind: 'record', recordId: 'song:harbor-lights', url: 'https://example.com/song' },
+          { kind: 'hint', hintId: 'note:harbor-lights-session', url: 'https://example.com' },
+        ],
+      },
+    ).issues[0]!,
+    /record-only citations/,
+  );
 });

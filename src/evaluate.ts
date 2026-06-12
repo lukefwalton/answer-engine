@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import type { RetrievalResult } from './retrieve.js';
-import type { AnswerMode } from './types.js';
+import type { AnswerMode, AnswerOutput } from './types.js';
 
 export interface GoldQuery {
   query: string;
@@ -21,6 +21,8 @@ export interface GoldQuery {
   forbidSources?: string[];
   /** The lesson this query guards; printed when it fails. */
   note?: string;
+  /** With --full: answer must not cite public records (boundary queries). */
+  forbidRecordCitations?: boolean;
 }
 
 const GOLD_MODES: ReadonlySet<string> = new Set([
@@ -54,8 +56,28 @@ export function loadGold(path: string, author = ''): GoldQuery[] {
         throw new Error(`${path}: queries[${i}].${key} must be a list of source ids`);
       }
     }
+    if (item.forbidRecordCitations !== undefined && typeof item.forbidRecordCitations !== 'boolean') {
+      throw new Error(`${path}: queries[${i}].forbidRecordCitations must be a boolean`);
+    }
     return item as GoldQuery;
   });
+}
+
+/** Answer behavior: mode match plus citation guards aligned with mode semantics. */
+export function judgeAnswer(gold: GoldQuery, answer: AnswerOutput): JudgeResult {
+  const issues = [...judgeAnswerMode(gold, answer.mode).issues];
+  const hasRecord = answer.citations.some((c) => c.kind === 'record');
+  const hasHint = answer.citations.some((c) => c.kind === 'hint');
+  if (gold.forbidRecordCitations && hasRecord) {
+    issues.push('answer must not cite public records for this query');
+  }
+  if (gold.expectAnswerMode === 'partial' && hasHint) {
+    issues.push('partial mode requires record-only citations');
+  }
+  if (gold.expectAnswerMode === 'related-material' && hasRecord) {
+    issues.push('related-material mode requires hint-only citations');
+  }
+  return { pass: issues.length === 0, issues };
 }
 
 export interface JudgeResult {

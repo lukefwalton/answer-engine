@@ -13,7 +13,7 @@ behavior:
 
 ```yaml
 - query: What does {{author}} say about staying instead of leaving?
-  expectAnswerMode: supported          # the mode the engine must return
+  expectAnswerMode: partial              # the mode the engine must return
   expectSources: [song:harbor-lights]  # what retrieval must surface
 ```
 
