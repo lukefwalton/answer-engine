@@ -41,8 +41,12 @@ The corpus has two layers, and the distinction drives everything downstream
   (`locator`). Its text gets embedded, so retrieval can find it. It is never
   shown to the model.
 
-> In production, the private layer is chunked podcast transcripts — hours of
-> guests' words that routing can point into but the engine must never quote.
+> In production ([Ask the Archive](https://lukefwalton.com/ask/)), podcast
+> transcripts are part of the public archive: published passages are **records**
+> (retrieved and cited). Unpublished transcript text may be embedded for search
+> but reaches the model only as **routing hints** — where to listen, never what
+> was said. The system must not turn transcripts into uncited private knowledge
+> or persona-voice.
 > This repo uses hand-written notebook entries to show the same boundary
 > without the transcription pipeline.
 
