@@ -23,6 +23,11 @@ install`, `npm run …`). It is not published to npm — there is no `bin`,
 `main`, or `exports`; you read the source and invoke the CLI scripts, not
 `npm install answer-engine` as a dependency.
 
+It is deliberately not a framework, hosted app, chatbot UI, or vector-database
+starter. It is the smallest useful version of the answer contract: what
+evidence may enter the prompt, what must stay out, how citations are grounded,
+and when the system must decline.
+
 **Example content:** everything under `example-content/` is synthetic fiction
 for the demo, including the first-person notebook entries — written to show
 the private-layer boundary, not real notes.
@@ -117,7 +122,7 @@ can't claim `supported` while citing nothing but hints. Finally
 (id, url) pair of something actually retrieved. An invented source is an
 error, not a footnote.
 
-One UI lesson follows from the same boundary: **retrieved is not cited**.
+One UI lesson: **retrieved is not cited**.
 Retrieved neighbors are candidates; final citations are evidence. If you build
 a web UI around this, render source cards from the final citation list, not
 from raw retrieval hits — and render none for `not-found`, even if retrieval
