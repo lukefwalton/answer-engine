@@ -205,3 +205,7 @@ contact [luke@lukefwalton.com](mailto:luke@lukefwalton.com).
 
 Provided as-is for personal use; no support, warranty, or maintenance is
 implied. It is a personal project, not written on behalf of any employer.
+
+PRs on this repo are reviewed with
+[Surmado Code Review](https://www.surmado.com/review). Luke F. Walton is
+Surmado’s founder; this is a personal open-source project, not a Surmado product.
