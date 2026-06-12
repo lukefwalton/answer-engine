@@ -3,7 +3,7 @@
 // almost-right citations onto the exact evidence and re-derive the mode from
 // the citation mix, and finally ground every citation against what retrieval
 // actually returned. The schema makes failures rare; the gates make them
-// impossible to return. Modes are enforced here, not vibes.
+// impossible to return. Modes are validated and re-derived here.
 
 import type OpenAI from 'openai';
 import { ANSWER_TEXT_FORMAT, buildSystemPrompt, buildUserPrompt } from './prompt.js';

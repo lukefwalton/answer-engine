@@ -1,6 +1,6 @@
 // The shapes that travel through the engine. The one to read slowly is
-// AnswerEvidence: RoutingHint has no field for private text, which is what
-// makes the privacy boundary a type error instead of a code-review hope.
+// AnswerEvidence: RoutingHint has no field for private text, which makes
+// the privacy boundary a compile-time constraint rather than a review note.
 
 /** One piece of the PUBLIC archive — quotable, citable, body travels. */
 export interface ArchiveRecord {
