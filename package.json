@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "An AI that says 'I don't know': site-level search over a personal archive where every claim cites its source.",
+  "description": "Teaching example: site-level search over a personal archive where every claim cites its source. Clone and run — not published to npm.",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22"
