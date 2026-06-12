@@ -1,0 +1,75 @@
+# Surmado Code Review config
+#
+# Everything in this file is optional. Unset keys use sensible defaults.
+# Comments below explain each option.
+
+# Auto-review behaviour
+# ----------------------
+
+# Review on PR open / reopen / ready-for-review.
+# Default: true
+auto_review_on_open: true
+
+# Re-review automatically on every push to an open PR.
+# Default: false. When false, reviewers comment `/rerun-review` to
+# trigger a re-review manually — this avoids burning through your
+# monthly PR quota on incremental commits.
+auto_review_on_push: true
+
+# Review draft PRs.
+# Default: false. Flip to true if your team typically wants review
+# on drafts before marking them ready.
+review_drafts: false
+
+# Which PRs to review
+# -------------------
+
+# 'all'     - review every PR
+# 'labeled' - only review PRs that carry `trigger_label` (below)
+# Default: all
+trigger_mode: all
+
+# Label that triggers review when trigger_mode is 'labeled'.
+# Default: surmado-code-review
+trigger_label: surmado-code-review
+
+# Standards doc
+# -------------
+
+# Where Scout reads your engineering standards from. Falls back to
+# `{owner}/.github/STANDARDS.md` if this file doesn't exist in the
+# repo being reviewed.
+# Default: .github/STANDARDS.md
+standards_path: .github/STANDARDS.md
+
+# Language for review comments (en, es, fr, pt, ja, it, de)
+# Default: en
+language: en
+
+# Framework documentation context
+# -------------------------------
+
+# When true, the reviewer retrieves Godot 4.6 documentation chunks
+# (from Surmado's vector index — the same one that powers the
+# games.surmado.com chatbot) based on this PR's contents and includes
+# them as reference context in the review. Helps cut down on
+# hallucinated Godot API signatures. Only useful if this repo is a
+# Godot project — leave false otherwise.
+# Default: false
+godot_rag_enabled: false
+
+# Org-level options
+# -----------------
+# Only honored when this file lives at `.github/surmado-code-review.yml`
+# in your org's `.github` repo, not per-repo.
+
+# Which repos Scout reviews:
+# 'all'      - every repo the GitHub App is installed on
+# 'selected' - only repos listed in `enabled_repos`
+# Default: all
+# repo_mode: all
+
+# Explicit repo allowlist when repo_mode: 'selected'
+# enabled_repos:
+#   - owner/repo-name
+#   - owner/another-repo
