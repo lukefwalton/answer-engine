@@ -12,6 +12,8 @@ import type { RetrievalResult } from './retrieve.js';
 import type { AnswerMode, AnswerOutput } from './types.js';
 
 export interface GoldQuery {
+  /** Stable id for targeted runs (--ids, --from-report). */
+  id: string;
   query: string;
   /** Mode the answer engine must return. Checked by `eval --full`. */
   expectAnswerMode: AnswerMode;
@@ -23,6 +25,39 @@ export interface GoldQuery {
   note?: string;
   /** With --full: answer must not cite public records (boundary queries). */
   forbidRecordCitations?: boolean;
+  /** With --full: answer prose must not match these regexes (e.g. raw URLs). */
+  forbidAnswerPatterns?: string[];
+}
+
+export interface EvalQueryResult {
+  id: string;
+  query: string;
+  pass: boolean;
+  issues: string[];
+}
+
+export interface EvalReport {
+  ranAt: string;
+  full: boolean;
+  total: number;
+  passed: number;
+  failed: number;
+  results: EvalQueryResult[];
+}
+
+export function summarizeEvalReport(
+  results: readonly EvalQueryResult[],
+  opts: { ranAt: string; full: boolean },
+): EvalReport {
+  const passed = results.filter((r) => r.pass).length;
+  return {
+    ranAt: opts.ranAt,
+    full: opts.full,
+    total: results.length,
+    passed,
+    failed: results.length - passed,
+    results: [...results],
+  };
 }
 
 const GOLD_MODES: ReadonlySet<string> = new Set([
@@ -39,8 +74,11 @@ export function loadGold(path: string, author = ''): GoldQuery[] {
   if (!parsed || !Array.isArray(parsed.queries) || parsed.queries.length === 0) {
     throw new Error(`${path} must contain a non-empty 'queries' list`);
   }
-  return parsed.queries.map((q, i): GoldQuery => {
+  const queries = parsed.queries.map((q, i): GoldQuery => {
     const item = q as Partial<GoldQuery>;
+    if (typeof item.id !== 'string' || !item.id.trim()) {
+      throw new Error(`${path}: queries[${i}] needs a non-empty id`);
+    }
     if (typeof item.query !== 'string' || !item.query.trim()) {
       throw new Error(`${path}: queries[${i}] needs a query string`);
     }
@@ -59,8 +97,22 @@ export function loadGold(path: string, author = ''): GoldQuery[] {
     if (item.forbidRecordCitations !== undefined && typeof item.forbidRecordCitations !== 'boolean') {
       throw new Error(`${path}: queries[${i}].forbidRecordCitations must be a boolean`);
     }
+    if (item.forbidAnswerPatterns !== undefined) {
+      if (
+        !Array.isArray(item.forbidAnswerPatterns) ||
+        item.forbidAnswerPatterns.some((p) => typeof p !== 'string')
+      ) {
+        throw new Error(`${path}: queries[${i}].forbidAnswerPatterns must be a list of regex strings`);
+      }
+    }
     return item as GoldQuery;
   });
+  const seen = new Set<string>();
+  for (const q of queries) {
+    if (seen.has(q.id)) throw new Error(`${path}: duplicate gold query id '${q.id}'`);
+    seen.add(q.id);
+  }
+  return queries;
 }
 
 /** Answer behavior: mode match plus citation guards aligned with mode semantics. */
@@ -76,6 +128,15 @@ export function judgeAnswer(gold: GoldQuery, answer: AnswerOutput): JudgeResult 
   }
   if (gold.expectAnswerMode === 'related-material' && hasRecord) {
     issues.push('related-material mode requires hint-only citations');
+  }
+  for (const pattern of gold.forbidAnswerPatterns ?? []) {
+    try {
+      if (new RegExp(pattern, 'i').test(answer.answer)) {
+        issues.push(`answer matched forbidden pattern /${pattern}/`);
+      }
+    } catch {
+      issues.push(`invalid forbidAnswerPatterns regex /${pattern}/`);
+    }
   }
   return { pass: issues.length === 0, issues };
 }

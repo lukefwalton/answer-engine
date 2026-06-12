@@ -379,10 +379,13 @@ test('eval: gold set loads, substitutes the author, and only references real sou
     ...buildPrivateNotes(config).map((n) => n.id),
   ]);
   for (const g of gold) {
+    assert.ok(g.id.length > 0, 'each gold query needs an id');
     for (const id of [...(g.expectSources ?? []), ...(g.forbidSources ?? [])]) {
       assert.ok(ids.has(id), `gold references unknown source '${id}'`);
     }
   }
+  const goldIds = gold.map((g) => g.id);
+  assert.equal(new Set(goldIds).size, goldIds.length, 'gold ids must be unique');
 });
 
 test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
@@ -391,6 +394,7 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
     notes: [{ note: makeNote(), score: 0.4, semantic: 0.4 }],
   };
   const gold = {
+    id: 'test',
     query: 'q',
     expectAnswerMode: 'supported' as const,
     expectSources: ['essay:on-listening', 'note:harbor-lights-session'],
@@ -420,7 +424,7 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
   );
   assert.match(
     judgeAnswer(
-      { query: 'q', expectAnswerMode: 'related-material' },
+      { id: 'test', query: 'q', expectAnswerMode: 'related-material' },
       {
         mode: 'related-material',
         answer: 'See the notebook.',
@@ -431,6 +435,22 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
       },
     ).issues[0]!,
     /hint-only citations/,
+  );
+  assert.match(
+    judgeAnswer(
+      {
+        id: 'test',
+        query: 'q',
+        expectAnswerMode: 'related-material',
+        forbidAnswerPatterns: ['https?://'],
+      },
+      {
+        mode: 'related-material',
+        answer: 'See https://example.com/lyrics/harbor-lights/',
+        citations: [{ kind: 'hint', hintId: 'note:harbor-lights-session', url: 'https://example.com' }],
+      },
+    ).issues[0]!,
+    /forbidden pattern/,
   );
   assert.match(
     judgeAnswer(

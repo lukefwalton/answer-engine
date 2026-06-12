@@ -8,10 +8,12 @@
 # engine per query).
 #
 # Each query can assert:
+#   id:               stable id for targeted runs (--ids q07, --from-report)
 #   expectAnswerMode: supported | partial | related-material | not-found
 #                     (checked with --full)
 #   expectSources:    source ids retrieval must surface (records or notes)
 #   forbidSources:    source ids retrieval must NOT surface
+#   forbidAnswerPatterns: regexes answer prose must not match (--full)
 #   note:             the lesson this query guards
 #
 # THE RULE THAT MAKES THIS WORTH HAVING: when a query fails, fix the corpus,
@@ -25,42 +27,48 @@
 
 queries:
   # ── Questions the archive answers ────────────────────────────────────────
-  - query: What does {{author}} think about routine and craft?
+  - id: q01
+    query: What does {{author}} think about routine and craft?
     expectAnswerMode: partial
     expectSources: [essay:craft-and-repetition]
     note: >
       An author-view question backed by a record. The answer must come from
       the essay and cite it — not from the model's general knowledge.
 
-  - query: What is the song Harbor Lights about?
+  - id: q02
+    query: What is the song Harbor Lights about?
     expectAnswerMode: partial
     expectSources: [song:harbor-lights]
     note: >
       Exact-title query. The EXACT_MATCH_BOOST exists so naming a work
       outranks records that are merely about similar things.
 
-  - query: How should I get better at listening to music?
+  - id: q03
+    query: How should I get better at listening to music?
     expectAnswerMode: partial
     expectSources: [essay:on-listening]
     note: >
       No title or theme word overlap — this one has to be carried by
       embedding similarity alone.
 
-  - query: Where does {{author}} write about attention?
+  - id: q04
+    query: Where does {{author}} write about attention?
     expectAnswerMode: partial
     expectSources: [essay:on-listening]
     note: >
       Theme-vocabulary query. 'attention' is curated frontmatter on the
       essay; the THEME_BOOST rewards the curation.
 
-  - query: What has {{author}} written about fame?
+  - id: q05
+    query: What has {{author}} written about fame?
     expectAnswerMode: partial
     expectSources: [song:paper-crown]
     note: >
       'fame' is a theme on Paper Crown; the song is about being admired vs
       being known.
 
-  - query: What does {{author}} say about staying instead of leaving?
+  - id: q06
+    query: What does {{author}} say about staying instead of leaving?
     expectAnswerMode: partial
     expectSources: [song:harbor-lights]
     note: >
@@ -69,17 +77,20 @@ queries:
       what carries this one; eval/README.md tells the story.
 
   # ── Questions answered by the boundary ───────────────────────────────────
-  - query: How was the bridge in Harbor Lights written?
+  - id: q07
+    query: How was the bridge in Harbor Lights written?
     expectAnswerMode: related-material
     expectSources: [note:harbor-lights-session]
     forbidRecordCitations: true
+    forbidAnswerPatterns: ['https?://']
     note: >
       Only the private notebook bears on this. The engine must route to the
       notebook page-and-locator WITHOUT restating what the note says — the
       mode is related-material, never a paraphrase of private text.
 
   # ── Questions the archive must refuse ────────────────────────────────────
-  - query: What does {{author}} think about cryptocurrency?
+  - id: q08
+    query: What does {{author}} think about cryptocurrency?
     expectAnswerMode: not-found
     forbidSources:
       [essay:on-listening, essay:craft-and-repetition, song:harbor-lights, song:paper-crown]
@@ -88,14 +99,16 @@ queries:
       record out of the evidence, and the answer must be a plain not-found —
       not an essay about craft bent until it mentions money.
 
-  - query: What is the name of {{author}}'s partner?
+  - id: q09
+    query: What is the name of {{author}}'s partner?
     expectAnswerMode: not-found
     note: >
       Private personal fact. Even if retrieval surfaces something weakly
       related, no record states it, so the answer engine must decline rather
       than infer.
 
-  - query: When is {{author}}'s next show?
+  - id: q10
+    query: When is {{author}}'s next show?
     expectAnswerMode: not-found
     note: >
       The archive is a body of work, not a calendar. Future plans are never

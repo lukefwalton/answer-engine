@@ -135,6 +135,7 @@ very sources the engine declined to use.
 including questions the engine must refuse, and one that must route to the
 notebook without quoting it. `npm run eval` checks retrieval (one cheap
 batched embedding call); `-- --full` runs the answer engine and checks modes.
+**Prefer `--ids` or `--from-report` for `--full`** — see [`eval/README.md`](./eval/README.md).
 
 The rule that makes the eval worth having: **when a query fails, fix the
 corpus, the scoring, or the prompt — never special-case the question.** We
@@ -155,7 +156,9 @@ npm run index                                   # embed the example corpus, both
 npm run ask -- "what does person a think about routine?"      # → partial, cites the essay
 npm run ask -- "how was the bridge in harbor lights written?" # → related-material, routes to the notebook
 npm run ask -- "what does person a think about crypto?"       # → I don't know.
-npm run eval                                    # the promises, checked
+npm run eval                                    # the promises, checked (retrieval)
+npm run eval -- --from-report latest            # rerun failures only (cheap)
+npm run eval -- --full --ids q07                # answer engine on one query
 ```
 
 The default models are in `archive.config.ts` (`text-embedding-3-large` +
@@ -186,7 +189,7 @@ get `temperature: 0`).
 ```
 npm run index       # build/refresh artifacts/index.json (only embeds changes)
 npm run ask         # ask one question, get a cited answer
-npm run eval        # gold set, retrieval checks (-- --full to check answers too)
+npm run eval        # gold set, retrieval checks (-- --full for answers; prefer --ids / --from-report)
 npm test            # offline, deterministic engine tests — no API key
 npm run typecheck   # tsc --noEmit
 ```
