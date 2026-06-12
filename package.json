@@ -1,0 +1,28 @@
+{
+  "name": "answer-engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "An AI that says 'I don't know': site-level search over a personal archive where every claim cites its source.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "index": "node --env-file-if-exists=.env --import tsx src/cli/build-index.ts",
+    "ask": "node --env-file-if-exists=.env --import tsx src/cli/ask.ts",
+    "eval": "node --env-file-if-exists=.env --import tsx src/cli/eval.ts",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "openai": "^6.42.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.20",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.0"
+  }
+}

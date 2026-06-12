@@ -1,0 +1,94 @@
+# Testing answerability, not accuracy trivia
+
+The gold set does not test whether the model knows things. It tests whether
+the *system* behaves: does the right evidence surface for questions the
+archive can answer, does nothing surface for questions it can't, and does the
+final answer take the honest mode for what surfaced. That property —
+**answerability** — is what the two promises rest on, and it's a property of
+the corpus, the retrieval scoring, and the prompt together. The model is the
+least interesting part.
+
+So a gold query never asserts a fact ("the answer is 1974"). It asserts
+behavior:
+
+```yaml
+- query: What does {{author}} say about staying instead of leaving?
+  expectAnswerMode: supported          # the mode the engine must return
+  expectSources: [song:harbor-lights]  # what retrieval must surface
+```
+
+and, just as important, the inverse:
+
+```yaml
+- query: What does {{author}} think about cryptocurrency?
+  expectAnswerMode: not-found
+  forbidSources: [essay:on-listening, essay:craft-and-repetition, ...]
+```
+
+`npm run eval` checks the retrieval lines (one cheap batched embedding call);
+`npm run eval -- --full` also runs the answer engine and checks modes. Either
+exits non-zero on any failure, so it can gate a deploy.
+
+## A query failing, then passing — the right way
+
+The "staying instead of leaving" query above is in the shipped gold set
+because it's the interesting kind: a **vocabulary mismatch**. Harbor Lights
+is entirely about staying when leaving would be easier, but the lyric never
+says so — it says ferries, maps, harbor lights, flags. Ask the question in
+plain words and embedding similarity has very little to grab:
+
+```
+  FAIL What does Person A say about staying instead of leaving?
+       - expected source 'song:harbor-lights' not retrieved
+```
+
+Three fixes are legitimate, and they're all *content or scoring* fixes:
+
+1. **Say what the work is about, in plain language, in frontmatter.** This is
+   the one we shipped. The song's `meaning` field reads "A song about staying
+   put when leaving would be easier" — that line is part of the embedded text
+   (`embedText` in `src/corpus.ts`), so the query now lands. The fix isn't
+   clever; it's *curation*. Frontmatter is where you translate imagery into
+   the words a reader would actually ask with.
+2. **Add a theme.** A `themes: [staying]` entry would catch the query
+   verbatim via the theme boost. Right move when one word captures it.
+3. **Tune retrieval.** If many queries fail the same way, the floor or the
+   boost weights are wrong, not the corpus. Change them once, for every
+   question, and watch the rest of the gold set for regressions.
+
+And one fix is forbidden, which is the entire reason this file exists:
+
+> **Do not special-case the question.** No `if (query.includes('staying'))`,
+> no per-query answer override, no regex that detects this gold entry and
+> forces the mode. We did this once in the production engine — a handful of
+> hardcoded patches that made specific gold queries pass. The eval went
+> green; the engine stayed wrong for every phrasing we hadn't predicted, and
+> a question we'd patched to refuse would have kept refusing even after the
+> archive gained the answer. Deleting the patches and fixing the prompt
+> passed the same queries honestly. The patches were never the engine getting
+> better — they were the eval being defeated.
+
+The asymmetry is the lesson: a corpus fix (the `meaning` line) helps every
+future question about the song's subject. A query patch helps exactly one
+string, and lies to you about it.
+
+## What a good gold set includes
+
+- **Direct hits** — title queries, theme queries, plain-language queries.
+  Each exercises a different retrieval signal; label which (see the `note`
+  fields in `gold.yaml`).
+- **Vocabulary mismatches** — questions phrased nothing like the work, like
+  the walkthrough above. These are the queries that keep your frontmatter
+  honest.
+- **Boundary queries** — questions only the private layer bears on. The
+  required mode is `related-material`: route to the moment, never restate it.
+- **Refusals** — questions the archive must decline: subjects it doesn't
+  cover, private personal facts, the future. Keep these when you replace the
+  example queries with your own; they are the half of the eval that protects
+  the second promise. The north star is the reader who trusts the engine
+  *because* it declined.
+
+When you point the engine at your own corpus, rewrite `gold.yaml` against it
+(ids are `type:slug`; `{{author}}` resolves to `authorName` from
+`archive.config.ts`). Add a query every time the engine surprises you —
+that's the regression suite writing itself.
