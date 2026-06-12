@@ -1,5 +1,9 @@
 # Answer Engine: An AI that Says "I Don't Know"
 
+A small answer engine that keeps the authorial frame outside the model:
+sources are bounded, private text cannot leak into the prompt, citations are
+grounded, and refusals are tested.
+
 This is site-level search that uses an LLM **without being a chatbot**. You
 point it at a body of work — essays, lyrics, letters, philosophy,
 documentation — and it answers one question at a time, with no conversation
@@ -13,6 +17,15 @@ Archive" on [lukefwalton.com](https://lukefwalton.com). It runs out of the
 box on a bundled example corpus (by "Person A" — a placeholder, not a
 person), it's small enough to read in one sitting, and the whole design is
 five ideas. Here they are, in the order the data flows.
+
+**What this is:** a **GitHub example repo** you clone and run locally (`npm
+install`, `npm run …`). It is not published to npm — there is no `bin`,
+`main`, or `exports`; you read the source and invoke the CLI scripts, not
+`npm install answer-engine` as a dependency.
+
+**Example content:** everything under `example-content/` is synthetic fiction
+for the demo, including the first-person notebook entries — written to show
+the private-layer boundary, not real notes.
 
 ## 1. Public records are quotable; private text is not
 
@@ -120,19 +133,19 @@ Requires Node.js 22+ and an OpenAI API key.
 
 ```sh
 npm install
-echo "OPENAI_API_KEY=sk-..." > .env
+cp .env.example .env              # add your OPENAI_API_KEY in an editor
 
 npm run index                                   # embed the example corpus, both layers
-npm run ask -- "what does person a think about routine?"      # → supported, cites the essay
+npm run ask -- "what does person a think about routine?"      # → partial, cites the essay
 npm run ask -- "how was the bridge in harbor lights written?" # → related-material, routes to the notebook
 npm run ask -- "what does person a think about crypto?"       # → I don't know.
 npm run eval                                    # the promises, checked
 ```
 
-The default models are set in `archive.config.ts`; if your key doesn't have
-access to the configured answer model, swap in any Responses-API model you do
-have — the engine adapts (reasoning models get an effort setting, others get
-`temperature: 0`).
+The default models are in `archive.config.ts` (`text-embedding-3-large` +
+`gpt-4o-mini`). Change `answerModel` to any Responses-API model your key
+supports — the engine adapts (reasoning models get an effort setting, others
+get `temperature: 0`).
 
 ## Make it yours
 
@@ -180,6 +193,10 @@ Contributions welcome — the bar for new code is the bar the repo sets for
 itself: least lines that keep the promises, boundaries enforced by types or
 runtime checks, loud failures, and no change that makes the eval pass by
 special-casing a question.
+
+That is the design principle: **answerability**. The model may write the
+sentence, but the system owns the frame it must satisfy. Evidence boundaries,
+citation validation, refusal modes, and evals stay outside the model so the answer can be checked rather than merely trusted.
 
 ## License & contact
 
