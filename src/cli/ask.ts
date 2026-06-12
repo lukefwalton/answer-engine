@@ -49,6 +49,8 @@ async function main(): Promise<void> {
   console.log(`Mode: ${answer.mode}`);
   // not-found carries an empty answer string by contract; say it plainly.
   console.log(answer.mode === 'not-found' ? "I don't know." : answer.answer);
+  // Render citations from the final answer, not from raw retrieval hits:
+  // retrieved neighbors are candidates, but citations are the evidence.
   if (answer.citations.length > 0) {
     console.log('\nCitations:');
     for (const c of answer.citations) {

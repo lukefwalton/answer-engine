@@ -117,6 +117,13 @@ can't claim `supported` while citing nothing but hints. Finally
 (id, url) pair of something actually retrieved. An invented source is an
 error, not a footnote.
 
+One UI lesson follows from the same boundary: **retrieved is not cited**.
+Retrieved neighbors are candidates; final citations are evidence. If you build
+a web UI around this, render source cards from the final citation list, not
+from raw retrieval hits — and render none for `not-found`, even if retrieval
+found nearby material. Otherwise a refusal can look like it is backed by the
+very sources the engine declined to use.
+
 ## 5. Gold queries are regression tests for answerability
 
 `eval/gold.yaml` is a fixed set of questions with required behavior —
