@@ -208,6 +208,8 @@ don't change. In production we also keep the wire contract's `not-found`
 empty and let the UI roll plain decline copy at display time, so refusals
 stay honest *and* human.
 
+Code the invariant. Document the scaling pattern. Comment the footgun.
+
 Contributions welcome — the bar for new code is the bar the repo sets for
 itself: least lines that keep the promises, boundaries enforced by types or
 runtime checks, loud failures, and no change that makes the eval pass by
@@ -215,12 +217,28 @@ special-casing a question.
 
 That is the design principle: **answerability**. The model may write the
 sentence, but the system owns the frame it must satisfy. Evidence boundaries,
-citation validation, refusal modes, and evals stay outside the model so the answer can be checked rather than merely trusted.
+citation validation, refusal modes, and evals stay outside the model so the
+answer can be checked rather than merely trusted.
+
+## Related writing
+
+This repo is a practical companion to a few essays and papers about
+answerability, authorship, and AI systems:
+
+- [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/)
+- [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/)
+- [The Invariant of Answerability](https://lukefwalton.com/writing/the-invariant-of-answerability/)
+
+The writing is licensed separately under CC BY-NC-ND 4.0. This code is
+Apache-2.0.
 
 ## License & contact
 
-Apache-2.0. Built by [Luke F. Walton](https://lukefwalton.com) —
-contact [luke@lukefwalton.com](mailto:luke@lukefwalton.com).
+Apache-2.0. Archived on Zenodo:
+[10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774).
+
+Built by [Luke F. Walton](https://lukefwalton.com) — contact
+[luke@lukefwalton.com](mailto:luke@lukefwalton.com).
 
 Provided as-is for personal use; no support, warranty, or maintenance is
 implied. It is a personal project, not written on behalf of any employer.

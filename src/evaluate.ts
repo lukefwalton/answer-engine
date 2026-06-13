@@ -39,23 +39,30 @@ export interface EvalQueryResult {
 export interface EvalReport {
   ranAt: string;
   full: boolean;
+  /** Queries selected for this run (before --fail-fast truncation). */
+  selectedTotal: number;
+  /** Queries actually executed (results.length). */
   total: number;
   passed: number;
   failed: number;
+  /** True when --fail-fast stopped the run early. */
+  aborted?: boolean;
   results: EvalQueryResult[];
 }
 
 export function summarizeEvalReport(
   results: readonly EvalQueryResult[],
-  opts: { ranAt: string; full: boolean },
+  opts: { ranAt: string; full: boolean; selectedTotal: number; aborted?: boolean },
 ): EvalReport {
   const passed = results.filter((r) => r.pass).length;
   return {
     ranAt: opts.ranAt,
     full: opts.full,
+    selectedTotal: opts.selectedTotal,
     total: results.length,
     passed,
     failed: results.length - passed,
+    ...(opts.aborted ? { aborted: true } : {}),
     results: [...results],
   };
 }
@@ -104,6 +111,15 @@ export function loadGold(path: string, author = ''): GoldQuery[] {
       ) {
         throw new Error(`${path}: queries[${i}].forbidAnswerPatterns must be a list of regex strings`);
       }
+      for (const pattern of item.forbidAnswerPatterns) {
+        try {
+          new RegExp(pattern, 'i');
+        } catch {
+          throw new Error(
+            `${path}: queries[${i}].forbidAnswerPatterns contains invalid regex /${pattern}/`,
+          );
+        }
+      }
     }
     return item as GoldQuery;
   });
@@ -130,12 +146,8 @@ export function judgeAnswer(gold: GoldQuery, answer: AnswerOutput): JudgeResult 
     issues.push('related-material mode requires hint-only citations');
   }
   for (const pattern of gold.forbidAnswerPatterns ?? []) {
-    try {
-      if (new RegExp(pattern, 'i').test(answer.answer)) {
-        issues.push(`answer matched forbidden pattern /${pattern}/`);
-      }
-    } catch {
-      issues.push(`invalid forbidAnswerPatterns regex /${pattern}/`);
+    if (new RegExp(pattern, 'i').test(answer.answer)) {
+      issues.push(`answer matched forbidden pattern /${pattern}/`);
     }
   }
   return { pass: issues.length === 0, issues };

@@ -1,9 +1,6 @@
-// Targeted eval selection — filter gold queries and load failure ids from reports.
-// Pure functions (except report IO). Prefer retrieval on a subset before --full.
+// Pure helpers for targeted eval runs — no IO. Report loading lives in src/cli/eval.ts.
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import type { EvalReport, GoldQuery } from './evaluate.js';
+import type { GoldQuery } from './evaluate.js';
 
 export interface EvalQueryFilters {
   ids?: readonly string[];
@@ -29,41 +26,15 @@ export function filterGoldQueries(
     }
   }
   if (filters.fromReportIds?.length) {
+    const missing = filters.fromReportIds.filter((id) => !queries.some((q) => q.id === id));
+    if (missing.length > 0) {
+      throw new Error(`report references unknown gold query id(s): ${missing.join(', ')}`);
+    }
     const want = new Set(filters.fromReportIds);
     out = out.filter((q) => want.has(q.id));
   }
 
   return out;
-}
-
-function isEvalReport(value: unknown): value is EvalReport {
-  if (typeof value !== 'object' || value === null) return false;
-  return Array.isArray((value as EvalReport).results);
-}
-
-export function loadFailedIdsFromReport(reportPath: string): string[] {
-  if (!existsSync(reportPath)) {
-    throw new Error(`eval report not found: ${reportPath}`);
-  }
-  const doc = JSON.parse(readFileSync(reportPath, 'utf8')) as unknown;
-  if (!isEvalReport(doc)) {
-    throw new Error(`not a valid eval report (missing results[]): ${reportPath}`);
-  }
-  return doc.results.filter((r) => !r.pass).map((r) => r.id);
-}
-
-export function resolveLatestEvalReport(evalDir: string): string {
-  if (!existsSync(evalDir)) {
-    throw new Error(`eval report directory not found: ${evalDir}`);
-  }
-  const files = readdirSync(evalDir)
-    .filter((f) => f.endsWith('.json'))
-    .map((f) => join(evalDir, f))
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-  if (files.length === 0) {
-    throw new Error(`no eval reports in ${evalDir}; run npm run eval first`);
-  }
-  return files[0]!;
 }
 
 export const EVAL_USAGE = `Usage: npm run eval [-- flags]
@@ -78,7 +49,7 @@ Target a subset (prefer this over re-running the full set):
   --from-report latest   rerun failures from the newest artifacts/eval/*.json
 
 Other flags:
-  --fail-fast            stop on first failure
+  --fail-fast            stop on first failure (report marks aborted: true)
   --report PATH          write report JSON (default: artifacts/eval/<timestamp>.json)
   --list                 print selected queries and exit (no API calls)
 

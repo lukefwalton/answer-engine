@@ -5,28 +5,52 @@
 // so you do not re-synthesize every query while fixing one failure.
 // See eval/README.md.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import OpenAI from 'openai';
 
 import { config } from '../../archive.config.js';
 import { answerQuestion } from '../answer.js';
 import { batchInputs, embedBatch } from '../embedding.js';
-import {
-  EVAL_USAGE,
-  filterGoldQueries,
-  loadFailedIdsFromReport,
-  parseQueryIdList,
-  resolveLatestEvalReport,
-} from '../eval-select.js';
+import { EVAL_USAGE, filterGoldQueries, parseQueryIdList } from '../eval-select.js';
 import { judgeAnswer, judgeRetrieval, loadGold, summarizeEvalReport } from '../evaluate.js';
-import type { EvalQueryResult } from '../evaluate.js';
+import type { EvalQueryResult, EvalReport } from '../evaluate.js';
 import { assembleEvidence } from '../no-leak.js';
 import { retrieve } from '../retrieve.js';
 import { assertHomogeneousIndex, readIndexFile } from '../store.js';
 
 const GOLD_PATH = resolve('eval/gold.yaml');
 const EVAL_REPORT_DIR = resolve('artifacts/eval');
+
+function isEvalReport(value: unknown): value is EvalReport {
+  if (typeof value !== 'object' || value === null) return false;
+  return Array.isArray((value as EvalReport).results);
+}
+
+function loadFailedIdsFromReport(reportPath: string): string[] {
+  if (!existsSync(reportPath)) {
+    throw new Error(`eval report not found: ${reportPath}`);
+  }
+  const doc = JSON.parse(readFileSync(reportPath, 'utf8')) as unknown;
+  if (!isEvalReport(doc)) {
+    throw new Error(`not a valid eval report (missing results[]): ${reportPath}`);
+  }
+  return doc.results.filter((r) => !r.pass).map((r) => r.id);
+}
+
+function resolveLatestEvalReport(evalDir: string): string {
+  if (!existsSync(evalDir)) {
+    throw new Error(`eval report directory not found: ${evalDir}`);
+  }
+  const files = readdirSync(evalDir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => join(evalDir, f))
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+  if (files.length === 0) {
+    throw new Error(`no eval reports in ${evalDir}; run npm run eval first`);
+  }
+  return files[0]!;
+}
 
 interface EvalArgs {
   full: boolean;
@@ -159,6 +183,7 @@ async function main(): Promise<void> {
 
   const results: EvalQueryResult[] = [];
   let failures = 0;
+  let aborted = false;
 
   for (const g of gold) {
     const vector = vectorById.get(g.id);
@@ -191,11 +216,19 @@ async function main(): Promise<void> {
       console.log(`  FAIL ${g.id}  ${g.query}`);
       for (const issue of issues) console.log(`       - ${issue}`);
       if (g.note) console.log(`       note: ${g.note.trim()}`);
-      if (args.failFast) break;
+      if (args.failFast) {
+        aborted = true;
+        break;
+      }
     }
   }
 
-  const report = summarizeEvalReport(results, { ranAt, full: args.full });
+  const report = summarizeEvalReport(results, {
+    ranAt,
+    full: args.full,
+    selectedTotal: gold.length,
+    aborted,
+  });
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
   console.log(

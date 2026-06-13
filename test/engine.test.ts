@@ -16,6 +16,7 @@ import {
 import { buildCorpus, buildPrivateNotes, embedText, stripMarkdown } from '../src/corpus.js';
 import { batchInputs, truncateForEmbedding, MAX_INPUT_BYTES } from '../src/embedding.js';
 import { judgeAnswer, judgeAnswerMode, judgeRetrieval, loadGold } from '../src/evaluate.js';
+import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
 import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
 import { containsPhrase, cosine, hasThemeMatch, retrieve } from '../src/retrieve.js';
@@ -466,4 +467,44 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
     ).issues[0]!,
     /record-only citations/,
   );
+});
+
+test('eval: parseQueryIdList and filterGoldQueries support targeted runs', () => {
+  const sample = [
+    {
+      id: 'q06',
+      query: 'staying',
+      expectAnswerMode: 'partial' as const,
+      expectSources: ['song:harbor-lights'],
+    },
+    {
+      id: 'q07',
+      query: 'bridge',
+      expectAnswerMode: 'related-material' as const,
+      expectSources: ['note:harbor-lights-session'],
+    },
+  ];
+  assert.deepEqual(parseQueryIdList('q06, q07'), ['q06', 'q07']);
+  assert.equal(filterGoldQueries(sample, { ids: ['q07'] }).length, 1);
+  assert.throws(() => filterGoldQueries(sample, { ids: ['q99'] }), /unknown gold query id/);
+  assert.throws(
+    () => filterGoldQueries(sample, { fromReportIds: ['q99'] }),
+    /report references unknown gold query id/,
+  );
+});
+
+test('eval: loadGold rejects invalid forbidAnswerPatterns at load time', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gold-'));
+  const path = join(dir, 'gold.yaml');
+  writeFileSync(
+    path,
+    `queries:
+  - id: q01
+    query: test
+    expectAnswerMode: partial
+    forbidAnswerPatterns: ['(']
+`,
+    'utf8',
+  );
+  assert.throws(() => loadGold(path), /invalid regex/);
 });
