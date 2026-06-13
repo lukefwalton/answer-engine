@@ -102,6 +102,19 @@ The asymmetry is the lesson: a corpus fix (the `meaning` line) helps every
 future question about the song's subject. A query patch helps exactly one
 string, and lies to you about it.
 
+One more legitimate fix arrives only when the archive grows past what
+frontmatter can reach: a fact that lives *off-site* (the page never carries
+it), a *negative* fact (a question whose honest answer is "none," which pages
+rarely state because they describe what is, not what isn't), or simply more
+retrieval prose than a short page should show a reader. The scalable answer
+there is a keyed enrichment layer: a small authored map that appends retrieval
+text to a record *beside* the corpus, leaving the published page as the source
+of truth. Reach for frontmatter when you own the page and one line fixes it;
+reach for enrichment when the fact lives elsewhere, or you need volume the page
+shouldn't carry. It is still corpus-authored content, so it still helps every
+future phrasing, and the asymmetry above is exactly why it stays honest rather
+than becoming a per-query patch.
+
 ## What a good gold set includes
 
 - **Direct hits** — title queries, theme queries, plain-language queries.

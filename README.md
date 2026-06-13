@@ -246,7 +246,12 @@ retrieval points at passages; more retrieval signals (recency for "what do
 you think *now*", author aliases, per-collection weights); a
 document-frequency cap on the theme boost — at four records a verbatim theme
 match is signal, but on a large corpus a theme that appears on half the
-records boosts nothing and should be discounted; an HTTP handler
+records boosts nothing and should be discounted; an evidence-selection prune
+before synthesis (keep one record per cluster, then the clear winner plus a
+single corroborator when it leads the rest by a margin) for when a large
+corpus makes wide top-k surface correlated neighbors instead of distinct
+sources, which shapes what synthesis *sees*, not what the gate certifies
+(retrieved is still not cited); an HTTP handler
 around `retrieve` + `answerQuestion` with a rate limit, query cap, and cache;
 SQLite or pgvector when the archive outgrows in-memory cosine — the shapes
 don't change. In production we also keep the wire contract's `not-found`
@@ -254,6 +259,20 @@ empty and let the UI roll plain decline copy at display time, so refusals
 stay honest *and* human.
 
 Code the invariant. Document the scaling pattern. Comment the footgun.
+
+## What stays out
+
+A running deployment grows layers this engine deliberately omits: deterministic
+product routes (help, usage, or corpus-count answers that never call a model),
+a domain-specific eval guard taxonomy, an ingestion or transcription pipeline,
+and the site's own config. Those are consumer-adapter concerns. They live in
+the site layer (for "Ask the Archive," the `ask-the-archive/` adapter), not the
+engine, because the value this repo carries is the boundary and the answer
+contract, not feature parity (`.github/STANDARDS.md` §3, "What Matters Less").
+One line worth holding if you add a deterministic route downstream: it may
+shortcut *delivery*, but it must never be how a gold query passes. A route that
+flips an eval outcome is special-casing the question wearing a hat: the same
+thing §5 forbids, one layer up.
 
 ## Citing this software
 
@@ -281,7 +300,7 @@ To pin a specific archived snapshot, pick that release's version DOI on the
 required when a new release lands.
 
 **Cutting a release:** on `main`, run **Actions → release** (patch/minor/major).
-Checked-in metadata must match the latest `v*` tag on the remote (`v1.1.0`
+Checked-in metadata must match the latest `v*` tag on the remote (`v1.2.0`
 today — the tag already exists). The workflow queues concurrent runs, bumps
 semver via [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
 pushes `main` and the new tag atomically, then creates the GitHub release
@@ -289,7 +308,7 @@ Zenodo archives. `CITATION.cff` and `.zenodo.json` both use the concept DOI for
 citation; Zenodo assigns a version DOI per release on its own.
 If the workflow pushes refs but GitHub release creation fails, create the release
 manually from the existing tag in the GitHub UI — **do not re-run** this workflow:
-a rerun would bump semver again (e.g. skip `v1.2.0` and cut `v1.2.1`) because
+a rerun would bump semver again (e.g. skip `v1.3.0` and cut `v1.3.1`) because
 the latest tag already advanced.
 When P4 lands, add its DOI to `related_identifiers` in `.zenodo.json` and cut
 the next release.
