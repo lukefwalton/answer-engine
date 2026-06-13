@@ -15,7 +15,15 @@ import {
 } from '../src/answer.js';
 import { buildCorpus, buildPrivateNotes, embedText, stripMarkdown } from '../src/corpus.js';
 import { batchInputs, truncateForEmbedding, MAX_INPUT_BYTES } from '../src/embedding.js';
-import { judgeAnswer, judgeAnswerMode, judgeRetrieval, loadGold } from '../src/evaluate.js';
+import {
+  judgeAnswer,
+  judgeAnswerMode,
+  judgeRetrieval,
+  loadGold,
+  parseEvalReport,
+  parseEvalReportJson,
+} from '../src/evaluate.js';
+import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
 import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
 import { containsPhrase, cosine, hasThemeMatch, retrieve } from '../src/retrieve.js';
@@ -379,10 +387,13 @@ test('eval: gold set loads, substitutes the author, and only references real sou
     ...buildPrivateNotes(config).map((n) => n.id),
   ]);
   for (const g of gold) {
+    assert.ok(g.id.length > 0, 'each gold query needs an id');
     for (const id of [...(g.expectSources ?? []), ...(g.forbidSources ?? [])]) {
       assert.ok(ids.has(id), `gold references unknown source '${id}'`);
     }
   }
+  const goldIds = gold.map((g) => g.id);
+  assert.equal(new Set(goldIds).size, goldIds.length, 'gold ids must be unique');
 });
 
 test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
@@ -391,6 +402,7 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
     notes: [{ note: makeNote(), score: 0.4, semantic: 0.4 }],
   };
   const gold = {
+    id: 'test',
     query: 'q',
     expectAnswerMode: 'supported' as const,
     expectSources: ['essay:on-listening', 'note:harbor-lights-session'],
@@ -420,7 +432,7 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
   );
   assert.match(
     judgeAnswer(
-      { query: 'q', expectAnswerMode: 'related-material' },
+      { id: 'test', query: 'q', expectAnswerMode: 'related-material' },
       {
         mode: 'related-material',
         answer: 'See the notebook.',
@@ -431,6 +443,22 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
       },
     ).issues[0]!,
     /hint-only citations/,
+  );
+  assert.match(
+    judgeAnswer(
+      {
+        id: 'test',
+        query: 'q',
+        expectAnswerMode: 'related-material',
+        forbidAnswerPatterns: ['https?://'],
+      },
+      {
+        mode: 'related-material',
+        answer: 'See https://example.com/lyrics/harbor-lights/',
+        citations: [{ kind: 'hint', hintId: 'note:harbor-lights-session', url: 'https://example.com' }],
+      },
+    ).issues[0]!,
+    /forbidden pattern/,
   );
   assert.match(
     judgeAnswer(
@@ -445,5 +473,113 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
       },
     ).issues[0]!,
     /record-only citations/,
+  );
+});
+
+test('eval: parseQueryIdList and filterGoldQueries support targeted runs', () => {
+  const sample = [
+    {
+      id: 'q06',
+      query: 'staying',
+      expectAnswerMode: 'partial' as const,
+      expectSources: ['song:harbor-lights'],
+    },
+    {
+      id: 'q07',
+      query: 'bridge',
+      expectAnswerMode: 'related-material' as const,
+      expectSources: ['note:harbor-lights-session'],
+    },
+  ];
+  assert.deepEqual(parseQueryIdList('q06, q07'), ['q06', 'q07']);
+  assert.equal(filterGoldQueries(sample, { ids: ['q07'] }).length, 1);
+  assert.throws(() => filterGoldQueries(sample, { ids: ['q99'] }), /unknown gold query id/);
+  assert.throws(
+    () => filterGoldQueries(sample, { fromReportIds: ['q99'] }),
+    /report references unknown gold query id/,
+  );
+});
+
+test('eval: loadGold rejects invalid forbidAnswerPatterns at load time', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gold-'));
+  const path = join(dir, 'gold.yaml');
+  writeFileSync(
+    path,
+    `queries:
+  - id: q01
+    query: test
+    expectAnswerMode: partial
+    forbidAnswerPatterns: ['(']
+`,
+    'utf8',
+  );
+  assert.throws(() => loadGold(path), /invalid regex/);
+});
+
+test('eval: parseEvalReport rejects malformed result entries loudly', () => {
+  assert.throws(
+    () =>
+      parseEvalReport(
+        {
+          ranAt: '2026-06-13T00:00:00.000Z',
+          full: false,
+          selectedTotal: 1,
+          total: 1,
+          passed: 0,
+          failed: 1,
+          results: [{}],
+        },
+        'bad-report.json',
+      ),
+    /bad-report\.json: results\[0\]\.id must be a string/,
+  );
+});
+
+test('eval: parseEvalReport preserves aborted metadata for fail-fast reports', () => {
+  const report = parseEvalReport({
+    ranAt: '2026-06-13T00:00:00.000Z',
+    full: true,
+    selectedTotal: 10,
+    total: 1,
+    passed: 0,
+    failed: 1,
+    aborted: true,
+    results: [
+      {
+        id: 'q03',
+        query: 'test',
+        pass: false,
+        issues: ['expected source not retrieved'],
+      },
+    ],
+  });
+  assert.equal(report.aborted, true);
+  assert.equal(report.selectedTotal, 10);
+  assert.equal(report.total, 1);
+});
+
+test('eval: parseEvalReportJson rejects syntactically invalid JSON with path context', () => {
+  assert.throws(
+    () => parseEvalReportJson('{not json', 'broken-report.json'),
+    /invalid eval report at broken-report\.json: not valid JSON/,
+  );
+});
+
+test('eval: parseEvalReport rejects inconsistent count metadata', () => {
+  assert.throws(
+    () =>
+      parseEvalReport(
+        {
+          ranAt: '2026-06-13T00:00:00.000Z',
+          full: false,
+          selectedTotal: 2,
+          total: 2,
+          passed: 2,
+          failed: 0,
+          results: [{ id: 'q01', query: 'a', pass: true, issues: [] }],
+        },
+        'counts-report.json',
+      ),
+    /counts-report\.json: total \(2\) does not match results\.length \(1\)/,
   );
 });

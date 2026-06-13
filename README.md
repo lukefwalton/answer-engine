@@ -135,6 +135,7 @@ very sources the engine declined to use.
 including questions the engine must refuse, and one that must route to the
 notebook without quoting it. `npm run eval` checks retrieval (one cheap
 batched embedding call); `-- --full` runs the answer engine and checks modes.
+**Prefer `--ids` or `--from-report` for `--full`** — see [`eval/README.md`](./eval/README.md).
 
 The rule that makes the eval worth having: **when a query fails, fix the
 corpus, the scoring, or the prompt — never special-case the question.** We
@@ -155,7 +156,9 @@ npm run index                                   # embed the example corpus, both
 npm run ask -- "what does person a think about routine?"      # → partial, cites the essay
 npm run ask -- "how was the bridge in harbor lights written?" # → related-material, routes to the notebook
 npm run ask -- "what does person a think about crypto?"       # → I don't know.
-npm run eval                                    # the promises, checked
+npm run eval                                    # the promises, checked (retrieval)
+npm run eval -- --from-report latest            # rerun failures only (cheap)
+npm run eval -- --full --ids q07                # answer engine on one query
 ```
 
 The default models are in `archive.config.ts` (`text-embedding-3-large` +
@@ -186,7 +189,7 @@ get `temperature: 0`).
 ```
 npm run index       # build/refresh artifacts/index.json (only embeds changes)
 npm run ask         # ask one question, get a cited answer
-npm run eval        # gold set, retrieval checks (-- --full to check answers too)
+npm run eval        # gold set, retrieval checks (-- --full for answers; prefer --ids / --from-report)
 npm test            # offline, deterministic engine tests — no API key
 npm run typecheck   # tsc --noEmit
 ```
@@ -205,6 +208,8 @@ don't change. In production we also keep the wire contract's `not-found`
 empty and let the UI roll plain decline copy at display time, so refusals
 stay honest *and* human.
 
+Code the invariant. Document the scaling pattern. Comment the footgun.
+
 Contributions welcome — the bar for new code is the bar the repo sets for
 itself: least lines that keep the promises, boundaries enforced by types or
 runtime checks, loud failures, and no change that makes the eval pass by
@@ -212,12 +217,28 @@ special-casing a question.
 
 That is the design principle: **answerability**. The model may write the
 sentence, but the system owns the frame it must satisfy. Evidence boundaries,
-citation validation, refusal modes, and evals stay outside the model so the answer can be checked rather than merely trusted.
+citation validation, refusal modes, and evals stay outside the model so the
+answer can be checked rather than merely trusted.
+
+## Related writing
+
+This repo is a practical companion to a few essays and papers about
+answerability, authorship, and AI systems:
+
+- [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/)
+- [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/)
+- [The Invariant of Answerability](https://lukefwalton.com/writing/the-invariant-of-answerability/)
+
+The writing is licensed separately under CC BY-NC-ND 4.0. This code is
+Apache-2.0.
 
 ## License & contact
 
-Apache-2.0. Built by [Luke F. Walton](https://lukefwalton.com) —
-contact [luke@lukefwalton.com](mailto:luke@lukefwalton.com).
+Apache-2.0. Archived on Zenodo:
+[10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774).
+
+Built by [Luke F. Walton](https://lukefwalton.com) — contact
+[luke@lukefwalton.com](mailto:luke@lukefwalton.com).
 
 Provided as-is for personal use; no support, warranty, or maintenance is
 implied. It is a personal project, not written on behalf of any employer.

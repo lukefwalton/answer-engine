@@ -23,7 +23,7 @@ Offline tests are the CI gate; gold eval is the behavioral gate.
 - **`npm test` must stay green without an API key.** No hidden dependencies on live OpenAI calls.
 - **Changes to prompt, retrieval, validation, or repair should consider `eval/gold.yaml`.** Especially: refusals, CANON vs PROCESS modes, the bridge query, and `forbidRecordCitations` alignment on boundary gold queries.
 - **New behavior worth keeping gets a gold query or unit test, not a one-off fix.** Fix corpus, scoring, or prompt — never special-case the question (see §1).
-- **Full eval (`npm run eval -- --full`) is manual / pre-merge, not required in CI.** Integration/e2e against OpenAI is not expected in GitHub Actions.
+- **Full eval (`npm run eval -- --full`) is manual / pre-merge, not required in CI.** Integration/e2e against OpenAI is not expected in GitHub Actions. **Run `--full` on `--ids` or `--from-report` subsets**, not the whole gold set while iterating.
 
 ## 3. Architecture (Small and Intentional)
 

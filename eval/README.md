@@ -29,6 +29,36 @@ and, just as important, the inverse:
 `npm run eval -- --full` also runs the answer engine and checks modes. Either
 exits non-zero on any failure, so it can gate a deploy.
 
+## Cost model (read this first)
+
+| Mode | API spend | When to use |
+|------|-----------|-------------|
+| **Default** (`npm run eval`) | One **batched embedding** call for selected queries | Always run this first |
+| **`--full`** | Embeddings **+ OpenAI synthesis** per query | Only after retrieval passes, on a **subset** |
+
+Do **not** run `npm run eval -- --full` on the whole set while fixing one
+failure. That burns synthesis tokens for queries you already know pass retrieval.
+
+```bash
+npm run eval                              # full retrieval floor (cheap)
+npm run eval -- --from-report latest      # failures only, still cheap
+npm run eval -- --full --ids q07          # answer engine on one query ($$$)
+npm run eval -- --full --from-report latest
+npm run eval -- --list --ids q06,q07      # dry-run selection, no API
+npm run eval -- --help                    # full flag list
+```
+
+Reports land in `artifacts/eval/<timestamp>.json` (gitignored with `artifacts/`).
+Use `--from-report latest` to rerun only `"pass": false` entries. Each gold row
+needs a stable `id` (e.g. `q07`) for `--ids` targeting.
+
+## Recommended workflow
+
+1. Change gold YAML, retrieval, or answer code.
+2. `npm run eval` — full retrieval floor.
+3. If anything fails: `npm run eval -- --from-report latest`.
+4. Only then: `npm run eval -- --full --from-report latest` (or `--ids` for new rows).
+
 ## A query failing, then passing — the right way
 
 The "staying instead of leaving" query above is in the shipped gold set
