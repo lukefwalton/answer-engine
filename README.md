@@ -223,23 +223,26 @@ answer can be checked rather than merely trusted.
 ## What this shows, and where it stops
 
 The strongest objection to this approach is that it works only because the
-frame is easy to own: one archive, one named author, a delimited corpus.
-Engineering answerability here does not, on its own, show that public, plural,
-or contested answer systems — where it is genuinely unsettled *whose* frame
-holds — can be made answerable the same way. That is a real limit. This repo
-is the bounded case, deliberately, not a proof about the unbounded one.
+frame is easy to own: one archive, one named author, a delimited corpus. But
+the mechanisms here do not depend on that smallness — none of them refers to
+the size of the corpus or the number of maintainers. What a bounded demo
+cannot do, on its own, is prove that holding these surfaces at public, plural,
+or contested scale is affordable. That cost is the open question, and this repo
+is deliberately the bounded case, not a proof about the unbounded one.
 
-What it does try to show is narrower: that the line between a frame that is
-*held* and one that is *merely inherited* can be drawn in running code rather
-than asserted on paper. The privacy boundary is a type that will not compile
-if violated, not a guard someone has to remember (`src/no-leak.ts`); modes are
-re-derived from the evidence, not taken from the model's word for it; refusals
-are regression-tested like any other behavior (`eval/gold.yaml`). The
-adversarial moves against the idea deserve to be taken seriously, and the
-place to take them seriously is the implementation, not only the prose. The
-general account — when standing authorization counts as authoring a frame, and
-when institutional authorship is a fiction — is the subject of separate
-writing.
+What the code does establish is narrower but real: the junctures are control
+surfaces, not promissory labels. The privacy boundary is a type that will not
+compile if violated (`src/no-leak.ts`); citations are re-grounded against what
+retrieval actually returned and the mode re-derived from them, never taken
+from the model's word (`src/answer.ts`); weak matches fall below a floor and
+the engine refuses (`src/retrieve.ts`); the gold suite tests those refusals as
+regressions (`eval/gold.yaml`). That buys *soundness* — nothing ungrounded
+enters force — not *completeness*: a source that never cleared the floor is
+simply absent, and the suite owns recall only for the cases it enumerates.
+Which standing policies *count* as authoring a frame rather than inheriting
+one, and whether the scale cost is bearable, are taken up in the companion
+papers below; the repo's job is to make the junctures real, not to settle
+those.
 
 ## Related writing
 
