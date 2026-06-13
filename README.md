@@ -247,11 +247,14 @@ To pin a specific snapshot, use that release's version DOI on
 | Latest | [`v1.1.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.1.0) | [10.5281/zenodo.20677602](https://doi.org/10.5281/zenodo.20677602) |
 | Initial | [`v1.0.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.0.0) | [10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774) |
 
-**Cutting a release:** merge metadata changes first, then on `main` run
-**Actions → release → minor** to cut **`v1.2.0`** (next after `v1.1.0`). That
-syncs `package.json`, `.zenodo.json`, and `CITATION.cff`, tags, and creates
-the GitHub release Zenodo archives. Do not retag `v1.1.0`. When P4 lands, add
-its DOI to `related_identifiers` in `.zenodo.json` and cut the next tag.
+**Cutting a release:** on `main`, run **Actions → release** (patch/minor/major).
+The workflow checks that `package.json`, `.zenodo.json`, and `CITATION.cff`
+match the latest `v*` tag, computes the next semver, runs
+[`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
+commits that bump, tags the commit, and creates the GitHub release Zenodo
+archives. Update the version DOI in the table below after Zenodo assigns it.
+When P4 lands, add its DOI to `related_identifiers` in `.zenodo.json` and cut
+the next release.
 
 ```bibtex
 @software{walton_answer_engine_2026,
