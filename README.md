@@ -1,5 +1,9 @@
 # Answer Engine: An AI that Says "I Don't Know"
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20676773.svg)](https://doi.org/10.5281/zenodo.20676773)
+[![License](https://img.shields.io/github/license/lukefwalton/answer-engine)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/lukefwalton/answer-engine)](https://github.com/lukefwalton/answer-engine/releases)
+
 A small answer engine that keeps the authorial frame outside the model:
 sources are bounded, private text cannot leak into the prompt, citations are
 grounded, and refusals are tested.
@@ -142,6 +146,47 @@ corpus, the scoring, or the prompt — never special-case the question.** We
 learned that the hard way; [`eval/README.md`](./eval/README.md) tells the
 story, including a real failing-then-passing walkthrough.
 
+## What this shows, and where it stops
+
+The strongest objection to this approach is that it works only because the
+frame is easy to own: one archive, one named author, a delimited corpus.
+The mechanisms here do not depend on that smallness — none of them refers to
+corpus size. What a bounded demo cannot do, on its own, is prove that holding
+these surfaces at public, plural, or contested scale is affordable, or that
+systems where it is genuinely unsettled *whose* frame holds can be made
+answerable the same way. That is a real limit, and this repo is the bounded
+case on purpose, not a proof about the unbounded one. The public-scale cost
+question is real, but it belongs to the builders of public-scale systems, not
+to a teaching repo note.
+
+It is worth being exact about *which* limit, because it is narrower than it
+looks. The gate owns **soundness**: nothing enters an answer that isn't
+grounded in retrieved evidence or honestly refused. It does not own
+**completeness** — it cannot certify that what was retrieved is what *should*
+have been. A source that falls below the score floor is simply absent, and a
+gate sees only what reaches it. But absence isn't therefore unowned: the
+scoring, the floor, and the corpus boundary that decide what becomes a
+candidate are authored constants someone maintains (`src/retrieve.ts`,
+`archive.config.ts`), and the gold set tests recall for the cases it names
+(`eval/gold.yaml`). What stays irreducible is the relevant source no one
+thought to test for — and that is irreducible for any system, since
+anticipating it in full would mean knowing the answer in advance.
+
+What the repo does try to show is concrete: that whether a frame is *held* or
+just *inherited* can be settled at control surfaces in running code, not
+promissory labels. The privacy boundary is a type that won't compile if violated, not a guard
+someone has to remember (`src/no-leak.ts`); modes are re-derived from the
+evidence, not taken from the model's word for it (`src/answer.ts`); refusals
+are regression-tested like any other behavior (`eval/gold.yaml`).
+
+The [Answerability papers](#related-writing) take up the harder cases — plural
+authorship, contested frames, systems where *whose* gate applies is itself
+unsettled. This repo is the bounded reference implementation; discussion, issues,
+and PRs that extend, test, or push against those limits are welcome. The bar
+for new code is the bar the repo sets for itself: least lines that keep the
+promises, boundaries enforced by types or runtime checks, loud failures, and
+no change that makes the eval pass by special-casing a question.
+
 ---
 
 ## Quick start
@@ -210,32 +255,74 @@ stay honest *and* human.
 
 Code the invariant. Document the scaling pattern. Comment the footgun.
 
-Contributions welcome — the bar for new code is the bar the repo sets for
-itself: least lines that keep the promises, boundaries enforced by types or
-runtime checks, loud failures, and no change that makes the eval pass by
-special-casing a question.
+## Citing this software
 
-That is the design principle: **answerability**. The model may write the
-sentence, but the system owns the frame it must satisfy. Evidence boundaries,
-citation validation, refusal modes, and evals stay outside the model so the
-answer can be checked rather than merely trusted.
+If you use or build on this repo, please cite the Zenodo archive (not just
+the GitHub URL).
+
+- **[`.zenodo.json`](./.zenodo.json)** — metadata for Zenodo's GitHub archive
+  (title, ORCID, related paper DOIs, documentation links). Commit this before
+  each tag; Zenodo reads it from the release snapshot and ignores
+  `CITATION.cff` when it is present.
+- **[`CITATION.cff`](./CITATION.cff)** — GitHub **Cite this repository** UI
+  only.
+
+**Recommended:** cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773)
+— it represents all versions and always resolves to the latest archived release.
+
+| | |
+| --- | --- |
+| DOI | [10.5281/zenodo.20676773](https://doi.org/10.5281/zenodo.20676773) |
+| Code | [github.com/lukefwalton/answer-engine](https://github.com/lukefwalton/answer-engine) |
+| About | [lukefwalton.com/ask/about/](https://lukefwalton.com/ask/about/) |
+
+To pin a specific archived snapshot, pick that release's version DOI on the
+[Zenodo versions page](https://zenodo.org/records/20676773) — no README update
+required when a new release lands.
+
+**Cutting a release:** on `main`, run **Actions → release** (patch/minor/major).
+Checked-in metadata must match the latest `v*` tag on the remote (`v1.1.0`
+today — the tag already exists). The workflow queues concurrent runs, bumps
+semver via [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
+pushes `main` and the new tag atomically, then creates the GitHub release
+Zenodo archives. `CITATION.cff` and `.zenodo.json` both use the concept DOI for
+citation; Zenodo assigns a version DOI per release on its own.
+If the workflow pushes refs but GitHub release creation fails, create the release
+manually from the existing tag in the GitHub UI — **do not re-run** this workflow:
+a rerun would bump semver again (e.g. skip `v1.2.0` and cut `v1.2.1`) because
+the latest tag already advanced.
+When P4 lands, add its DOI to `related_identifiers` in `.zenodo.json` and cut
+the next release.
+
+```bibtex
+@software{walton_answer_engine_2026,
+  author       = {Walton, Luke F.},
+  title        = {Answer Engine: An AI that Says "I Don't Know"},
+  year         = {2026},
+  publisher    = {Zenodo},
+  doi          = {10.5281/zenodo.20676773},
+  url          = {https://github.com/lukefwalton/answer-engine}
+}
+```
 
 ## Related writing
 
-This repo is a practical companion to a few essays and papers about
-answerability, authorship, and AI systems:
+This repo is a practical companion to the Answerability papers:
 
-- [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/)
-- [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/)
-- [The Invariant of Answerability](https://lukefwalton.com/writing/the-invariant-of-answerability/)
+- [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/) — [DOI](https://doi.org/10.5281/zenodo.20622946)
+- [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/) — [DOI](https://doi.org/10.5281/zenodo.20676328)
+- [The Invariant of Answerability](https://lukefwalton.com/writing/the-invariant-of-answerability/) — [DOI](https://doi.org/10.5281/zenodo.20606493)
 
-The writing is licensed separately under CC BY-NC-ND 4.0. This code is
-Apache-2.0.
+## Licenses
 
-## License & contact
+| Work | License |
+| --- | --- |
+| Answerability papers | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
+| answer-engine (this software) | [Apache-2.0](./LICENSE) |
 
-Apache-2.0. Archived on Zenodo:
-[10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774).
+## Contact
+
+Archived on Zenodo: [10.5281/zenodo.20676773](https://doi.org/10.5281/zenodo.20676773).
 
 Built by [Luke F. Walton](https://lukefwalton.com) — contact
 [luke@lukefwalton.com](mailto:luke@lukefwalton.com).

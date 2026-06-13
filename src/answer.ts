@@ -4,6 +4,15 @@
 // the citation mix, and finally ground every citation against what retrieval
 // actually returned. The schema makes failures rare; the gates make them
 // impossible to return. Modes are validated and re-derived here.
+//
+// Scope of these gates: they own *soundness* — every claim that enters force
+// is grounded in retrieved evidence, or the answer is a refusal; nothing
+// ungrounded passes. They do not own *recall*. Whether the right source was
+// retrieved at all is decided upstream at retrieve.ts; the gold set
+// (evaluate.ts, offline only) checks enumerated recall cases in regression,
+// not at serving time. Unanticipated relevant sources remain an irreducible
+// residue. The admission surface certifies that what it admits is sound; it
+// cannot certify that the retrieval behind it was complete.
 
 import type OpenAI from 'openai';
 import { ANSWER_TEXT_FORMAT, buildSystemPrompt, buildUserPrompt } from './prompt.js';

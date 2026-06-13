@@ -1,0 +1,55 @@
+{
+  "title": "Answer Engine: An AI that Says \"I Don't Know\"",
+  "version": "1.1.0",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "Apache-2.0",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Walton, Luke F.",
+      "orcid": "0009-0005-9263-1954",
+      "affiliation": "Independent Researcher",
+      "type": "Researcher"
+    }
+  ],
+  "description": "A teaching-sized answer engine that keeps the authorial frame outside the model: bounded sources, no-leak private routing, grounded citations, refusal modes, and an eval harness.",
+  "keywords": [
+    "answer engine",
+    "answerability",
+    "generative AI",
+    "RAG",
+    "semantic search",
+    "citations",
+    "LLM evaluation",
+    "AI ethics",
+    "human authorship"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/lukefwalton/answer-engine",
+      "relation": "isDocumentedBy",
+      "resource_type": "software"
+    },
+    {
+      "identifier": "https://lukefwalton.com/ask/about/",
+      "relation": "isDocumentedBy",
+      "resource_type": "publication-technicalnote"
+    },
+    {
+      "identifier": "https://doi.org/10.5281/zenodo.20622946",
+      "relation": "isSupplementTo",
+      "resource_type": "publication-preprint"
+    },
+    {
+      "identifier": "https://doi.org/10.5281/zenodo.20676328",
+      "relation": "isSupplementTo",
+      "resource_type": "publication-preprint"
+    },
+    {
+      "identifier": "https://doi.org/10.5281/zenodo.20606493",
+      "relation": "isSupplementTo",
+      "resource_type": "publication-workingpaper"
+    }
+  ]
+}

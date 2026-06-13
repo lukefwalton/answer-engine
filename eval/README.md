@@ -122,3 +122,15 @@ When you point the engine at your own corpus, rewrite `gold.yaml` against it
 (ids are `type:slug`; `{{author}}` resolves to `authorName` from
 `archive.config.ts`). Add a query every time the engine surprises you —
 that's the regression suite writing itself.
+
+## What the gold set cannot catch
+
+The set checks recall for the cases it names: a listed source must surface, a
+listed refusal must fire. What it cannot own is the case no one wrote down. A
+relevant source that sits below the score floor is simply absent, and a
+regression suite only ever catches the omission it already thought of. That
+residue is irreducible for any open-ended answer system — closing it
+completely would mean knowing the answer before the question. So the honest
+form of ownership here is the loop above, not a gate: author the query when an
+incident reveals the gap, then fix the corpus, the scoring, or the prompt —
+never the question. The suite grows toward completeness; it never certifies it.
