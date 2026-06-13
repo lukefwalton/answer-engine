@@ -241,10 +241,11 @@ To pin a specific snapshot, use that release's version DOI on
 | Latest | [`v1.1.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.1.0) | [10.5281/zenodo.20677602](https://doi.org/10.5281/zenodo.20677602) |
 | Initial | [`v1.0.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.0.0) | [10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774) |
 
-**Cutting a release:** use **Actions → release → Run workflow** when you want a
-new citable snapshot (not on every merge). That bumps semver from the latest
-`v*` tag, syncs `package.json` and `CITATION.cff`, and creates the GitHub
-release that Zenodo picks up.
+**Cutting a release:** after merge to `main`, use **Actions → release → Run
+workflow** on the `main` branch when you want a new citable snapshot (not on
+every merge). That bumps semver from the latest `v*` tag, syncs
+`package.json` and `CITATION.cff`, and creates the GitHub release that Zenodo
+picks up.
 
 ```bibtex
 @software{walton_answer_engine_2026,

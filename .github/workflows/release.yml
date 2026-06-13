@@ -28,7 +28,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
+
+      - name: Require main
+        run: |
+          branch="${GITHUB_REF#refs/heads/}"
+          if [ "$branch" != "main" ]; then
+            echo "Release workflow must run on main (got: $branch)."
+            exit 1
+          fi
 
       - name: Compute next version
         id: version
@@ -66,16 +75,28 @@ jobs:
           writeFileSync('package.json', `${JSON.stringify(pkg, null, 2)}\n`);
 
           let cff = readFileSync('CITATION.cff', 'utf8');
+          const before = cff;
           cff = cff.replace(/^version: .+$/m, `version: ${next}`);
           cff = cff.replace(/^date-released: .+$/m, `date-released: "${today}"`);
-          cff = cff.replace(
-            /^(\s+version: ).+$/m,
-            `$1${next}`,
-          );
-          cff = cff.replace(
-            /^(\s+date-released: ).+$/m,
-            `$1"${today}"`,
-          );
+          cff = cff.replace(/^(\s+version: ).+$/m, `$1${next}`);
+          cff = cff.replace(/^(\s+date-released: ).+$/m, `$1"${today}"`);
+          if (cff === before) {
+            throw new Error('CITATION.cff did not change — check field layout.');
+          }
+
+          const topVersion = cff.match(/^version: (.+)$/m)?.[1];
+          const topDate = cff.match(/^date-released: "(.+)"$/m)?.[1];
+          const preferredBlock = cff.match(/^preferred-citation:[\s\S]*?(?=^(?:references|$))/m)?.[0] ?? '';
+          const preferredVersion = preferredBlock.match(/^\s+version: (.+)$/m)?.[1];
+          const preferredDate = preferredBlock.match(/^\s+date-released: "(.+)"$/m)?.[1];
+
+          if (topVersion !== next || preferredVersion !== next) {
+            throw new Error(`Expected version ${next} in CITATION.cff (top=${topVersion}, preferred=${preferredVersion}).`);
+          }
+          if (topDate !== today || preferredDate !== today) {
+            throw new Error(`Expected date-released ${today} in CITATION.cff (top=${topDate}, preferred=${preferredDate}).`);
+          }
+
           writeFileSync('CITATION.cff', cff);
           EOF
         env:
