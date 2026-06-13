@@ -13,8 +13,8 @@ import { config } from '../../archive.config.js';
 import { answerQuestion } from '../answer.js';
 import { batchInputs, embedBatch } from '../embedding.js';
 import { EVAL_USAGE, filterGoldQueries, parseQueryIdList } from '../eval-select.js';
-import { judgeAnswer, judgeRetrieval, loadGold, summarizeEvalReport } from '../evaluate.js';
-import type { EvalQueryResult, EvalReport } from '../evaluate.js';
+import { judgeAnswer, judgeRetrieval, loadGold, parseEvalReport, summarizeEvalReport } from '../evaluate.js';
+import type { EvalQueryResult } from '../evaluate.js';
 import { assembleEvidence } from '../no-leak.js';
 import { retrieve } from '../retrieve.js';
 import { assertHomogeneousIndex, readIndexFile } from '../store.js';
@@ -22,20 +22,18 @@ import { assertHomogeneousIndex, readIndexFile } from '../store.js';
 const GOLD_PATH = resolve('eval/gold.yaml');
 const EVAL_REPORT_DIR = resolve('artifacts/eval');
 
-function isEvalReport(value: unknown): value is EvalReport {
-  if (typeof value !== 'object' || value === null) return false;
-  return Array.isArray((value as EvalReport).results);
-}
-
 function loadFailedIdsFromReport(reportPath: string): string[] {
   if (!existsSync(reportPath)) {
     throw new Error(`eval report not found: ${reportPath}`);
   }
-  const doc = JSON.parse(readFileSync(reportPath, 'utf8')) as unknown;
-  if (!isEvalReport(doc)) {
-    throw new Error(`not a valid eval report (missing results[]): ${reportPath}`);
+  const report = parseEvalReport(JSON.parse(readFileSync(reportPath, 'utf8')) as unknown, reportPath);
+  if (report.aborted) {
+    throw new Error(
+      `eval report was aborted by --fail-fast: ${reportPath}. ` +
+        `Use --ids for the intended subset or rerun the report without --fail-fast.`,
+    );
   }
-  return doc.results.filter((r) => !r.pass).map((r) => r.id);
+  return report.results.filter((r) => !r.pass).map((r) => r.id);
 }
 
 function resolveLatestEvalReport(evalDir: string): string {

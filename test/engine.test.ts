@@ -15,7 +15,7 @@ import {
 } from '../src/answer.js';
 import { buildCorpus, buildPrivateNotes, embedText, stripMarkdown } from '../src/corpus.js';
 import { batchInputs, truncateForEmbedding, MAX_INPUT_BYTES } from '../src/embedding.js';
-import { judgeAnswer, judgeAnswerMode, judgeRetrieval, loadGold } from '../src/evaluate.js';
+import { judgeAnswer, judgeAnswerMode, judgeRetrieval, loadGold, parseEvalReport } from '../src/evaluate.js';
 import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
 import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
@@ -507,4 +507,46 @@ test('eval: loadGold rejects invalid forbidAnswerPatterns at load time', () => {
     'utf8',
   );
   assert.throws(() => loadGold(path), /invalid regex/);
+});
+
+test('eval: parseEvalReport rejects malformed result entries loudly', () => {
+  assert.throws(
+    () =>
+      parseEvalReport(
+        {
+          ranAt: '2026-06-13T00:00:00.000Z',
+          full: false,
+          selectedTotal: 1,
+          total: 1,
+          passed: 0,
+          failed: 1,
+          results: [{}],
+        },
+        'bad-report.json',
+      ),
+    /bad-report\.json: results\[0\]\.id must be a string/,
+  );
+});
+
+test('eval: parseEvalReport preserves aborted metadata for fail-fast reports', () => {
+  const report = parseEvalReport({
+    ranAt: '2026-06-13T00:00:00.000Z',
+    full: true,
+    selectedTotal: 10,
+    total: 3,
+    passed: 2,
+    failed: 1,
+    aborted: true,
+    results: [
+      {
+        id: 'q03',
+        query: 'test',
+        pass: false,
+        issues: ['expected source not retrieved'],
+      },
+    ],
+  });
+  assert.equal(report.aborted, true);
+  assert.equal(report.selectedTotal, 10);
+  assert.equal(report.total, 3);
 });

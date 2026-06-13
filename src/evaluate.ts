@@ -67,6 +67,70 @@ export function summarizeEvalReport(
   };
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function requireReportNumber(value: unknown, path: string, key: string): number {
+  if (typeof value !== 'number') {
+    throw new Error(`invalid eval report at ${path}: ${key} must be a number`);
+  }
+  return value;
+}
+
+/** Validate a JSON eval report before `--from-report` uses it to select work. */
+export function parseEvalReport(raw: unknown, path = 'eval report'): EvalReport {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new Error(`invalid eval report at ${path}: expected an object`);
+  }
+  const report = raw as Partial<EvalReport>;
+  if (typeof report.ranAt !== 'string') {
+    throw new Error(`invalid eval report at ${path}: ranAt must be a string`);
+  }
+  if (typeof report.full !== 'boolean') {
+    throw new Error(`invalid eval report at ${path}: full must be a boolean`);
+  }
+  const selectedTotal = requireReportNumber(report.selectedTotal, path, 'selectedTotal');
+  const total = requireReportNumber(report.total, path, 'total');
+  const passed = requireReportNumber(report.passed, path, 'passed');
+  const failed = requireReportNumber(report.failed, path, 'failed');
+  if (report.aborted !== undefined && typeof report.aborted !== 'boolean') {
+    throw new Error(`invalid eval report at ${path}: aborted must be a boolean when present`);
+  }
+  if (!Array.isArray(report.results)) {
+    throw new Error(`invalid eval report at ${path}: results must be an array`);
+  }
+  const results = report.results.map((result, i): EvalQueryResult => {
+    if (typeof result !== 'object' || result === null) {
+      throw new Error(`invalid eval report at ${path}: results[${i}] must be an object`);
+    }
+    const item = result as Partial<EvalQueryResult>;
+    if (typeof item.id !== 'string') {
+      throw new Error(`invalid eval report at ${path}: results[${i}].id must be a string`);
+    }
+    if (typeof item.query !== 'string') {
+      throw new Error(`invalid eval report at ${path}: results[${i}].query must be a string`);
+    }
+    if (typeof item.pass !== 'boolean') {
+      throw new Error(`invalid eval report at ${path}: results[${i}].pass must be a boolean`);
+    }
+    if (!isStringArray(item.issues)) {
+      throw new Error(`invalid eval report at ${path}: results[${i}].issues must be a string array`);
+    }
+    return { id: item.id, query: item.query, pass: item.pass, issues: item.issues };
+  });
+  return {
+    ranAt: report.ranAt,
+    full: report.full,
+    selectedTotal,
+    total,
+    passed,
+    failed,
+    ...(report.aborted ? { aborted: true } : {}),
+    results,
+  };
+}
+
 const GOLD_MODES: ReadonlySet<string> = new Set([
   'supported',
   'partial',
