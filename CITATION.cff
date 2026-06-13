@@ -1,3 +1,4 @@
+# cff-version is the Citation File Format schema version, not the software release.
 cff-version: 1.2.0
 title: "Answer Engine: An AI that Says \"I Don't Know\""
 message: "If you use this software, please cite it as below. (GitHub citation UI only — Zenodo reads .zenodo.json from the release snapshot.)"
