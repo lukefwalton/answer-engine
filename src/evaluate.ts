@@ -78,6 +78,18 @@ function requireReportNumber(value: unknown, path: string, key: string): number 
   return value;
 }
 
+/** Parse report JSON text, then validate shape. Pure — no filesystem IO. */
+export function parseEvalReportJson(text: string, path = 'eval report'): EvalReport {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`invalid eval report at ${path}: not valid JSON (${detail})`);
+  }
+  return parseEvalReport(raw, path);
+}
+
 /** Validate a JSON eval report before `--from-report` uses it to select work. */
 export function parseEvalReport(raw: unknown, path = 'eval report'): EvalReport {
   if (typeof raw !== 'object' || raw === null) {
@@ -119,6 +131,34 @@ export function parseEvalReport(raw: unknown, path = 'eval report'): EvalReport 
     }
     return { id: item.id, query: item.query, pass: item.pass, issues: item.issues };
   });
+  const passCount = results.filter((r) => r.pass).length;
+  const failCount = results.length - passCount;
+  if (total !== results.length) {
+    throw new Error(
+      `invalid eval report at ${path}: total (${total}) does not match results.length (${results.length})`,
+    );
+  }
+  if (passed !== passCount) {
+    throw new Error(
+      `invalid eval report at ${path}: passed (${passed}) does not match results (${passCount} passed)`,
+    );
+  }
+  if (failed !== failCount) {
+    throw new Error(
+      `invalid eval report at ${path}: failed (${failed}) does not match results (${failCount} failed)`,
+    );
+  }
+  if (selectedTotal < total) {
+    throw new Error(
+      `invalid eval report at ${path}: selectedTotal (${selectedTotal}) is less than total (${total})`,
+    );
+  }
+  const aborted = report.aborted === true;
+  if (!aborted && selectedTotal !== total) {
+    throw new Error(
+      `invalid eval report at ${path}: selectedTotal (${selectedTotal}) must equal total (${total}) when not aborted`,
+    );
+  }
   return {
     ranAt: report.ranAt,
     full: report.full,
@@ -126,7 +166,7 @@ export function parseEvalReport(raw: unknown, path = 'eval report'): EvalReport 
     total,
     passed,
     failed,
-    ...(report.aborted ? { aborted: true } : {}),
+    ...(aborted ? { aborted: true } : {}),
     results,
   };
 }

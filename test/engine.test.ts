@@ -15,7 +15,14 @@ import {
 } from '../src/answer.js';
 import { buildCorpus, buildPrivateNotes, embedText, stripMarkdown } from '../src/corpus.js';
 import { batchInputs, truncateForEmbedding, MAX_INPUT_BYTES } from '../src/embedding.js';
-import { judgeAnswer, judgeAnswerMode, judgeRetrieval, loadGold, parseEvalReport } from '../src/evaluate.js';
+import {
+  judgeAnswer,
+  judgeAnswerMode,
+  judgeRetrieval,
+  loadGold,
+  parseEvalReport,
+  parseEvalReportJson,
+} from '../src/evaluate.js';
 import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
 import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
@@ -533,8 +540,8 @@ test('eval: parseEvalReport preserves aborted metadata for fail-fast reports', (
     ranAt: '2026-06-13T00:00:00.000Z',
     full: true,
     selectedTotal: 10,
-    total: 3,
-    passed: 2,
+    total: 1,
+    passed: 0,
     failed: 1,
     aborted: true,
     results: [
@@ -548,5 +555,31 @@ test('eval: parseEvalReport preserves aborted metadata for fail-fast reports', (
   });
   assert.equal(report.aborted, true);
   assert.equal(report.selectedTotal, 10);
-  assert.equal(report.total, 3);
+  assert.equal(report.total, 1);
+});
+
+test('eval: parseEvalReportJson rejects syntactically invalid JSON with path context', () => {
+  assert.throws(
+    () => parseEvalReportJson('{not json', 'broken-report.json'),
+    /invalid eval report at broken-report\.json: not valid JSON/,
+  );
+});
+
+test('eval: parseEvalReport rejects inconsistent count metadata', () => {
+  assert.throws(
+    () =>
+      parseEvalReport(
+        {
+          ranAt: '2026-06-13T00:00:00.000Z',
+          full: false,
+          selectedTotal: 2,
+          total: 2,
+          passed: 2,
+          failed: 0,
+          results: [{ id: 'q01', query: 'a', pass: true, issues: [] }],
+        },
+        'counts-report.json',
+      ),
+    /counts-report\.json: total \(2\) does not match results\.length \(1\)/,
+  );
 });

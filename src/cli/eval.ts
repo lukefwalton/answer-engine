@@ -13,7 +13,13 @@ import { config } from '../../archive.config.js';
 import { answerQuestion } from '../answer.js';
 import { batchInputs, embedBatch } from '../embedding.js';
 import { EVAL_USAGE, filterGoldQueries, parseQueryIdList } from '../eval-select.js';
-import { judgeAnswer, judgeRetrieval, loadGold, parseEvalReport, summarizeEvalReport } from '../evaluate.js';
+import {
+  judgeAnswer,
+  judgeRetrieval,
+  loadGold,
+  parseEvalReportJson,
+  summarizeEvalReport,
+} from '../evaluate.js';
 import type { EvalQueryResult } from '../evaluate.js';
 import { assembleEvidence } from '../no-leak.js';
 import { retrieve } from '../retrieve.js';
@@ -26,7 +32,7 @@ function loadFailedIdsFromReport(reportPath: string): string[] {
   if (!existsSync(reportPath)) {
     throw new Error(`eval report not found: ${reportPath}`);
   }
-  const report = parseEvalReport(JSON.parse(readFileSync(reportPath, 'utf8')) as unknown, reportPath);
+  const report = parseEvalReportJson(readFileSync(reportPath, 'utf8'), reportPath);
   if (report.aborted) {
     throw new Error(
       `eval report was aborted by --fail-fast: ${reportPath}. ` +
