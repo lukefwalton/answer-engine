@@ -150,10 +150,12 @@ story, including a real failing-then-passing walkthrough.
 
 The strongest objection to this approach is that it works only because the
 frame is easy to own: one archive, one named author, a delimited corpus.
-Engineering answerability here does not, on its own, show that public, plural,
-or contested answer systems — where it is genuinely unsettled *whose* frame
-holds — can be made answerable the same way. That is a real limit, and this
-repo is the bounded case on purpose, not a proof about the unbounded one.
+The mechanisms here do not depend on that smallness — none of them refers to
+corpus size. What a bounded demo cannot do, on its own, is prove that holding
+these surfaces at public, plural, or contested scale is affordable, or that
+systems where it is genuinely unsettled *whose* frame holds can be made
+answerable the same way. That is a real limit, and this repo is the bounded
+case on purpose, not a proof about the unbounded one.
 
 It is worth being exact about *which* limit, because it is narrower than it
 looks. The gate owns **soundness**: nothing enters an answer that isn't
@@ -169,8 +171,8 @@ thought to test for — and that is irreducible for any system, since
 anticipating it in full would mean knowing the answer in advance.
 
 What the repo does try to show is concrete: that whether a frame is *held* or
-just *inherited* can be settled in running code rather than asserted on paper.
-The privacy boundary is a type that won't compile if violated, not a guard
+just *inherited* can be settled at control surfaces in running code, not
+promissory labels. The privacy boundary is a type that won't compile if violated, not a guard
 someone has to remember (`src/no-leak.ts`); modes are re-derived from the
 evidence, not taken from the model's word for it (`src/answer.ts`); refusals
 are regression-tested like any other behavior (`eval/gold.yaml`).
