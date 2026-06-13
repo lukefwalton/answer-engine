@@ -51,15 +51,4 @@ if (topDate !== today || preferredDate !== today) {
 
 writeFileSync('CITATION.cff', cff);
 
-let readme = readFileSync('README.md', 'utf8');
-const latestRow = readme.match(/^\| Latest \| \[`v[^`]+`\]\([^)]+\) \| \[[^\]]+\]\([^)]+\) \|$/m);
-if (!latestRow) {
-  throw new Error('Could not find Latest row in README.md release table.');
-}
-readme = readme.replace(
-  latestRow[0],
-  latestRow[0].replace(/(`v)[^`]+(`)/, `$1${next}$2`),
-);
-writeFileSync('README.md', readme);
-
 console.log(`Synced release metadata to ${next} (${today}).`);

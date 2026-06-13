@@ -239,20 +239,26 @@ the GitHub URL).
 **Recommended:** cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773)
 — it represents all versions and always resolves to the latest archived release.
 
-To pin a specific snapshot, use that release's version DOI on
+| | |
+| --- | --- |
+| DOI | [10.5281/zenodo.20676773](https://doi.org/10.5281/zenodo.20676773) |
+| Code | [github.com/lukefwalton/answer-engine](https://github.com/lukefwalton/answer-engine) |
+| About | [lukefwalton.com/ask/about/](https://lukefwalton.com/ask/about/) |
+
+To pin a specific archived snapshot, use that release's version DOI on
 [Zenodo](https://zenodo.org/records/20676773):
 
-| Release | Git tag | Version DOI |
-| --- | --- | --- |
-| Latest | [`v1.1.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.1.0) | [10.5281/zenodo.20677602](https://doi.org/10.5281/zenodo.20677602) |
-| Initial | [`v1.0.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.0.0) | [10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774) |
+| Release | Version DOI |
+| --- | --- |
+| v1.1.0 | [10.5281/zenodo.20677602](https://doi.org/10.5281/zenodo.20677602) |
+| v1.0.0 | [10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774) |
 
 **Cutting a release:** on `main`, run **Actions → release** (patch/minor/major).
 The workflow checks that `package.json`, `.zenodo.json`, and `CITATION.cff`
 match the latest `v*` tag, computes the next semver, runs
 [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
 commits that bump, tags the commit, and creates the GitHub release Zenodo
-archives. Update the version DOI in the table below after Zenodo assigns it.
+archives. Add new version DOI rows to the pinning table above when needed.
 When P4 lands, add its DOI to `related_identifiers` in `.zenodo.json` and cut
 the next release.
 
