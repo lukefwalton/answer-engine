@@ -21,7 +21,7 @@ on:
 
 concurrency:
   group: release
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -97,7 +97,7 @@ jobs:
           git add package.json package-lock.json .zenodo.json CITATION.cff
           git commit -m "chore(release): ${{ steps.version.outputs.tag }}"
           git tag "${{ steps.version.outputs.tag }}"
-          git push origin main "${{ steps.version.outputs.tag }}"
+          git push --atomic origin main "${{ steps.version.outputs.tag }}"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
