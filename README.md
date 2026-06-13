@@ -155,7 +155,9 @@ corpus size. What a bounded demo cannot do, on its own, is prove that holding
 these surfaces at public, plural, or contested scale is affordable, or that
 systems where it is genuinely unsettled *whose* frame holds can be made
 answerable the same way. That is a real limit, and this repo is the bounded
-case on purpose, not a proof about the unbounded one.
+case on purpose, not a proof about the unbounded one. The public-scale cost
+question is real, but it belongs to the builders of public-scale systems, not
+to a teaching repo note.
 
 It is worth being exact about *which* limit, because it is narrower than it
 looks. The gate owns **soundness**: nothing enters an answer that isn't
