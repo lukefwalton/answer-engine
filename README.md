@@ -246,7 +246,12 @@ retrieval points at passages; more retrieval signals (recency for "what do
 you think *now*", author aliases, per-collection weights); a
 document-frequency cap on the theme boost — at four records a verbatim theme
 match is signal, but on a large corpus a theme that appears on half the
-records boosts nothing and should be discounted; an HTTP handler
+records boosts nothing and should be discounted; an evidence-selection prune
+before synthesis — keep one record per cluster, then the clear winner plus a
+single corroborator when it leads the rest by a margin — for when a large
+corpus makes wide top-k surface correlated neighbors instead of distinct
+sources, which shapes what synthesis *sees*, not what the gate certifies
+(retrieved is still not cited); an HTTP handler
 around `retrieve` + `answerQuestion` with a rate limit, query cap, and cache;
 SQLite or pgvector when the archive outgrows in-memory cosine — the shapes
 don't change. In production we also keep the wire contract's `not-found`
@@ -254,6 +259,20 @@ empty and let the UI roll plain decline copy at display time, so refusals
 stay honest *and* human.
 
 Code the invariant. Document the scaling pattern. Comment the footgun.
+
+## What stays out
+
+A running deployment grows layers this engine deliberately omits: deterministic
+product routes (help, usage, or corpus-count answers that never call a model),
+a domain-specific eval guard taxonomy, an ingestion or transcription pipeline,
+and the site's own config. Those are consumer-adapter concerns — they live in
+the site layer (for "Ask the Archive," the `ask-the-archive/` adapter), not the
+engine — because the value this repo carries is the boundary and the answer
+contract, not feature parity (`.github/STANDARDS.md` §3, "What Matters Less").
+One line worth holding if you add a deterministic route downstream: it may
+shortcut *delivery*, but it must never be how a gold query passes. A route that
+flips an eval outcome is special-casing the question wearing a hat — the same
+thing §5 forbids, one layer up.
 
 ## Citing this software
 
