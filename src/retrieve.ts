@@ -21,12 +21,11 @@ export const EXACT_MATCH_BOOST = 0.3;
 export const THEME_BOOST = 0.15;
 
 /** Hits scoring below this are not evidence. Tune against your own corpus.
- *  The floor is where recall is owned upstream: a visible, versioned constant
- *  that decides what becomes a candidate, not an emergent property of the
- *  model. It is also where recall's hard limit lives — a relevant source that
- *  lands below the floor is simply absent, and absence is the one thing the
- *  downstream citation gate (answer.ts) cannot catch. No floor setting catches
- *  the case no one wrote a gold query for. */
+ *  The floor defines what becomes a candidate upstream — a visible, versioned
+ *  constant, not an emergent property of the model. A relevant source below
+ *  the floor is simply absent, and absence is the one thing the downstream
+ *  citation gate (answer.ts) cannot catch. No floor catches the case no one
+ *  wrote a gold query for. */
 export const SCORE_FLOOR = 0.2;
 
 export interface ScoredRecord {

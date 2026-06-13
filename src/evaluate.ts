@@ -264,11 +264,10 @@ export interface JudgeResult {
 
 /** Retrieval floor: expected sources in the hits, forbidden sources out.
  *  Both streams count — a gold id can name a record or a private note.
- *  This is where the gold set owns *recall* — but only for the cases it
- *  enumerates: every expectSources id is a source someone decided must
- *  surface. The relevant source no gold query names is the residue a
- *  regression suite can never reach: it catches what it lists, not the
- *  omission it never thought of. */
+ *  This is where the gold set *checks recall* on enumerated cases: every
+ *  expectSources id is a source someone decided must surface in regression.
+ *  The relevant source no gold query names is residue the suite can never
+ *  reach — it catches what it lists, not the omission it never thought of. */
 export function judgeRetrieval(gold: GoldQuery, hits: RetrievalResult): JudgeResult {
   const hitIds = new Set([
     ...hits.records.map((h) => h.record.id),

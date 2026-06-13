@@ -125,7 +125,7 @@ that's the regression suite writing itself.
 
 ## What the gold set cannot catch
 
-The set owns recall for the cases it names: a listed source must surface, a
+The set checks recall for the cases it names: a listed source must surface, a
 listed refusal must fire. What it cannot own is the case no one wrote down. A
 relevant source that sits below the score floor is simply absent, and a
 regression suite only ever catches the omission it already thought of. That
