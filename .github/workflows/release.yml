@@ -35,6 +35,10 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Require main
         run: |
           branch="${GITHUB_REF#refs/heads/}"
@@ -82,10 +86,6 @@ jobs:
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
           echo "tag=v${next}" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
 
       - name: Sync release metadata
         run: node scripts/sync-release-metadata.mjs "${{ steps.version.outputs.next }}"

@@ -293,7 +293,9 @@ Zenodo archives. Add new version DOI rows to the pinning table above when
 needed. `CITATION.cff` uses the [concept DOI](https://doi.org/10.5281/zenodo.20676773)
 for GitHub's cite UI; version-specific DOIs appear in Zenodo after each publish.
 If the workflow pushes refs but GitHub release creation fails, create the release
-manually from the existing tag — do not re-run the workflow (that would bump again).
+manually from the existing tag in the GitHub UI — **do not re-run** this workflow:
+a rerun would bump semver again (e.g. skip `v1.2.0` and cut `v1.2.1`) because
+the latest tag already advanced.
 When P4 lands, add its DOI to `related_identifiers` in `.zenodo.json` and cut
 the next release.
 
