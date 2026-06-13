@@ -247,8 +247,8 @@ you think *now*", author aliases, per-collection weights); a
 document-frequency cap on the theme boost — at four records a verbatim theme
 match is signal, but on a large corpus a theme that appears on half the
 records boosts nothing and should be discounted; an evidence-selection prune
-before synthesis — keep one record per cluster, then the clear winner plus a
-single corroborator when it leads the rest by a margin — for when a large
+before synthesis (keep one record per cluster, then the clear winner plus a
+single corroborator when it leads the rest by a margin) for when a large
 corpus makes wide top-k surface correlated neighbors instead of distinct
 sources, which shapes what synthesis *sees*, not what the gate certifies
 (retrieved is still not cited); an HTTP handler
@@ -265,13 +265,13 @@ Code the invariant. Document the scaling pattern. Comment the footgun.
 A running deployment grows layers this engine deliberately omits: deterministic
 product routes (help, usage, or corpus-count answers that never call a model),
 a domain-specific eval guard taxonomy, an ingestion or transcription pipeline,
-and the site's own config. Those are consumer-adapter concerns — they live in
+and the site's own config. Those are consumer-adapter concerns. They live in
 the site layer (for "Ask the Archive," the `ask-the-archive/` adapter), not the
-engine — because the value this repo carries is the boundary and the answer
+engine, because the value this repo carries is the boundary and the answer
 contract, not feature parity (`.github/STANDARDS.md` §3, "What Matters Less").
 One line worth holding if you add a deterministic route downstream: it may
 shortcut *delivery*, but it must never be how a gold query passes. A route that
-flips an eval outcome is special-casing the question wearing a hat — the same
+flips an eval outcome is special-casing the question wearing a hat: the same
 thing §5 forbids, one layer up.
 
 ## Citing this software
