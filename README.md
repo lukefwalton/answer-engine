@@ -283,8 +283,8 @@ To pin a specific archived snapshot, use that release's version DOI on
 | v1.0.0 | [10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774) |
 
 **Cutting a release:** on `main`, run **Actions → release** (patch/minor/major).
-The workflow checks that `package.json`, `.zenodo.json`, and `CITATION.cff`
-match the latest `v*` tag, computes the next semver, runs
+Checked-in metadata must match the latest `v*` tag (currently `v1.1.0`). The
+workflow computes the next semver, runs
 [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
 commits that bump, tags the commit, and creates the GitHub release Zenodo
 archives. Add new version DOI rows to the pinning table above when needed.

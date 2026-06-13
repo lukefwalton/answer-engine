@@ -19,6 +19,10 @@ on:
         required: false
         type: string
 
+concurrency:
+  group: release
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -39,12 +43,13 @@ jobs:
             exit 1
           fi
 
-      - name: Verify main matches latest tag
+      - name: Verify baseline tag matches checked-in metadata
+        id: baseline
         run: |
           latest="$(git tag -l 'v*' --sort=-v:refname | head -1)"
           if [ -z "$latest" ]; then
-            echo "No v* tags found; skipping alignment check."
-            exit 0
+            echo "No v* tags found. Tag main to match checked-in metadata before running release."
+            exit 1
           fi
           expected="${latest#v}"
           pkg="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json','utf8')).version")"
@@ -55,17 +60,17 @@ jobs:
             got="${entry#*:}"
             if [ "$got" != "$expected" ]; then
               echo "$file is $got but latest tag is $latest."
+              echo "Repair metadata or cut a matching tag before releasing."
               exit 1
             fi
           done
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "expected=$expected" >> "$GITHUB_OUTPUT"
 
       - name: Compute next version
         id: version
         run: |
-          latest="$(git tag -l 'v*' --sort=-v:refname | head -1)"
-          if [ -z "$latest" ]; then
-            latest="v0.0.0"
-          fi
+          latest="${{ steps.baseline.outputs.latest }}"
           version="${latest#v}"
           IFS=. read -r major minor patch <<< "$version"
           case "${{ inputs.bump }}" in
@@ -92,8 +97,7 @@ jobs:
           git add package.json package-lock.json .zenodo.json CITATION.cff
           git commit -m "chore(release): ${{ steps.version.outputs.tag }}"
           git tag "${{ steps.version.outputs.tag }}"
-          git push origin main
-          git push origin "${{ steps.version.outputs.tag }}"
+          git push origin main "${{ steps.version.outputs.tag }}"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
