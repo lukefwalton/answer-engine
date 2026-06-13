@@ -1,0 +1,65 @@
+cff-version: 1.2.0
+title: "Answer Engine: An AI that Says \"I Don't Know\""
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Walton
+    given-names: Luke F.
+    affiliation: Independent Researcher
+    orcid: "https://orcid.org/0009-0005-9263-1954"
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.20676773
+  - type: url
+    value: https://github.com/lukefwalton/answer-engine
+repository-code: "https://github.com/lukefwalton/answer-engine"
+url: "https://lukefwalton.com/ask/about/"
+license: Apache-2.0
+version: 1.1.0
+date-released: "2026-06-13"
+keywords:
+  - answerability
+  - answer engine
+  - retrieval-augmented generation
+  - citation grounding
+  - refusal
+  - evaluation
+abstract: >
+  A small answer engine that keeps the authorial frame outside the model:
+  sources are bounded, private text cannot leak into the prompt, citations
+  are grounded against retrieved evidence, and refusals are tested.
+preferred-citation:
+  type: software
+  authors:
+    - family-names: Walton
+      given-names: Luke F.
+  title: "Answer Engine: An AI that Says \"I Don't Know\""
+  version: 1.1.0
+  doi: 10.5281/zenodo.20676773
+  date-released: "2026-06-13"
+  url: "https://github.com/lukefwalton/answer-engine"
+references:
+  - type: article
+    title: "The Decision No One Authored"
+    authors:
+      - family-names: Walton
+        given-names: Luke F.
+    doi: 10.5281/zenodo.20622946
+    url: "https://lukefwalton.com/writing/the-decision-no-one-authored/"
+    license: CC-BY-NC-ND-4.0
+  - type: article
+    title: "The Captured Oracle"
+    authors:
+      - family-names: Walton
+        given-names: Luke F.
+    doi: 10.5281/zenodo.20676328
+    url: "https://lukefwalton.com/writing/the-captured-oracle/"
+    license: CC-BY-NC-ND-4.0
+  - type: article
+    title: "The Invariant of Answerability"
+    authors:
+      - family-names: Walton
+        given-names: Luke F.
+    doi: 10.5281/zenodo.20606493
+    url: "https://lukefwalton.com/writing/the-invariant-of-answerability/"
+    license: CC-BY-NC-ND-4.0

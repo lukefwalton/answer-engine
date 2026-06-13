@@ -51,6 +51,7 @@ async function main(): Promise<void> {
   console.log(answer.mode === 'not-found' ? "I don't know." : answer.answer);
   // Render citations from the final answer, not from raw retrieval hits:
   // retrieved neighbors are candidates, but citations are the evidence.
+  // Web UIs should follow the same rule — see README §4.
   if (answer.citations.length > 0) {
     console.log('\nCitations:');
     for (const c of answer.citations) {

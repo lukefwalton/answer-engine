@@ -1,0 +1,104 @@
+name: release
+
+# Intentional releases only — not on every green CI run.
+# Each GitHub release can trigger a new Zenodo archive and citable DOI.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver bump from the latest v* tag
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      notes:
+        description: Release notes (optional; shown on the GitHub release)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version
+        id: version
+        run: |
+          latest="$(git tag -l 'v*' --sort=-v:refname | head -1)"
+          if [ -z "$latest" ]; then
+            latest="v0.0.0"
+          fi
+          version="${latest#v}"
+          IFS=. read -r major minor patch <<< "$version"
+          case "${{ inputs.bump }}" in
+            patch) patch=$((patch + 1)) ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+          esac
+          next="${major}.${minor}.${patch}"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "tag=v${next}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Sync version files
+        run: |
+          node <<'EOF'
+          import { readFileSync, writeFileSync } from 'node:fs';
+
+          const next = process.env.NEXT_VERSION;
+          const today = new Date().toISOString().slice(0, 10);
+
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          pkg.version = next;
+          writeFileSync('package.json', `${JSON.stringify(pkg, null, 2)}\n`);
+
+          let cff = readFileSync('CITATION.cff', 'utf8');
+          cff = cff.replace(/^version: .+$/m, `version: ${next}`);
+          cff = cff.replace(/^date-released: .+$/m, `date-released: "${today}"`);
+          cff = cff.replace(
+            /^(\s+version: ).+$/m,
+            `$1${next}`,
+          );
+          cff = cff.replace(
+            /^(\s+date-released: ).+$/m,
+            `$1"${today}"`,
+          );
+          writeFileSync('CITATION.cff', cff);
+          EOF
+        env:
+          NEXT_VERSION: ${{ steps.version.outputs.next }}
+
+      - name: Commit, tag, and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json CITATION.cff
+          git commit -m "release ${{ steps.version.outputs.tag }}"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin main
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body: |
+            ${{ inputs.notes }}
+
+            ---
+            Archived on Zenodo after publish. Cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773) for latest, or this release's version DOI to pin the snapshot.
+          generate_release_notes: true

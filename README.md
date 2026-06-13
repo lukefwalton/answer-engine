@@ -1,5 +1,9 @@
 # Answer Engine: An AI that Says "I Don't Know"
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20676773.svg)](https://doi.org/10.5281/zenodo.20676773)
+[![License](https://img.shields.io/github/license/lukefwalton/answer-engine)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/lukefwalton/answer-engine)](https://github.com/lukefwalton/answer-engine/releases)
+
 A small answer engine that keeps the authorial frame outside the model:
 sources are bounded, private text cannot leak into the prompt, citations are
 grounded, and refusals are tested.
@@ -220,22 +224,57 @@ sentence, but the system owns the frame it must satisfy. Evidence boundaries,
 citation validation, refusal modes, and evals stay outside the model so the
 answer can be checked rather than merely trusted.
 
+## Citing this software
+
+If you use or build on this repo, please cite the Zenodo archive (not just
+the GitHub URL). GitHub reads [`CITATION.cff`](./CITATION.cff) for the
+**Cite this repository** button.
+
+**Recommended:** cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773)
+— it represents all versions and always resolves to the latest archived release.
+
+To pin a specific snapshot, use that release's version DOI on
+[Zenodo](https://zenodo.org/records/20676773):
+
+| Release | Git tag | Version DOI |
+| --- | --- | --- |
+| Latest | [`v1.1.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.1.0) | [10.5281/zenodo.20677602](https://doi.org/10.5281/zenodo.20677602) |
+| Initial | [`v1.0.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.0.0) | [10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774) |
+
+**Cutting a release:** use **Actions → release → Run workflow** when you want a
+new citable snapshot (not on every merge). That bumps semver from the latest
+`v*` tag, syncs `package.json` and `CITATION.cff`, and creates the GitHub
+release that Zenodo picks up.
+
+```bibtex
+@software{walton_answer_engine_2026,
+  author       = {Walton, Luke F.},
+  title        = {Answer Engine: An AI that Says "I Don't Know"},
+  year         = {2026},
+  publisher    = {Zenodo},
+  doi          = {10.5281/zenodo.20676773},
+  url          = {https://github.com/lukefwalton/answer-engine}
+}
+```
+
 ## Related writing
 
-This repo is a practical companion to a few essays and papers about
-answerability, authorship, and AI systems:
+This repo is a practical companion to the Answerability papers:
 
-- [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/)
-- [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/)
-- [The Invariant of Answerability](https://lukefwalton.com/writing/the-invariant-of-answerability/)
+- [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/) — [DOI](https://doi.org/10.5281/zenodo.20622946)
+- [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/) — [DOI](https://doi.org/10.5281/zenodo.20676328)
+- [The Invariant of Answerability](https://lukefwalton.com/writing/the-invariant-of-answerability/) — [DOI](https://doi.org/10.5281/zenodo.20606493)
 
-The writing is licensed separately under CC BY-NC-ND 4.0. This code is
-Apache-2.0.
+## Licenses
 
-## License & contact
+| Work | License |
+| --- | --- |
+| Answerability papers | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
+| answer-engine (this software) | [Apache-2.0](./LICENSE) |
 
-Apache-2.0. Archived on Zenodo:
-[10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774).
+## Contact
+
+Archived on Zenodo: [10.5281/zenodo.20676773](https://doi.org/10.5281/zenodo.20676773).
 
 Built by [Luke F. Walton](https://lukefwalton.com) — contact
 [luke@lukefwalton.com](mailto:luke@lukefwalton.com).
