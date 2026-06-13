@@ -288,8 +288,12 @@ today — the tag already exists). The workflow queues concurrent runs, bumps
 semver via [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
 pushes `main` and the new tag atomically, then creates the GitHub release
 Zenodo archives. Add new version DOI rows to the pinning table above when
-needed. When P4 lands, add its DOI to `related_identifiers` in `.zenodo.json`
-and cut the next release.
+needed. `CITATION.cff` uses the [concept DOI](https://doi.org/10.5281/zenodo.20676773)
+for GitHub's cite UI; version-specific DOIs appear in Zenodo after each publish.
+If the workflow pushes refs but GitHub release creation fails, create the release
+manually from the existing tag — do not re-run the workflow (that would bump again).
+When P4 lands, add its DOI to `related_identifiers` in `.zenodo.json` and cut
+the next release.
 
 ```bibtex
 @software{walton_answer_engine_2026,
