@@ -146,6 +146,43 @@ corpus, the scoring, or the prompt — never special-case the question.** We
 learned that the hard way; [`eval/README.md`](./eval/README.md) tells the
 story, including a real failing-then-passing walkthrough.
 
+## What this shows, and where it stops
+
+The strongest objection to this approach is that it works only because the
+frame is easy to own: one archive, one named author, a delimited corpus.
+Engineering answerability here does not, on its own, show that public, plural,
+or contested answer systems — where it is genuinely unsettled *whose* frame
+holds — can be made answerable the same way. That is a real limit, and this
+repo is the bounded case on purpose, not a proof about the unbounded one.
+
+It is worth being exact about *which* limit, because it is narrower than it
+looks. The gate owns **soundness**: nothing enters an answer that isn't
+grounded in retrieved evidence or honestly refused. It does not own
+**completeness** — it cannot certify that what was retrieved is what *should*
+have been. A source that falls below the score floor is simply absent, and a
+gate sees only what reaches it. But absence isn't therefore unowned: the
+scoring, the floor, and the corpus boundary that decide what becomes a
+candidate are authored constants someone maintains (`src/retrieve.ts`,
+`archive.config.ts`), and the gold set tests recall for the cases it names
+(`eval/gold.yaml`). What stays irreducible is the relevant source no one
+thought to test for — and that is irreducible for any system, since
+anticipating it in full would mean knowing the answer in advance.
+
+What the repo does try to show is concrete: that whether a frame is *held* or
+just *inherited* can be settled in running code rather than asserted on paper.
+The privacy boundary is a type that won't compile if violated, not a guard
+someone has to remember (`src/no-leak.ts`); modes are re-derived from the
+evidence, not taken from the model's word for it (`src/answer.ts`); refusals
+are regression-tested like any other behavior (`eval/gold.yaml`).
+
+The [Answerability papers](#related-writing) take up the harder cases — plural
+authorship, contested frames, systems where *whose* gate applies is itself
+unsettled. This repo is the bounded reference implementation; discussion, issues,
+and PRs that extend, test, or push against those limits are welcome. The bar
+for new code is the bar the repo sets for itself: least lines that keep the
+promises, boundaries enforced by types or runtime checks, loud failures, and
+no change that makes the eval pass by special-casing a question.
+
 ---
 
 ## Quick start
@@ -213,16 +250,6 @@ empty and let the UI roll plain decline copy at display time, so refusals
 stay honest *and* human.
 
 Code the invariant. Document the scaling pattern. Comment the footgun.
-
-Contributions welcome — the bar for new code is the bar the repo sets for
-itself: least lines that keep the promises, boundaries enforced by types or
-runtime checks, loud failures, and no change that makes the eval pass by
-special-casing a question.
-
-That is the design principle: **answerability**. The model may write the
-sentence, but the system owns the frame it must satisfy. Evidence boundaries,
-citation validation, refusal modes, and evals stay outside the model so the
-answer can be checked rather than merely trusted.
 
 ## Citing this software
 
