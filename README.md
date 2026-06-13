@@ -227,8 +227,14 @@ answer can be checked rather than merely trusted.
 ## Citing this software
 
 If you use or build on this repo, please cite the Zenodo archive (not just
-the GitHub URL). GitHub reads [`CITATION.cff`](./CITATION.cff) for the
-**Cite this repository** button.
+the GitHub URL).
+
+- **[`.zenodo.json`](./.zenodo.json)** — metadata for Zenodo's GitHub archive
+  (title, ORCID, related paper DOIs, documentation links). Commit this before
+  each tag; Zenodo reads it from the release snapshot and ignores
+  `CITATION.cff` when it is present.
+- **[`CITATION.cff`](./CITATION.cff)** — GitHub **Cite this repository** UI
+  only.
 
 **Recommended:** cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773)
 — it represents all versions and always resolves to the latest archived release.
@@ -241,11 +247,11 @@ To pin a specific snapshot, use that release's version DOI on
 | Latest | [`v1.1.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.1.0) | [10.5281/zenodo.20677602](https://doi.org/10.5281/zenodo.20677602) |
 | Initial | [`v1.0.0`](https://github.com/lukefwalton/answer-engine/releases/tag/v1.0.0) | [10.5281/zenodo.20676774](https://doi.org/10.5281/zenodo.20676774) |
 
-**Cutting a release:** after merge to `main`, use **Actions → release → Run
-workflow** on the `main` branch when you want a new citable snapshot (not on
-every merge). That bumps semver from the latest `v*` tag, syncs
-`package.json` and `CITATION.cff`, and creates the GitHub release that Zenodo
-picks up.
+**Cutting a release:** merge metadata changes first, then on `main` run
+**Actions → release → minor** to cut **`v1.2.0`** (next after `v1.1.0`). That
+syncs `package.json`, `.zenodo.json`, and `CITATION.cff`, tags, and creates
+the GitHub release Zenodo archives. Do not retag `v1.1.0`. When P4 lands, add
+its DOI to `related_identifiers` in `.zenodo.json` and cut the next tag.
 
 ```bibtex
 @software{walton_answer_engine_2026,

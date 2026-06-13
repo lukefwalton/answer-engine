@@ -74,15 +74,15 @@ jobs:
           pkg.version = next;
           writeFileSync('package.json', `${JSON.stringify(pkg, null, 2)}\n`);
 
+          const zenodo = JSON.parse(readFileSync('.zenodo.json', 'utf8'));
+          zenodo.version = next;
+          writeFileSync('.zenodo.json', `${JSON.stringify(zenodo, null, 2)}\n`);
+
           let cff = readFileSync('CITATION.cff', 'utf8');
-          const before = cff;
           cff = cff.replace(/^version: .+$/m, `version: ${next}`);
           cff = cff.replace(/^date-released: .+$/m, `date-released: "${today}"`);
           cff = cff.replace(/^(\s+version: ).+$/m, `$1${next}`);
           cff = cff.replace(/^(\s+date-released: ).+$/m, `$1"${today}"`);
-          if (cff === before) {
-            throw new Error('CITATION.cff did not change — check field layout.');
-          }
 
           const topVersion = cff.match(/^version: (.+)$/m)?.[1];
           const topDate = cff.match(/^date-released: "(.+)"$/m)?.[1];
@@ -96,6 +96,9 @@ jobs:
           if (topDate !== today || preferredDate !== today) {
             throw new Error(`Expected date-released ${today} in CITATION.cff (top=${topDate}, preferred=${preferredDate}).`);
           }
+          if (zenodo.version !== next) {
+            throw new Error(`Expected version ${next} in .zenodo.json (got ${zenodo.version}).`);
+          }
 
           writeFileSync('CITATION.cff', cff);
           EOF
@@ -106,7 +109,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json CITATION.cff
+          git add package.json .zenodo.json CITATION.cff
           git commit -m "release ${{ steps.version.outputs.tag }}"
           git tag "${{ steps.version.outputs.tag }}"
           git push origin main
