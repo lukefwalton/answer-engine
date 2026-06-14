@@ -304,7 +304,7 @@ To pin a specific archived snapshot, pick that release's version DOI on the
 required when a new release lands.
 
 **Cutting a release:** on `main`, run **Actions → release** (patch/minor/major).
-Checked-in metadata must match the latest `v*` tag on the remote (`v1.3.0`
+Checked-in metadata must match the latest `v*` tag on the remote (`v1.3.1`
 today — the tag already exists). The workflow queues concurrent runs, bumps
 semver via [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
 pushes `main` and the new tag atomically, then creates the GitHub release
