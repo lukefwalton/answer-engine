@@ -7,7 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const METADATA_FILES = ['package.json', 'package-lock.json', 'CITATION.cff', '.zenodo.json'] as const;
+const METADATA_FILES = [
+  'package.json',
+  'package-lock.json',
+  'CITATION.cff',
+  '.zenodo.json',
+  'README.md',
+] as const;
 
 test('sync-release-metadata updates all version-bearing files', () => {
   const dir = mkdtempSync(join(tmpdir(), 'release-meta-'));
@@ -33,4 +39,10 @@ test('sync-release-metadata updates all version-bearing files', () => {
   assert.match(cff, /^version: 2\.0\.0$/m);
   assert.match(cff, /^date-released: "\d{4}-\d{2}-\d{2}"$/m);
   assert.match(cff, /^\s+version: 2\.0\.0$/m);
+
+  const readme = readFileSync(join(dir, 'README.md'), 'utf8');
+  // the release-baseline reference is bumped to the new version...
+  assert.match(readme, /latest `v\*` tag on the remote \(`v2\.0\.0`/);
+  // ...while the illustrative version examples in the prose are left alone.
+  assert.match(readme, /skip `v1\.4\.0` and cut `v1\.4\.1`/);
 });

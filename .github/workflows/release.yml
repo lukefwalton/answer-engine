@@ -94,7 +94,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json .zenodo.json CITATION.cff
+          git add package.json package-lock.json .zenodo.json CITATION.cff README.md
           git commit -m "chore(release): ${{ steps.version.outputs.tag }}"
           git tag "${{ steps.version.outputs.tag }}"
           git push --atomic origin main "${{ steps.version.outputs.tag }}"
