@@ -54,12 +54,14 @@ shrinks by about the same factor.
 
 - **Buys:** ~14× smaller published bundle; cold start stops being a mini-batch
   job.
-- **Why it is nearly free here:** retrieval ranks by cosine, and cosine
-  recomputes norms per call, so the per-vector scale cancels out of the score
-  entirely. Quantization spends *direction* precision only, never magnitude
-  calibration — cosine rank is preserved to >0.99 correlation. It is safe
-  *because* of how the gate scores, not in general; carry that reasoning, not
-  just the technique.
+- **Why it is nearly free here — two facts, different in kind.** *Exact:*
+  cosine normalizes by vector norm, so a positive per-vector scale cancels from
+  the score entirely — the rank is invariant to it as a matter of algebra, and
+  you can score against the int8 bytes without restoring the scale at all.
+  *Measured:* int8 rounding perturbs direction and can reorder near-ties, so it
+  is not provably harmless — it is *verified* (rank correlation >0.99 against the
+  full-precision index, then a passing eval). Same move as everywhere else in the
+  repo: what is exact is proven, what is not is gated — never assumed.
 - **Costs:** a wire/in-memory split you must keep honest — quantize on publish,
   keep full precision in memory and in the on-disk source of truth — and a
   versioned wire format so a code/blob mismatch fails fast instead of
@@ -68,8 +70,9 @@ shrinks by about the same factor.
   eval.
 - **Lives:** a small portable quantize/dequantize/pack/unpack module, wired in
   only by the *site adapter* that serializes and serves the bundle — the engine
-  never needs it. Reference implementation: `vector-quant.ts` in the Ask the
-  Archive source (the `ask-the-archive/` site adapter, not this repo).
+  never needs it. Reference implementation: `vector-quant.ts` in the production
+  site adapter (`ask-the-archive/`, which is not a public repository), so it is
+  named here rather than linked.
 
 ## 3. Corpus geometry (chunk and passage count)
 
@@ -96,5 +99,6 @@ the setting, the same way it governs every other change to retrieval. The
 ratios are portable; the production instance is not. All three operate the same
 product, [Ask the Archive](https://lukefwalton.com/ask/); the site-adapter
 detail behind them — transcription, the published bundle, the HTTP handler,
-abuse and cost controls — lives in the `ask-the-archive/` adapter, the consumer
-layer this repo deliberately omits (`.github/STANDARDS.md` §3).
+abuse and cost controls — lives in the production site adapter (`ask-the-archive/`,
+not a public repository), the consumer layer this repo deliberately omits
+(`.github/STANDARDS.md` §3).
