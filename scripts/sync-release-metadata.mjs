@@ -51,4 +51,16 @@ if (topDate !== today || preferredDate !== today) {
 
 writeFileSync('CITATION.cff', cff);
 
+// The README documents the release baseline ("the latest `v*` tag ... (`vX.Y.Z`)").
+// Bump that reference here so the single release commit carries it too — no
+// manual follow-up commit. Targets only the baseline line, not the illustrative
+// version examples elsewhere in the prose; throws if the phrasing drifts.
+let readme = readFileSync('README.md', 'utf8');
+const readmeBaseline = /(latest `v\*` tag on the remote \(`v)\d+\.\d+\.\d+(`)/;
+if (!readmeBaseline.test(readme)) {
+  throw new Error('Could not find the release-baseline version reference in README.md to update.');
+}
+readme = readme.replace(readmeBaseline, `$1${next}$2`);
+writeFileSync('README.md', readme);
+
 console.log(`Synced release metadata to ${next} (${today}).`);
