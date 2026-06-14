@@ -64,3 +64,11 @@ references:
     doi: 10.5281/zenodo.20606493
     url: "https://lukefwalton.com/writing/the-invariant-of-answerability/"
     license: CC-BY-NC-ND-4.0
+  - type: article
+    title: "Building Answerable AI: Why Automation Needs Owned Error"
+    authors:
+      - family-names: Walton
+        given-names: Luke F.
+    doi: 10.5281/zenodo.20682307
+    url: "https://lukefwalton.com/writing/building-answerable-ai/"
+    license: CC-BY-NC-ND-4.0

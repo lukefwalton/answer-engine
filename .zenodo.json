@@ -50,6 +50,11 @@
       "identifier": "https://doi.org/10.5281/zenodo.20606493",
       "relation": "isSupplementTo",
       "resource_type": "publication-workingpaper"
+    },
+    {
+      "identifier": "https://doi.org/10.5281/zenodo.20682307",
+      "relation": "isSupplementTo",
+      "resource_type": "publication-workingpaper"
     }
   ]
 }

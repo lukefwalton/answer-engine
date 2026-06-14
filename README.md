@@ -310,8 +310,6 @@ If the workflow pushes refs but GitHub release creation fails, create the releas
 manually from the existing tag in the GitHub UI — **do not re-run** this workflow:
 a rerun would bump semver again (e.g. skip `v1.3.0` and cut `v1.3.1`) because
 the latest tag already advanced.
-When P4 lands, add its DOI to `related_identifiers` in `.zenodo.json` and cut
-the next release.
 
 ```bibtex
 @software{walton_answer_engine_2026,
@@ -331,6 +329,7 @@ This repo is a practical companion to the Answerability papers:
 - [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/) — [DOI](https://doi.org/10.5281/zenodo.20622946)
 - [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/) — [DOI](https://doi.org/10.5281/zenodo.20676328)
 - [The Invariant of Answerability](https://lukefwalton.com/writing/the-invariant-of-answerability/) — [DOI](https://doi.org/10.5281/zenodo.20606493)
+- [Building Answerable AI: Why Automation Needs Owned Error](https://lukefwalton.com/writing/building-answerable-ai/) — [DOI](https://doi.org/10.5281/zenodo.20682307)
 
 ## Licenses
 
