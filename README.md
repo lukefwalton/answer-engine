@@ -302,8 +302,8 @@ the GitHub URL).
 | Code | [github.com/lukefwalton/answer-engine](https://github.com/lukefwalton/answer-engine) |
 | About | [lukefwalton.com/ask/about/](https://lukefwalton.com/ask/about/) |
 
-**Artifact note:** cite [10.5281/zenodo.20686054](https://doi.org/10.5281/zenodo.20686054)
-for the formal write-up ([`docs/ARTIFACT-NOTE-v1.0.md`](./docs/ARTIFACT-NOTE-v1.0.md)).
+**Artifact note:** cite [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053)
+for the formal write-up ([`docs/ARTIFACT-NOTE-v1.1.md`](./docs/ARTIFACT-NOTE-v1.1.md)).
 That DOI is separate from the software archive above.
 
 To pin a specific archived snapshot, pick that release's version DOI on the
@@ -336,8 +336,8 @@ the latest tag already advanced.
 ## Related writing
 
 Formal description of this implementation:
-[`docs/ARTIFACT-NOTE-v1.0.md`](./docs/ARTIFACT-NOTE-v1.0.md) —
-[DOI](https://doi.org/10.5281/zenodo.20686054) (CC BY-NC-ND 4.0).
+[`docs/ARTIFACT-NOTE-v1.1.md`](./docs/ARTIFACT-NOTE-v1.1.md) —
+[DOI](https://doi.org/10.5281/zenodo.20686053) (CC BY-NC-ND 4.0).
 
 This repo is a practical companion to the Answerability papers:
 
@@ -350,7 +350,7 @@ This repo is a practical companion to the Answerability papers:
 
 | Work | License |
 | --- | --- |
-| [Artifact note](./docs/ARTIFACT-NOTE-v1.0.md) | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
+| [Artifact note](./docs/ARTIFACT-NOTE-v1.1.md) | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
 | Answerability papers | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
 | answer-engine (this software) | [Apache-2.0](./LICENSE) |
 
