@@ -304,7 +304,7 @@ To pin a specific archived snapshot, pick that release's version DOI on the
 required when a new release lands.
 
 **Cutting a release:** on `main`, run **Actions → release** (patch/minor/major).
-Checked-in metadata must match the latest `v*` tag on the remote (`v1.2.2`
+Checked-in metadata must match the latest `v*` tag on the remote (`v1.3.0`
 today — the tag already exists). The workflow queues concurrent runs, bumps
 semver via [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
 pushes `main` and the new tag atomically, then creates the GitHub release
@@ -312,7 +312,7 @@ Zenodo archives. `CITATION.cff` and `.zenodo.json` both use the concept DOI for
 citation; Zenodo assigns a version DOI per release on its own.
 If the workflow pushes refs but GitHub release creation fails, create the release
 manually from the existing tag in the GitHub UI — **do not re-run** this workflow:
-a rerun would bump semver again (e.g. skip `v1.3.0` and cut `v1.3.1`) because
+a rerun would bump semver again (e.g. skip `v1.4.0` and cut `v1.4.1`) because
 the latest tag already advanced.
 
 ```bibtex
