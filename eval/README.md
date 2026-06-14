@@ -115,6 +115,13 @@ shouldn't carry. It is still corpus-authored content, so it still helps every
 future phrasing, and the asymmetry above is exactly why it stays honest rather
 than becoming a per-query patch.
 
+But enrichment can be bent back into the patch it replaces. Append the gold
+query's *exact words* and you lift retrieval on that one phrasing while adding
+no fact another phrasing can reach — special-casing the question, wearing the
+corpus's hat. Enrich with the *fact* a reader would search for, not the
+*question* the eval asks: a line that would vanish the moment you stopped
+reading `gold.yaml` was never curation.
+
 ## What a good gold set includes
 
 - **Direct hits** — title queries, theme queries, plain-language queries.
