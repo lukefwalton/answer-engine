@@ -185,7 +185,9 @@ unsettled. This repo is the bounded reference implementation; discussion, issues
 and PRs that extend, test, or push against those limits are welcome. The bar
 for new code is the bar the repo sets for itself: least lines that keep the
 promises, boundaries enforced by types or runtime checks, loud failures, and
-no change that makes the eval pass by special-casing a question.
+no change that makes the eval pass by special-casing a question. Before opening
+one, see [`CONTRIBUTING.md`](./CONTRIBUTING.md): it names what is in scope — a
+failing gold case is the best PR — and what isn't.
 
 ---
 
