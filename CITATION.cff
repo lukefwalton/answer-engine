@@ -16,7 +16,7 @@ identifiers:
 repository-code: "https://github.com/lukefwalton/answer-engine"
 url: "https://lukefwalton.com/ask/about/"
 license: Apache-2.0
-version: 1.2.2
+version: 1.3.0
 date-released: "2026-06-14"
 keywords:
   - answerability
@@ -35,7 +35,7 @@ preferred-citation:
     - family-names: Walton
       given-names: Luke F.
   title: "Answer Engine: An AI that Says \"I Don't Know\""
-  version: 1.2.2
+  version: 1.3.0
   doi: 10.5281/zenodo.20676773
   date-released: "2026-06-14"
   url: "https://github.com/lukefwalton/answer-engine"

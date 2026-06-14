@@ -1,6 +1,6 @@
 {
   "name": "answer-engine",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "description": "Teaching example: site-level search over a personal archive where every claim cites its source. Clone and run — not published to npm.",
