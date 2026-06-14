@@ -89,8 +89,8 @@ corpus ─► index ─┤                                         (body travels
 ```
 
 `src/no-leak.ts` is eight lines of logic and it is the whole point:
-`RoutingHint` has **no field for the note's text**, so code that tried to
-hand private prose to the model would not compile. The boundary is a type,
+`RoutingHint` has **no field for the note's text**, so there is nothing through
+which private prose could reach the model: the boundary is the type's *shape*,
 not a guard somebody remembers to write.
 
 ## 3. The model only sees AnswerEvidence
@@ -174,7 +174,7 @@ anticipating it in full would mean knowing the answer in advance.
 
 What the repo does try to show is concrete: that whether a frame is *held* or
 just *inherited* can be settled at control surfaces in running code, not
-promissory labels. The privacy boundary is a type that won't compile if violated, not a guard
+promissory labels. The privacy boundary is structural — a type with no field for private prose, not a guard
 someone has to remember (`src/no-leak.ts`); modes are re-derived from the
 evidence, not taken from the model's word for it (`src/answer.ts`); refusals
 are regression-tested like any other behavior (`eval/gold.yaml`).
@@ -185,7 +185,9 @@ unsettled. This repo is the bounded reference implementation; discussion, issues
 and PRs that extend, test, or push against those limits are welcome. The bar
 for new code is the bar the repo sets for itself: least lines that keep the
 promises, boundaries enforced by types or runtime checks, loud failures, and
-no change that makes the eval pass by special-casing a question.
+no change that makes the eval pass by special-casing a question. Before opening
+one, see [`CONTRIBUTING.md`](./CONTRIBUTING.md): it names what is in scope — a
+failing gold case is the best PR — and what isn't.
 
 ---
 
