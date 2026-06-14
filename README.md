@@ -260,6 +260,11 @@ stay honest *and* human.
 
 Code the invariant. Document the scaling pattern. Comment the footgun.
 
+The empirical companion to this list — the two levers it doesn't name (vector
+dimension and wire format), which only appear once the index crosses a network
+boundary, each gated by the eval rather than by vibes — is in
+[`docs/production-scaling.md`](./docs/production-scaling.md).
+
 ## What stays out
 
 A running deployment grows layers this engine deliberately omits: deterministic
