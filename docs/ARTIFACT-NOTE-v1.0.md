@@ -4,7 +4,7 @@
 Independent Researcher · [lukefwalton.com](https://lukefwalton.com)
 ORCID: 0009-0005-9263-1954
 
-**DOI:** [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053) (concept DOI; resolves to the latest version) · **Version:** v1.0 · **License:** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+**DOI:** [10.5281/zenodo.20686054](https://doi.org/10.5281/zenodo.20686054) (concept DOI; resolves to the latest version) · **Version:** v1.0 · **License:** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
 **Abstract.** Chat-style language-model systems collapse five distinct operations — retrieval, use of private context, generation, citation, and refusal — into a single conversational surface, which makes it hard to say what evidence an answer rests on or whether it should have been given at all. This note describes `answer-engine`, a small TypeScript reference implementation that holds those operations apart. The system answers one question at a time against a bounded corpus, cites the public evidence it used, declines when no evidence clears a retrieval floor, and enforces a type-level boundary that keeps private text out of the model prompt while still allowing it to route retrieval. A fixed set of gold queries tests refusal, citation grounding, and the no-leak boundary as regressions. The artifact is a teaching-sized reference pattern, not a benchmark or a production framework.
 
@@ -66,7 +66,7 @@ The implementation therefore establishes a narrow claim: these junctures can be 
 
 ## Artifact statement
 
-Source code, the example corpus, and the gold-query eval are available at <https://github.com/lukefwalton/answer-engine> under the Apache-2.0 license, archived on Zenodo at <https://doi.org/10.5281/zenodo.20676773> (concept DOI; resolves to the latest version). This technical note is archived on Zenodo at <https://doi.org/10.5281/zenodo.20686053> (concept DOI; resolves to the latest version). The repository is the teaching-sized version of the engine behind "Ask the Archive" at lukefwalton.com.
+Source code, the example corpus, and the gold-query eval are available at <https://github.com/lukefwalton/answer-engine> under the Apache-2.0 license, archived on Zenodo at <https://doi.org/10.5281/zenodo.20676773> (concept DOI; resolves to the latest version). This technical note is archived on Zenodo at <https://doi.org/10.5281/zenodo.20686054> (concept DOI; resolves to the latest version). The repository is the teaching-sized version of the engine behind "Ask the Archive" at lukefwalton.com.
 
 ## Disclosures
 
