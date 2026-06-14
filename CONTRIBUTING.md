@@ -31,10 +31,11 @@ special-casing the question will be declined even when it is green. See
 ## Also in scope
 
 - **A port that keeps the boundary structural.** The no-leak boundary here is a
-  type with no field for private prose, so the prohibited move does not compile
+  type with no field for private prose, so the prohibited move is structurally
+  inexpressible — a property of the type's *shape*, not a checker that complains
   (`src/no-leak.ts`). A port to another language is a real contribution if it
-  keeps that boundary *structural* rather than a guard someone has to remember —
-  and it stress-tests whether the pattern is language-independent or secretly
+  keeps that boundary structural rather than a guard someone has to remember, and
+  it stress-tests whether the pattern is language-independent or secretly
   TypeScript-shaped. A port that demotes the boundary to a runtime check is not
   the same artifact.
 - **Adversarial cases against the boundary.** Try to get private prose into the
