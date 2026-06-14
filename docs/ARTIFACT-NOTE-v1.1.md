@@ -4,7 +4,7 @@
 Independent Researcher · [lukefwalton.com](https://lukefwalton.com)
 ORCID: 0009-0005-9263-1954
 
-**DOI:** [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053) (concept DOI; resolves to the latest version) · **Version:** v1.1 ([10.5281/zenodo.20693919](https://doi.org/10.5281/zenodo.20693919)) · **License:** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+**DOI:** [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053) (concept DOI; resolves to the latest version) · **Version:** v1.1 ([10.5281/zenodo.20694057](https://doi.org/10.5281/zenodo.20694057)) · **License:** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
 *Revision history: v1.1 appends §7 (empirical scaling notes from deployment) to the v1.0 text; the abstract and §§1–6 are unchanged.*
 
