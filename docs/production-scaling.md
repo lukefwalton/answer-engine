@@ -49,11 +49,12 @@ cold start.
 
 Vectors are ~90% of a serialized index, and a float64 vector printed as a JSON
 array is the waste — not the count. int8 scalar quantization (symmetric,
-per-vector scale, base64) is ~14× smaller per vector, so the cold-start download
-shrinks by about the same factor.
+per-vector scale, base64) is ~14× smaller *per vector*. The bundle shrinks by
+less than that: the ids, URLs, and JSON structure it also carries don't
+quantize, so at ~90% vectors the whole-bundle factor is closer to ~6× than 14×.
 
-- **Buys:** ~14× smaller published bundle; cold start stops being a mini-batch
-  job.
+- **Buys:** vectors ~14× smaller each, the published bundle several-fold (≈6× at
+  ~90% vectors); cold start stops being a mini-batch job.
 - **Why it is nearly free here — two facts, different in kind.** *Exact:*
   cosine normalizes by vector norm, so a positive per-vector scale cancels from
   the score entirely — the rank is invariant to it as a matter of algebra, and
