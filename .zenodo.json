@@ -55,11 +55,6 @@
       "identifier": "https://doi.org/10.5281/zenodo.20682307",
       "relation": "isSupplementTo",
       "resource_type": "publication-workingpaper"
-    },
-    {
-      "identifier": "https://doi.org/10.5281/zenodo.20686053",
-      "relation": "isDocumentedBy",
-      "resource_type": "publication-technicalnote"
     }
   ]
 }

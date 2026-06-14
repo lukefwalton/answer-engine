@@ -295,10 +295,6 @@ the GitHub URL).
 | Code | [github.com/lukefwalton/answer-engine](https://github.com/lukefwalton/answer-engine) |
 | About | [lukefwalton.com/ask/about/](https://lukefwalton.com/ask/about/) |
 
-**Artifact note:** cite [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053)
-for the formal write-up ([`docs/ARTIFACT-NOTE-v1.0.md`](./docs/ARTIFACT-NOTE-v1.0.md)).
-That DOI is separate from the software archive above.
-
 To pin a specific archived snapshot, pick that release's version DOI on the
 [Zenodo versions page](https://zenodo.org/records/20676773) — no README update
 required when a new release lands.
@@ -328,10 +324,6 @@ the latest tag already advanced.
 
 ## Related writing
 
-Formal description of this implementation:
-[`docs/ARTIFACT-NOTE-v1.0.md`](./docs/ARTIFACT-NOTE-v1.0.md) —
-[DOI](https://doi.org/10.5281/zenodo.20686053) (CC BY-NC-ND 4.0).
-
 This repo is a practical companion to the Answerability papers:
 
 - [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/) — [DOI](https://doi.org/10.5281/zenodo.20622946)
@@ -343,7 +335,6 @@ This repo is a practical companion to the Answerability papers:
 
 | Work | License |
 | --- | --- |
-| [Artifact note](./docs/ARTIFACT-NOTE-v1.0.md) | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
 | Answerability papers | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
 | answer-engine (this software) | [Apache-2.0](./LICENSE) |
 
