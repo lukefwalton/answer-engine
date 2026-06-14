@@ -1,6 +1,6 @@
 # Scaling the pattern: empirical notes from deployment
 
-The [artifact note](./ARTIFACT-NOTE-v1.0.md) §6 leaves one question open on
+The [artifact note](./ARTIFACT-NOTE-v1.1.md) §6 leaves one question open on
 purpose: the contract (no-leak, grounding, modes, refusal) is established here,
 but whether operating it at public scale is *affordable* "remains empirical."
 This is the empirical companion — what was learned running the same pattern

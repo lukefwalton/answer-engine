@@ -77,6 +77,6 @@ references:
     authors:
       - family-names: Walton
         given-names: Luke F.
-    doi: 10.5281/zenodo.20686054
-    url: "https://github.com/lukefwalton/answer-engine/blob/main/docs/ARTIFACT-NOTE-v1.0.md"
+    doi: 10.5281/zenodo.20686053
+    url: "https://github.com/lukefwalton/answer-engine/blob/main/docs/ARTIFACT-NOTE-v1.1.md"
     license: CC-BY-NC-ND-4.0

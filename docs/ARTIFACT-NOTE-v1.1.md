@@ -4,7 +4,7 @@
 Independent Researcher · [lukefwalton.com](https://lukefwalton.com)
 ORCID: 0009-0005-9263-1954
 
-**DOI:** [10.5281/zenodo.20686054](https://doi.org/10.5281/zenodo.20686054) (concept DOI; resolves to the latest version) · **Version:** v1.1 · **License:** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+**DOI:** [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053) (concept DOI; resolves to the latest version) · **Version:** v1.1 ([10.5281/zenodo.20693919](https://doi.org/10.5281/zenodo.20693919)) · **License:** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
 *Revision history: v1.1 appends §7 (empirical scaling notes from deployment) to the v1.0 text; the abstract and §§1–6 are unchanged.*
 
@@ -84,7 +84,7 @@ The footprint and cold-start cost fell several-fold, but that figure is the leas
 
 ## Artifact statement
 
-Source code, the example corpus, and the gold-query eval are available at <https://github.com/lukefwalton/answer-engine> under the Apache-2.0 license, archived on Zenodo at <https://doi.org/10.5281/zenodo.20676773> (concept DOI; resolves to the latest version). This technical note is archived on Zenodo at <https://doi.org/10.5281/zenodo.20686054> (concept DOI; resolves to the latest version). The repository is the teaching-sized version of the engine behind "Ask the Archive" at lukefwalton.com.
+Source code, the example corpus, and the gold-query eval are available at <https://github.com/lukefwalton/answer-engine> under the Apache-2.0 license, archived on Zenodo at <https://doi.org/10.5281/zenodo.20676773> (concept DOI; resolves to the latest version). This technical note is archived on Zenodo at <https://doi.org/10.5281/zenodo.20686053> (concept DOI; resolves to the latest version). The repository is the teaching-sized version of the engine behind "Ask the Archive" at lukefwalton.com.
 
 ## Disclosures
 
