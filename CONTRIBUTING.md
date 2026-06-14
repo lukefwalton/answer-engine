@@ -57,18 +57,31 @@ contribution the author most wants to learn from. Open an issue or a discussion.
 For any code that does land, the bar is the one the repo sets for itself: least
 lines that keep the promises, boundaries enforced by types or runtime checks,
 loud failures, and no change that makes the eval pass by special-casing a
-question. Before opening a PR:
+question. [`.github/STANDARDS.md`](./.github/STANDARDS.md) is the full rubric a
+PR is read against.
+
+Always, before any PR — both are offline and need no API key:
 
 ```sh
-npm test          # offline, deterministic — must stay green without an API key
+npm test          # offline, deterministic engine tests — the CI gate
 npm run typecheck # tsc --noEmit
-npm run eval      # retrieval checks against eval/gold.yaml (needs an API key)
 ```
 
-`npm test` must stay green with no API key — do not add hidden dependencies on
-live calls. The full answer-engine eval (`npm run eval -- --full`) is manual and
-pre-merge, not required in CI; run it on `--ids` or `--from-report` subsets while
-iterating (see [`eval/README.md`](./eval/README.md)).
+`npm test` must stay green **without an API key**; don't add hidden dependencies
+on live calls.
+
+If your change touches the prompt, retrieval, validation, or repair, run the
+eval too (it needs a key — one cheap embedding call per query):
+
+```sh
+npm run eval                          # retrieval checks against eval/gold.yaml
+npm run eval -- --from-report latest  # rerun just the failures
+```
+
+The full answer-engine eval (`npm run eval -- --full`) is **manual and
+pre-merge, not a CI requirement**; run it on `--ids` or `--from-report` subsets
+while iterating, never the whole gold set on every pass (see
+[`eval/README.md`](./eval/README.md)).
 
 ## Practical notes
 
