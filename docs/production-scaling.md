@@ -15,9 +15,9 @@ below appear only once there is one. They are documented, not wired in: the
 engine's value is the contract, not a bundle format.
 
 Each lever gets the same treatment: what it buys, what it costs, how you
-*verify* (the eval gate, never vibes), and where it lives. Numbers are ratios,
-not the production corpus — the archive's size and shape stay private by
-design.
+*verify* (the eval gate, never vibes), and where it lives. The numbers are real
+aggregates from that deployment (built 2026-06-14); what stays private is the
+item-level shape — which episodes, which unreleased titles — not the scale.
 
 ## 1. Vector dimension (Matryoshka)
 
@@ -25,7 +25,8 @@ design.
 `text-embedding-3-large` is trained with Matryoshka representation learning: its
 3072-dim vectors truncate and renormalize with graceful quality decay, exposed
 through OpenAI's `dimensions` parameter. Re-embedding at 1024 dims yields
-roughly 3× smaller vectors for about a 1% quality give.
+roughly 3× smaller vectors for about a 1% quality give. (Production runs the full
+3072 today; the 1024 cut is available headroom, not yet spent.)
 
 - **Buys:** a smaller vector space everywhere — in memory, on disk, on any wire.
 - **Costs:** a real (small) retrieval-quality trade. It is not free; that is the
@@ -47,14 +48,14 @@ serialization. It only exists once the index crosses a network boundary: a
 serverless function with no disk downloads and parses the whole index on every
 cold start.
 
-Vectors are ~90% of a serialized index, and a float64 vector printed as a JSON
-array is the waste — not the count. int8 scalar quantization (symmetric,
-per-vector scale, base64) is ~14× smaller *per vector*. The bundle shrinks by
-less than that: the ids, URLs, and JSON structure it also carries don't
-quantize, so at ~90% vectors the whole-bundle factor is closer to ~6× than 14×.
+A float64 vector printed as a JSON array is the waste — not the count. int8
+scalar quantization (symmetric, per-vector scale, base64) is ~14× smaller *per
+vector*. The published bundle strips chunk text, so it is almost all vectors:
+here it went ~616 MB → ~53 MB, about 12× — a little under the per-vector factor
+because the routing metadata (ids, URLs, timestamps) doesn't quantize.
 
-- **Buys:** vectors ~14× smaller each, the published bundle several-fold (≈6× at
-  ~90% vectors); cold start stops being a mini-batch job.
+- **Buys:** vectors ~14× smaller each; the published bundle ~12× (≈616 MB →
+  ≈53 MB here); cold start stops being a mini-batch job.
 - **Why it is nearly free here — two facts, different in kind.** *Exact:*
   cosine normalizes by vector norm, so a positive per-vector scale cancels from
   the score entirely — the rank is invariant to it as a matter of algebra, and
@@ -81,7 +82,8 @@ The first README lever — chunk long documents into overlapping windows — is
 also the dominant driver of index size at scale. Past some document length a
 single embedding dilutes the topical center (the same reason the theme boost
 exists), so you chunk; and then index size scales **linearly with passage
-count**, not document count.
+count**, not document count (here: 9,777 passages across 210 episodes, against
+777 public records).
 
 - **Buys:** retrieval that points at passages, not whole documents.
 - **Costs:** more passages means more vectors and more correlated neighbors in a
