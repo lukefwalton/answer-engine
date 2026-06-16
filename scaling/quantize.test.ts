@@ -5,7 +5,7 @@
 // tests prove the mechanism itself.
 
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'node:test';
 
 import { cosine } from '../src/retrieve.js';
 import type { ArchiveRecord, IndexEntry, PrivateNote } from '../src/types.js';

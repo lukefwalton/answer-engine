@@ -50,7 +50,7 @@ function recordEntries(config: ArchiveConfig, vectors: Map<string, number[]>): I
   for (const record of buildCorpus(config)) {
     const text = embedText(record);
     const vector = vectors.get(record.id);
-    if (!vector) continue;
+    if (!vector) throw new Error(`no embedding returned for record '${record.id}'; refusing to write a partial index.`);
     entries.push({
       model: config.embeddingModel,
       dimensions: vector.length,
@@ -67,7 +67,7 @@ function noteEntries(notes: PrivateNote[], vectors: Map<string, number[]>): Inde
   const entries: IndexEntry[] = [];
   for (const note of notes) {
     const vector = vectors.get(note.id);
-    if (!vector) continue;
+    if (!vector) throw new Error(`no embedding returned for note '${note.id}'; refusing to write a partial index.`);
     entries.push({
       model: config.embeddingModel,
       dimensions: vector.length,
@@ -135,10 +135,13 @@ async function main(): Promise<void> {
     console.log('No synthetic notes authored yet; skipping the spire index.');
   }
 
-  // Committed gold-query vectors (what makes scaling:run keyless).
-  const queryVectors = goldQueries
-    .map((g) => ({ id: g.id, vector: vectors.get(`query:${g.id}`) }))
-    .filter((q): q is { id: string; vector: number[] } => Array.isArray(q.vector));
+  // Committed gold-query vectors (what makes scaling:run keyless). Every gold
+  // query must embed, or the keyless runner would later fail on a missing id.
+  const queryVectors = goldQueries.map((g) => {
+    const vector = vectors.get(`query:${g.id}`);
+    if (!vector) throw new Error(`no embedding returned for gold query '${g.id}'; refusing to write partial query vectors.`);
+    return { id: g.id, vector };
+  });
   const dims = queryVectors[0]?.vector.length ?? naturalEntries[0]?.dimensions ?? 0;
   writeQueryVectors(config.embeddingModel, dims, queryVectors);
   console.log(`Wrote ${queryVectors.length} gold-query vectors`);

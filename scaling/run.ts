@@ -17,7 +17,7 @@ import { loadGold } from '../src/evaluate.js';
 import type { GoldQuery } from '../src/evaluate.js';
 import { assertHomogeneousIndex, readIndexFile } from '../src/store.js';
 import type { IndexEntry } from '../src/types.js';
-import { runGate } from './harness.js';
+import { requantizeIndex, runGate } from './harness.js';
 import { readQueryVectors } from './query-vectors.js';
 
 const NATURAL_INDEX = resolve('scaling/corpus/index.json');
@@ -149,7 +149,10 @@ async function main(): Promise<void> {
   );
 
   if (args.full) {
-    await runAnswerPass(gold, index, qv.byId, config);
+    // The answer pass must see evidence selected from the SAME quantized index
+    // the retrieval gate judged, or a route flip on the lossy index would be
+    // masked by full-precision retrieval. Quantize once, here, and hand it down.
+    await runAnswerPass(gold, requantizeIndex(index, args.bits), qv.byId, config);
   } else {
     console.log('(retrieval + route tier only; add --full to run the answer-mode pass with a key)');
   }
@@ -157,12 +160,15 @@ async function main(): Promise<void> {
   if (report.failed > 0) process.exitCode = 1;
 }
 
-/** The keyed bonus: run the answer model and check the declared mode. Exercises
- *  route SELECTION through the reused no-leak boundary; it does not touch A2
- *  (the answer model's confabulation residue), which the encoding never moves. */
+/** The keyed bonus: run the answer model on evidence retrieved from the
+ *  QUANTIZED index, and check the declared mode. Same lossy surface the
+ *  retrieval gate judged, so a route flip is not masked by full-precision
+ *  retrieval. Exercises route SELECTION through the reused no-leak boundary; it
+ *  does not touch A2 (the answer model's confabulation residue), which the
+ *  encoding never moves. */
 async function runAnswerPass(
   gold: readonly GoldQuery[],
-  index: readonly IndexEntry[],
+  quantIndex: readonly IndexEntry[],
   queryVectorById: ReadonlyMap<string, number[]>,
   config: import('../src/types.js').ArchiveConfig,
 ): Promise<void> {
@@ -178,12 +184,12 @@ async function runAnswerPass(
       import('../src/evaluate.js'),
     ]);
   const client = new OpenAI();
-  console.log('\n--full answer-mode pass (keyed):');
+  console.log('\n--full answer-mode pass (keyed, on the quantized index):');
   let answerFails = 0;
   for (const g of gold) {
     const qv = queryVectorById.get(g.id);
     if (!qv) continue;
-    const hits = retrieve(qv, g.query, index);
+    const hits = retrieve(qv, g.query, quantIndex);
     const evidence = assembleEvidence(
       hits.records.map((h) => h.record),
       hits.notes.map((h) => h.note),
