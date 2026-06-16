@@ -1,6 +1,6 @@
-# Build handoff — populate the scaling corpus and generate the vectors
+# Build handoff — regenerate the demo corpus and vectors
 
-This is an executable brief for an agent (or person) running in an environment **with network access to the public-domain sources and an `OPENAI_API_KEY`**. The session that built `demo/` had neither: this repo's egress allowed only GitHub, and `api.openai.com` plus Gutenberg / archive.org were all blocked, so the code, structure, gold set, provenance manifest, and deterministic harness tests are authored and committed, but the real text bodies and the committed embedding vectors are not. This brief produces them.
+This is an executable brief for an agent (or person) regenerating the demo in an environment **with network access to the public-domain sources and an `OPENAI_API_KEY`**. The corpus bodies and committed embedding vectors are now built; this document records the source path and calibration loop for future rebuilds.
 
 Read the spec (`docs/scaling-demo/SCALING-DEMO-spec.md`), the corpus manifest (`demo/corpus/README.md`), and the delta log (`docs/scaling-demo/scaling-demo-delta-log.md`) first. The frame governs: verify against the live source not against this doc, prefer the smaller change, and **never fabricate words for the real Adam Smith or the real George Adam Smith** — the only authored text is the quarantined synthetic spire.
 
@@ -8,7 +8,7 @@ Read the spec (`docs/scaling-demo/SCALING-DEMO-spec.md`), the corpus manifest (`
 
 - `OPENAI_API_KEY` set (in `.env` or the environment). The build embeds with `text-embedding-3-large` at native dimensionality; nothing else will satisfy the homogeneity invariant (`src/store.ts`).
 - Network egress to Project Gutenberg and the Internet Archive (and Wikipedia/Wikisource for the real route-target URLs).
-- A clean offline baseline first: `npm test` and `npm run typecheck` green (they are, with the fixture tests; do not regress them).
+- A clean offline baseline first: `npm test` and `npm run typecheck` green. Do not regress them.
 
 ## 1. Create the corpus files
 
@@ -69,7 +69,7 @@ Suggested first spire note: `syn-amos-justice-margin` — a fabricated George no
 - `demo/corpus/index.synthetic.json` — the spire delta (synthetic notes only), unioned under `--natural+synthetic`.
 - `demo/corpus/query-vectors.json` — the gold-query vectors that make `demo:run` keyless.
 
-Commit all three. They derive from public-domain text, so committing them exposes nothing private (manifest §2); do not generalize that to private corpora.
+Commit all three after checking `git status` and `git diff --stat` for unrelated artifacts or secrets. They derive from public-domain text, so committing them exposes nothing private (manifest §2); do not generalize that to private corpora.
 
 ## 4. Run the gate, then calibrate the deliberate failure
 
@@ -81,5 +81,5 @@ Commit all three. They derive from public-domain text, so committing them expose
 
 - Fill the provenance table OCR-quality notes in `demo/corpus/README.md` from the actual files; verify every Gutenberg ID and the IA ARK against the live source.
 - Fill the delta log rows with what the build actually did. Flag any `paper §5-§6` row immediately (especially row 4 if any unit had to be split).
-- **Only once `demo:run` confirms the headline**, apply the deferred `NEXT-STEPS.md` reconciliation (prepared text in the delta log): distinguish the deliberately-simple **core** (full-precision, pulls no levers, indexes documents whole) from the **`demo/` miniature** (pulls exactly one lever, int8, on a short-whole-unit corpus; explicitly marked), and add the §C1 link to `demo/`. Do not claim "a runnable miniature ships" until it runs — that honesty is the whole point.
+- If a rebuild changes the headline, revisit the `NEXT-STEPS.md` reconciliation and the demo README so they describe the measured result, not the old one.
 - Re-run `npm test` and `npm run typecheck`; both stay green.

@@ -59,14 +59,16 @@ queries:
   - id: boost-edge-micah
     query: What did Adam Smith say about the prophet Micah?
     expectAnswerMode: partial
-    expectSources: [george-adam-smith:twelve-prophets-micah]
+    expectSources: [george-adam-smith:twelve-prophets-amos]
     note: >
-      The boost edge case. The query names "Adam Smith" (the economist) but asks
-      about Micah (George's subject). EXACT_MATCH_BOOST (0.30) fires on the
-      partial name match against George's title, AND Micah is George's alone, so
-      the intended answer is George's Micah exposition despite the economist's
-      name in the query. Pin the observed behavior here; int8 reordering near
-      this collision is precisely the kind of thing that could tip it.
+      The boost edge case, re-pinned to the observed behavior. The query names
+      "Adam Smith" (the economist) and asks about Micah (George's subject), but
+      the exact-title boost does NOT fire on the partial name inside "George Adam
+      Smith"; it checks full title/slug phrases. With no boost, the shared
+      prophet/justice geometry selects George's Amos exposition over Micah by a
+      narrow semantic margin. That is the finding: the title boost does not
+      rescue this partial-name ambiguity, and the gold suite records it rather
+      than tuning the boost to confirm the prediction.
 
   # ── Route: answered by the boundary ──────────────────────────────────────
   - id: route-forgiveness
@@ -85,12 +87,13 @@ queries:
 
   # ── Refuse: nothing clears the floor ─────────────────────────────────────
   - id: refuse-quantum
-    query: What did Adam Smith think about quantum computing?
+    query: How should transformer accelerators schedule tensor kernels?
     expectAnswerMode: not-found
     forbidSources:
       [adam-smith:theory-of-moral-sentiments-justice, adam-smith:wealth-of-nations-division-of-labour, george-adam-smith:twelve-prophets-amos, george-adam-smith:isaiah-prophet-of-faith]
     note: >
-      A subject no Smith addressed, three centuries out of reach. The score
-      floor must keep every record out of the evidence and the answer must be a
-      plain not-found. A refuse case is only worth having if it sits where a
-      lowered floor or a coarser encoding could let a weak hit cross.
+      A technical subject no Smith addressed, far outside the corpus. The query
+      intentionally avoids naming either Smith: naming "Adam Smith" is an
+      exact-match retrieval signal in this demo, so that would test the title
+      boost rather than refusal. The score floor must keep every record out of
+      the evidence and the answer must be a plain not-found.

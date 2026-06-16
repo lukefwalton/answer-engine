@@ -176,13 +176,16 @@ operational discipline, not something the type system enforces across time.
 ## C. Performance levers that trade quality for cost
 
 This is the starter for anyone adapting the system. Each lever names the saving,
-the quality cost, and the rule. **This repository is full-precision and indexes
-documents whole; it pulls none of these levers.** The production deployment
-behind the project pulls one of them (int8 wire-format quantization, in a
-private serving adapter) and chunks its long-form inputs; the rest are
-documented here so you can reason about all of them the same way, whether or not
-this repo exercises them. **Every one of them is gated by the gold suite, never
-special-cased.**
+the quality cost, and the rule. **This repository's core is full-precision and
+indexes documents whole; it pulls none of these levers.** The one exception is
+the marked illustration at `demo/`: a runnable int8 miniature on a
+short-whole-unit public-domain corpus, which pulls exactly one lever (int8
+quantization) to show the gold suite gating it. The core's claims stay true of
+the core; `demo/` is named as the exception. The production deployment behind
+the project pulls int8 wire-format quantization in a private serving adapter and
+chunks its long-form inputs; the rest are documented here so you can reason
+about all of them the same way. **Every one of them is gated by the gold suite,
+never special-cased.**
 
 The cost concentrates almost entirely in one object: the embedding index, in its
 in-memory footprint and in the latency of shipping it to a stateless serving
@@ -196,8 +199,8 @@ cosine similarity normalizes by vector norm, so a positive per-vector scale
 cancels as a matter of *algebra* (guaranteed, exact); and integer rounding can
 reorder near-ties, so its harmlessness is *measured* against the gold suite, not
 proven. The full-precision vectors stay the source of truth, so this is a
-transport encoding, not a lossy store. (See `docs/production-scaling.md` §2 and
-the artifact note §7.)
+transport encoding, not a lossy store. (See `docs/production-scaling.md` §2, the
+artifact note §7, and the runnable miniature at `demo/`.)
 
 Going further trades more quality for more savings:
 - **int4 / lower-bit quantization** — roughly halves the transport size again;

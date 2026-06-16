@@ -1,12 +1,15 @@
 ---
-title: "Synthetic demo note (fabricated, not George Adam Smith): Amos and the justice of God"
+title: "Private Amos marginalia on divine justice"
 about: https://en.wikipedia.org/wiki/George_Adam_Smith
 locator: "study marginalia, Amos"
 synthetic: true
 targets: "syn-route-margin / route case at the floor / related-material — a tightened encoding (int4 or a lowered floor) should flip this to the public Amos exposition, caught by the gold suite"
 ---
 
-Fabricated for the int8 demo, not George Adam Smith's words (see the frontmatter).
+Fabricated for the int8 demo; not George Adam Smith's words (see the frontmatter).
+Private marginalia for Amos: divine justice, crooked courts, worship without
+mercy, the wronged poor, and the plumb-line set against a leaning wall. This is
+a private route case tuned to sit beside the public Amos exposition.
 
 On Amos the herdsman of Tekoa: justice is not a ledger the strong keep against
 the weak, but the weight of heaven set on the side of the wronged. The plumb-line
