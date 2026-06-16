@@ -4,10 +4,11 @@
 // (src/evaluate.ts) untouched: the int8 path is an encode/decode wrapper plus a
 // re-rank, never a second pipeline. Given full-precision index entries and a
 // quantization bit width, it builds the lossy index, re-ranks each gold query
-// against it, and reports the two things the paper distinguishes: rank
-// correlation against the full-precision ranking (necessary), and the gold
-// suite's verdicts including refuse and route (sufficient). Rank correlation
-// alone is a retrieval benchmark; the suite is the actual adjudicator.
+// against it, and reports two things: rank correlation against the
+// full-precision ranking (a diagnostic for how much the ranking moved), and the
+// gold suite's verdicts including refuse and route (the adjudicator). Rank
+// correlation gates nothing here — it is a retrieval benchmark; the gold suite
+// decides.
 
 import { cosine, retrieve } from '../src/retrieve.js';
 import type { RetrievalResult } from '../src/retrieve.js';
@@ -133,8 +134,19 @@ export function evaluateQuery(
   // the top slot, not merely appear. Refusals (not-found) carry no expected
   // source; the floor and forbidSources adjudicate them via judgeRetrieval.
   let topSlot: QueryGateResult['topSlot'];
-  if (gold.expectAnswerMode !== 'not-found' && gold.expectSources && gold.expectSources[0]) {
-    const expected = gold.expectSources[0];
+  if (gold.expectAnswerMode !== 'not-found') {
+    // The top-slot contract, made loud. The gate guards expectSources[0] only —
+    // that single source is the required top-slot winner — so a non-refusal case
+    // with two entries (which one must rank #1?) or none would let a flip past
+    // silently. Enforce exactly one rather than depend on the gold author
+    // happening to list one. Refusals name no source and never reach here.
+    if (gold.expectSources?.length !== 1) {
+      throw new Error(
+        `demo gold '${gold.id}': a non-refusal case must list exactly one expectSources ` +
+          `entry (the required top-slot winner); got ${gold.expectSources?.length ?? 0}.`,
+      );
+    }
+    const expected = gold.expectSources[0]!;
     const winner = topSource(hits);
     topSlot = { expected, winner: winner?.id ?? null, won: winner?.id === expected };
   }

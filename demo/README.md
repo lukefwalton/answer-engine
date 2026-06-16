@@ -60,15 +60,20 @@ Two facts make int8 admissible, and they differ in kind (the §6 split):
 - **Measured, by the suite.** Integer rounding perturbs direction and can
   reorder near-ties, so its harmlessness is not proven; it is verified. The
   harness reports rank correlation against the full-precision ranking, then runs
-  the gold suite. Rank correlation is *necessary, not sufficient*: a demo that
-  reports it and stops has shown a retrieval benchmark, not answerability
-  governing tuning. The gold suite is the actual adjudicator, and it checks not
+  the gold suite. Rank correlation is a *diagnostic*, not the gate: it measures
+  how much the ranking moved, but a demo that reports it and stops has shown a
+  retrieval benchmark, not answerability governing tuning. The gold suite is the
+  actual adjudicator, and it checks not
   just that the expected source is *retrieved* but that it *wins the top slot*:
   so a quantization flip that swaps which Smith ranks first (disambiguation) or
   lets a public record overtake the private note (route) is caught keyless, not
   only by the keyed answer pass. Past int8 (int4, PQ, binary) the exact part
   stops applying and the whole lever is measured; the wire format is versioned
-  so a code/data mismatch fails loudly.
+  so a code/data mismatch fails loudly. One scope note: int4 here is exercised
+  as *precision loss* to demonstrate the catch — codes still occupy an
+  `Int8Array`, nothing is nibble-packed — so the byte-size saving of low-bit
+  encodings is a production property (`docs/production-scaling.md` §2), not what
+  this gate measures.
 
 The headline run is **keyless**: it reads committed full-precision vectors and
 committed gold-query vectors, so no embedding call is made. A key is needed only
