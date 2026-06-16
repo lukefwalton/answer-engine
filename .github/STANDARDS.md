@@ -48,7 +48,7 @@ Fail fast and name the problem. Silent fallbacks hide bugs.
 Not a hardened production service, but a few things matter.
 
 - **Secrets: never commit `.env`; don't log prompts with keys.**
-- **Don't leak private embeddings/text into committed artifacts.** (The index is gitignored for a reason.) The one exception is `demo/`: its "private" layer is public-domain text by design (a layer assignment, not secrecy), so it commits `demo/corpus/index.json` on purpose to reproduce the headline with no key. See `demo/README.md` for why that is safe there and must not be generalized to a genuinely-private corpus.
+- **Don't leak private embeddings/text into committed artifacts.** (The index is gitignored for a reason.) The one exception is `demo/`: its "private" layer is public-domain text by design (a layer assignment, not secrecy), so it commits `demo/corpus/index.json` on purpose to reproduce the headline with no key. This exception is narrow and mechanically enforced: `demo/artifacts.test.ts` allowlists the exact public-domain natural sources plus the flagged synthetic spire. Do not generalize it to genuinely-private corpora.
 - **Performance: brute-force cosine is intentional at this scale.** Don't add pgvector, HTTP, or caching in a drive-by PR unless the README's "Where to take it" story is the explicit goal.
 
 ## 6. Style & Naming (Follow the Room)

@@ -19,7 +19,7 @@ const EXPECTED_NATURAL_SOURCES = [
   'note:word-of-god',
 ].sort();
 
-test('committed demo index is limited to verified public-domain safe sources', () => {
+test('committed demo index matches the public-domain source allowlist', () => {
   const natural = readIndexFile('demo/corpus/index.json');
   const actual = natural
     .map((entry) => (entry.sourceType === 'record' ? entry.record.id : entry.note.id))
