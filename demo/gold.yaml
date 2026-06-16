@@ -24,10 +24,10 @@ queries:
     expectSources: [adam-smith:theory-of-moral-sentiments-justice]
     note: >
       Must resolve to the economist. George's Amos and Micah expositions carry
-      the "justice" theme too, and his record titles contain "George Adam
-      Smith" so the query's "Adam Smith" phrase-matches them for the exact-match
-      boost. That mis-fire is the near-tie: int8 reordering is exactly what
-      could tip this toward the wrong Smith.
+      the "justice" theme too, but the exact-title boost does not fire on the
+      partial "Adam Smith" phrase inside "George Adam Smith" titles. The
+      near-tie is therefore semantic/theme geometry, not a partial-name boost:
+      int8 reordering is exactly what could tip this toward the wrong Smith.
 
   - id: econ-labour
     query: What did Adam Smith say about the division of labour?
