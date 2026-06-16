@@ -140,7 +140,7 @@ test('the payload: the gate certifies int8 and rejects int4 on the route case', 
   // int8: the note wins the top slot, the gate passes.
   const int8 = runGate([gold], index, qById, 8);
   assert.equal(int8.passed, 1, 'int8 certifies the route');
-  assert.equal(int8.results[0]!.route?.won, true);
+  assert.equal(int8.results[0]!.topSlot?.won, true);
   assert.ok(int8.results[0]!.rho >= 0.9);
 
   // int4: the record overtakes the note for the top slot. The note is still
@@ -150,8 +150,37 @@ test('the payload: the gate certifies int8 and rejects int4 on the route case', 
   assert.equal(int4.failed, 1, 'int4 is rejected');
   const r = int4.results[0]!;
   assert.equal(r.retrievalPass, true, 'the note is still in the candidate set');
-  assert.equal(r.route?.won, false, 'but it lost the top slot');
-  assert.equal(r.route?.winner, 'george-adam-smith:twelve-prophets-amos');
+  assert.equal(r.topSlot?.won, false, 'but it lost the top slot');
+  assert.equal(r.topSlot?.winner, 'george-adam-smith:twelve-prophets-amos');
+});
+
+test('disambiguation: the keyless gate catches a partial-mode flip (right Smith vs wrong Smith)', () => {
+  // Same near-tie geometry, but both candidates are public records: the right
+  // Smith (VN) outranks the wrong Smith (VR) at full precision and int8, and int4
+  // swaps them. A partial case is presence-checked by judgeRetrieval, so without
+  // the top-slot check the flipped disambiguation verdict would pass keyless.
+  const index: IndexEntry[] = [
+    recordEntry('adam-smith:theory-of-moral-sentiments-justice', VN, { title: 'unrelated phrasing' }),
+    recordEntry('george-adam-smith:twelve-prophets-amos', VR, { title: 'unrelated phrasing' }),
+  ];
+  const gold: GoldQuery = {
+    id: 'econ-justice',
+    query: 'zzz qqq no token overlap with any title or theme',
+    expectAnswerMode: 'partial',
+    expectSources: ['adam-smith:theory-of-moral-sentiments-justice'],
+  };
+  const qById = new Map([[gold.id, Q]]);
+
+  const int8 = runGate([gold], index, qById, 8);
+  assert.equal(int8.passed, 1, 'int8 keeps the right Smith on top');
+  assert.equal(int8.results[0]!.topSlot?.won, true);
+
+  const int4 = runGate([gold], index, qById, 4);
+  assert.equal(int4.failed, 1, 'int4 flips to the wrong Smith and the gate catches it');
+  const r = int4.results[0]!;
+  assert.equal(r.retrievalPass, true, 'both Smiths still retrieved (presence alone passes)');
+  assert.equal(r.topSlot?.won, false, 'but the wrong Smith won the top slot');
+  assert.equal(r.topSlot?.winner, 'george-adam-smith:twelve-prophets-amos');
 });
 
 test('the payload, directly: cosine ordering flips between int8 and int4', () => {

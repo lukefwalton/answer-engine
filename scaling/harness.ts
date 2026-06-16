@@ -106,10 +106,15 @@ export interface QueryGateResult {
   /** judgeRetrieval on the quantized index: expected sources in, forbidden out. */
   retrievalPass: boolean;
   retrievalIssues: string[];
-  /** Present only for route (related-material) cases: did the expected note win
-   *  the top slot on the quantized index? */
-  route?: { expectedNote: string; winner: string | null; won: boolean };
-  /** retrievalPass AND (route ? route.won : true). */
+  /** For any case that names an expected source and is not a refusal: did that
+   *  source win the top slot on the quantized index? This is what protects the
+   *  *verdict*, not just presence. judgeRetrieval only checks top-K membership,
+   *  so a quantization flip that keeps both Smiths retrieved but swaps which one
+   *  ranks first would pass it silently. The top-slot check catches that: the
+   *  expected record must OUTRANK the competing Smith (disambiguation), and the
+   *  private note must win over the public records (route). */
+  topSlot?: { expected: string; winner: string | null; won: boolean };
+  /** retrievalPass AND (topSlot ? topSlot.won : true). */
   pass: boolean;
 }
 
@@ -124,20 +129,23 @@ export function evaluateQuery(
   const judged = judgeRetrieval(gold, hits);
   const rho = rankCorrelation(index, quantIndex, queryVector);
 
-  let route: QueryGateResult['route'];
-  if (gold.expectAnswerMode === 'related-material' && gold.expectSources && gold.expectSources[0]) {
-    const expectedNote = gold.expectSources[0];
+  // Any non-refusal case with a named expected source must see that source win
+  // the top slot, not merely appear. Refusals (not-found) carry no expected
+  // source; the floor and forbidSources adjudicate them via judgeRetrieval.
+  let topSlot: QueryGateResult['topSlot'];
+  if (gold.expectAnswerMode !== 'not-found' && gold.expectSources && gold.expectSources[0]) {
+    const expected = gold.expectSources[0];
     const winner = topSource(hits);
-    route = { expectedNote, winner: winner?.id ?? null, won: winner?.id === expectedNote };
+    topSlot = { expected, winner: winner?.id ?? null, won: winner?.id === expected };
   }
 
-  const pass = judged.pass && (route ? route.won : true);
+  const pass = judged.pass && (topSlot ? topSlot.won : true);
   return {
     id: gold.id,
     rho,
     retrievalPass: judged.pass,
     retrievalIssues: judged.issues,
-    ...(route ? { route } : {}),
+    ...(topSlot ? { topSlot } : {}),
     pass,
   };
 }

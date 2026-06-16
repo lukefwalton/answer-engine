@@ -125,28 +125,53 @@ async function main(): Promise<void> {
     );
   }
 
+  // Say plainly what this run IS, so a reader knows what they are looking at.
   const label = args.synthetic ? '--natural+synthetic' : '--natural';
-  console.log(`scaling:run ${label}  int${args.bits}  ${gold.length} gold queries  ${index.length} index entries`);
-  if (args.synthetic) {
-    console.log('  (headline numbers come from the --natural run; the spire is broken out below)');
-  }
+  const shipped = args.bits === 8;
+  console.log('scaling:run — int8 quantization gate (Smith collection)');
+  console.log(
+    `  encoding: int${args.bits}  ` +
+      (shipped
+        ? '(the shipped wire format; expected to HOLD the suite)'
+        : '(tightened below int8; a near-tie may flip and be REJECTED)'),
+  );
+  console.log(
+    `  corpus:   ${label}  ` +
+      (args.synthetic
+        ? '(real corpus + the fabricated spire; headline still comes from --natural)'
+        : '(real corpus only; owns the headline numbers)'),
+  );
+  console.log(`  ${gold.length} gold queries, ${index.length} index entries, keyless (committed vectors)\n`);
 
   const report = runGate(gold, index, qv.byId, args.bits);
 
   for (const r of report.results) {
     const status = r.pass ? 'ok  ' : 'FAIL';
-    const routeBit = r.route ? `  route:${r.route.won ? 'won' : `LOST->${r.route.winner ?? 'none'}`}` : '';
-    console.log(`  ${status} ${r.id.padEnd(18)} rho=${r.rho.toFixed(4)}${routeBit}`);
-    if (!r.pass) for (const issue of r.retrievalIssues) console.log(`       - ${issue}`);
-    if (r.route && !r.route.won) {
-      console.log(`       - route flipped: expected ${r.route.expectedNote} to win the top slot`);
+    const slot = r.topSlot ? `  top:${r.topSlot.won ? 'won' : `LOST->${r.topSlot.winner ?? 'none'}`}` : '';
+    console.log(`  ${status} ${r.id.padEnd(18)} rho=${r.rho.toFixed(4)}${slot}`);
+    if (!r.pass) {
+      for (const issue of r.retrievalIssues) console.log(`       - ${issue}`);
+      if (r.topSlot && !r.topSlot.won) {
+        console.log(`       - top slot flipped: expected ${r.topSlot.expected} to win, ${r.topSlot.winner ?? 'nothing'} did`);
+      }
     }
   }
 
   console.log(
-    `\nint${args.bits}: ${report.passed}/${report.total} gold passed; ` +
+    `\nint${args.bits}: ${report.passed}/${report.total} gold verdicts held; ` +
       `rank correlation mean ${report.meanRho.toFixed(4)}, min ${report.minRho.toFixed(4)}`,
   );
+  if (report.failed === 0) {
+    console.log(`  VERDICT: the gold suite CERTIFIED int${args.bits} — every verdict full precision produces held.`);
+  } else {
+    const flips = report.results.filter((r) => r.topSlot && !r.topSlot.won).length;
+    console.log(
+      `  VERDICT: the gold suite REJECTED int${args.bits} — ${report.failed} verdict(s) did not hold` +
+        (flips ? `, including ${flips} top-slot flip(s)` : '') +
+        '.',
+    );
+    console.log('           The same suite that owns grounding and refusal caught it; that caught failure is the payload.');
+  }
 
   if (args.full) {
     // The answer pass must see evidence selected from the SAME quantized index
