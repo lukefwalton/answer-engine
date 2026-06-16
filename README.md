@@ -88,8 +88,8 @@ corpus ─► index ─┤                                         (body travels
                      AnswerEvidence = { records, hints } ──► the model
 ```
 
-`src/no-leak.ts` is small enough to audit by eye — `toRoutingHint` is eight
-lines — and it is the whole point:
+`src/no-leak.ts` is small enough to audit by eye — the only thing
+`toRoutingHint` does is drop the note's text — and it is the whole point:
 `RoutingHint` has **no field for the note's text**, so there is nothing through
 which private prose could reach the model: the boundary is the type's *shape*,
 not a guard somebody remembers to write.
