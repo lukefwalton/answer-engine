@@ -55,7 +55,7 @@ Confirm the actual sermon titles from the volume and rename slugs to match if ne
 ## 2. Author the synthetic spire (only if the deliberate failure needs it)
 
 The spire is the scalpel for the deliberate failure (step 4), not a corpus filler. Author it **only if** the real route-margin tie does not flip under a tightened encoding on its own. Each synthetic note:
-- lives in `scaling/corpus/synthetic/` (the quarantine **is** the flag; there is no `synthetic` type field),
+- lives in `scaling/corpus/synthetic/` (the quarantine is one flag) and carries a `synthetic: true` frontmatter marker (a second, in-file flag; the `PrivateNote` type does not read it, so it changes nothing the engine sees),
 - is a fabricated **George-private** note (never a third Smith, never words for the real Adam Smith),
 - carries a one-line comment at the top of the body naming the gold case, the margin, and the mode it targets,
 - is skewed toward must-refuse / route-flip, never an extra must-answer win.

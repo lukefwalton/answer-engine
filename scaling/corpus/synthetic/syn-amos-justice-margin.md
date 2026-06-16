@@ -1,5 +1,5 @@
 ---
-title: "George Adam Smith — private note on Amos and the justice of God"
+title: "Synthetic demo note (fabricated, not George Adam Smith): Amos and the justice of God"
 about: https://en.wikipedia.org/wiki/George_Adam_Smith
 locator: "study marginalia, Amos"
 synthetic: true

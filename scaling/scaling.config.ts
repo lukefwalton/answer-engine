@@ -46,6 +46,7 @@ export const config: ArchiveConfig = {
 
 // The quarantined synthetic spire (scaling/corpus/synthetic/) is loaded as an
 // ADDITIONAL private-notes dir only under --natural+synthetic, never here. Its
-// location is the flag: nothing in scaling/corpus/synthetic/ is real George
-// text. See scaling/run.ts and README §3.
+// location is one flag and each file also carries `synthetic: true` in
+// frontmatter (a second flag the PrivateNote type ignores): nothing in
+// scaling/corpus/synthetic/ is real George text. See scaling/run.ts and README §3.
 export const SYNTHETIC_NOTES_DIR = './scaling/corpus/synthetic';

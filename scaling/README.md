@@ -1,18 +1,27 @@
 # The int8 scaling demo
 
 The result this module is built to produce is a **caught failure**: the same
-gold suite that owns grounding and refusal rejecting a cheaper encoding. Run the
-quantizer at int4 (or with a lowered floor) and a route case flips, the private
-note loses the top slot to a public record, and the suite catches it. That is
-the point. "int8 held" on a small corpus is expected and proves little on its
-own; the gate saying *no* when pushed is what shows the gold suite, not the
-encoding, is the adjudicator.
+gold suite that owns grounding and refusal rejecting a cheaper encoding. The
+*mechanism* is proven offline, in `quantize.test.ts` (run by `npm test`): on
+fixture vectors searched to exhibit a near-tie, int8 preserves both the route
+and the disambiguation winner, int4 flips the top slot, and the gate catches it.
+
+Whether the **real Smith corpus** produces that flip at the int8/int4 boundary
+is a separate, empirical question, settled by the build run, not asserted here.
+"int8 held" on a small corpus is expected and proves little on its own; the gate
+saying *no* when pushed is what shows the gold suite, not the encoding, is the
+adjudicator. So: the mechanism is demonstrated; the real-corpus demonstration is
+pending.
+
+The committed vectors are not built yet (this module was written with no network
+and no key), so `npm run scaling:run` errors with a build pointer until then;
+see **Build status**. Once built:
 
 ```
-npm run scaling:run                        # int8 on the real corpus: the headline, keyless
-npm run scaling:run -- --bits 4            # int4: the gate rejects the route flip
-npm run scaling:run -- --natural+synthetic # add the quarantined spire + its gold
-npm run scaling:run -- --full              # also run the answer-mode pass (needs a key)
+npm run scaling:run                                  # int8, real corpus: the headline, keyless
+npm run scaling:run -- --natural+synthetic           # add the spire and its gold
+npm run scaling:run -- --natural+synthetic --bits 4  # int4: the gate rejects the spire's route flip
+npm run scaling:run -- --full                        # also run the answer-mode pass (needs a key)
 ```
 
 ## What it is
@@ -52,9 +61,13 @@ Two facts make int8 admissible, and they differ in kind (the §6 split):
   harness reports rank correlation against the full-precision ranking, then runs
   the gold suite. Rank correlation is *necessary, not sufficient*: a demo that
   reports it and stops has shown a retrieval benchmark, not answerability
-  governing tuning. The refuse and route cases are the actual adjudicator. Past
-  int8 (int4, PQ, binary) the exact part stops applying and the whole lever is
-  measured; the wire format is versioned so a code/data mismatch fails loudly.
+  governing tuning. The gold suite is the actual adjudicator, and it checks not
+  just that the expected source is *retrieved* but that it *wins the top slot*:
+  so a quantization flip that swaps which Smith ranks first (disambiguation) or
+  lets a public record overtake the private note (route) is caught keyless, not
+  only by the keyed answer pass. Past int8 (int4, PQ, binary) the exact part
+  stops applying and the whole lever is measured; the wire format is versioned
+  so a code/data mismatch fails loudly.
 
 The headline run is **keyless**: it reads committed full-precision vectors and
 committed gold-query vectors, so no embedding call is made. A key is needed only
@@ -74,7 +87,8 @@ encoding never exercises.
    under `--natural+synthetic`, each marked `synthetic: true` and naming the
    edge it tests. It is additive and never enters the headline metrics; the
    spire's effect is reported on its own line. No fabricated words are ever
-   attributed to the real Adam Smith.
+   passed off as either real Smith's writing: the spire is George-framed but
+   flagged, and nothing fabricated is presented as the actual work of either man.
 3. **The claim is relative.** int8 preserves the verdicts full-precision
    produces; the corpus is not offered as realistic and nothing turns on its
    realism.
@@ -97,6 +111,24 @@ bodies and the committed vectors (`corpus/index.json`,
 `OPENAI_API_KEY`; the session that wrote the module had neither. See
 [`docs/scaling-demo/build-handoff.md`](../docs/scaling-demo/build-handoff.md)
 for the exact steps, and the delta log for what is confirmed versus pending.
+
+## The spec and the log are kept in the open
+
+The planning docs live beside the module in
+[`docs/scaling-demo/`](../docs/scaling-demo/), kept on purpose rather than
+discarded once the code landed:
+
+- `SCALING-DEMO-spec.md`: what the demo set out to do, and why; the ticket it was
+  built from.
+- `scaling-demo-delta-log.md`: every place the build diverged from that spec,
+  what is settled versus pending the keyed build run, and the prepared
+  reconciliations (NEXT-STEPS, STANDARDS, the paper) to apply at merge.
+- `build-handoff.md`: the brief for the build run that fetches the public-domain
+  texts and generates the committed vectors.
+
+This is the same move the corpus manifest makes: the reasoning behind the
+artifact is part of the artifact. A reader can see what was intended, where
+reality differed, and which decisions are still owed.
 
 ## Relation to production
 
