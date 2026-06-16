@@ -196,3 +196,20 @@ test('evaluateQuery: a refuse case with nothing above the floor stays not-found'
   const res = evaluateQuery(gold, index, requantizeIndex(index, 8), Q);
   assert.equal(res.pass, true, 'fillers stay below the floor, so nothing is forbidden-surfaced');
 });
+
+test('the top-slot contract: a non-refusal case must name exactly one expected source', () => {
+  // The gate guards expectSources[0] as the required top-slot winner. Two entries
+  // (which must rank #1?) or none would let a flip past silently, so the harness
+  // refuses to evaluate them rather than guess. Refusals are exempt.
+  const index = [recordEntry('work:a', VR), noteEntry('note:b', VN)];
+  const qIndex = requantizeIndex(index, 8);
+
+  const twoSources: GoldQuery = { id: 'two', query: 'q', expectAnswerMode: 'partial', expectSources: ['work:a', 'note:b'] };
+  assert.throws(() => evaluateQuery(twoSources, index, qIndex, Q), /exactly one expectSources/);
+
+  const noSource: GoldQuery = { id: 'none', query: 'q', expectAnswerMode: 'partial' };
+  assert.throws(() => evaluateQuery(noSource, index, qIndex, Q), /exactly one expectSources/);
+
+  const refusal: GoldQuery = { id: 'refuse', query: 'q', expectAnswerMode: 'not-found' };
+  assert.doesNotThrow(() => evaluateQuery(refusal, index, qIndex, Q));
+});

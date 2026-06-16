@@ -13,6 +13,11 @@
 // reorder near-ties, so its harmlessness is not proven but measured against the
 // gold suite. int8 holds on the real corpus; int4 is the scalpel that makes the
 // gate say no.
+//
+// Scope: int4 is modeled as precision loss only — codes still occupy an
+// Int8Array, never nibble-packed — because this gate measures ranking error,
+// not storage size. The byte-size win of low-bit encodings is a production
+// property (docs/production-scaling.md §2), not what this demo proves.
 
 export interface QuantizedVector {
   /** Signed integer codes, one per dimension, each in [-level, level]. */
