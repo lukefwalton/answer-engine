@@ -88,7 +88,8 @@ corpus ─► index ─┤                                         (body travels
                      AnswerEvidence = { records, hints } ──► the model
 ```
 
-`src/no-leak.ts` is eight lines of logic and it is the whole point:
+`src/no-leak.ts` is small enough to audit by eye — `toRoutingHint` is eight
+lines — and it is the whole point:
 `RoutingHint` has **no field for the note's text**, so there is nothing through
 which private prose could reach the model: the boundary is the type's *shape*,
 not a guard somebody remembers to write.
@@ -98,7 +99,11 @@ not a guard somebody remembers to write.
 One Responses API call (`src/answer.ts`), with the policy versioned in code
 (`src/prompt.ts`): records render with their bodies; hints render as label,
 locator, and URL — `buildUserPrompt` couldn't leak a hint's text if it wanted
-to, because the field doesn't exist. The model is told what a hint *is*: the
+to, because the field doesn't exist. **What does travel is the label and the
+locator: any frontmatter field that becomes a hint's label or locator reaches
+the model, so keep titles and locators public-safe.** The body is stripped;
+those two are not. (Making that boundary structural rather than advisory is
+[`NEXT-STEPS.md`](./NEXT-STEPS.md) A1.) The model is told what a hint *is*: the
 location of a relevant private moment, to be routed to, never restated. If no
 evidence cleared the floor at all, the engine returns `not-found` without
 making the call — refusal costs nothing.
@@ -267,6 +272,16 @@ dimension and wire format), which only appear once the index crosses a network
 boundary, each gated by the eval rather than by vibes — is in
 [`docs/production-scaling.md`](./docs/production-scaling.md).
 
+## Next steps / open problems
+
+[`NEXT-STEPS.md`](./NEXT-STEPS.md) is the standing record of the **seams we can
+see** — where the design leaves something to be *owned* rather than structurally
+guaranteed — and the **levers an adopter might pull** that trade quality for
+cost. It is not a roadmap: nothing in it has to be fixed for the engine to keep
+its promises. Each entry is written to be pulled as a ticket, and the
+performance section is a starter for anyone adapting this to their own system.
+Naming these edges is the program doing what it claims, in the open.
+
 ## What stays out
 
 A running deployment grows layers this engine deliberately omits: deterministic
@@ -303,7 +318,7 @@ the GitHub URL).
 | About | [lukefwalton.com/ask/about/](https://lukefwalton.com/ask/about/) |
 
 **Artifact note:** cite [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053)
-for the formal write-up ([`docs/ARTIFACT-NOTE-v1.1.md`](./docs/ARTIFACT-NOTE-v1.1.md)).
+for the formal write-up ([`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md)).
 That DOI is separate from the software archive above.
 
 To pin a specific archived snapshot, pick that release's version DOI on the
@@ -336,7 +351,7 @@ the latest tag already advanced.
 ## Related writing
 
 Formal description of this implementation:
-[`docs/ARTIFACT-NOTE-v1.1.md`](./docs/ARTIFACT-NOTE-v1.1.md) —
+[`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md) —
 [DOI](https://doi.org/10.5281/zenodo.20686053) (CC BY-NC-ND 4.0).
 
 This repo is a practical companion to the Answerability papers:
@@ -350,7 +365,7 @@ This repo is a practical companion to the Answerability papers:
 
 | Work | License |
 | --- | --- |
-| [Artifact note](./docs/ARTIFACT-NOTE-v1.1.md) | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
+| [Artifact note](./docs/ARTIFACT-NOTE-v1.2.md) | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
 | Answerability papers | [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) |
 | answer-engine (this software) | [Apache-2.0](./LICENSE) |
 
