@@ -54,8 +54,16 @@ export function readQueryVectors(path: string = QUERY_VECTORS_PATH): LoadedQuery
   }
   const byId = new Map<string, number[]>();
   for (const q of file.queries) {
-    if (typeof q?.id !== 'string' || !Array.isArray(q.vector)) {
-      throw new Error(`query vectors at ${path} have a malformed entry. ${REBUILD}`);
+    // Validate to the same depth the store does for the index: a corrupt vector
+    // must fail loudly at read with the rebuild hint, not later as bad cosine.
+    if (
+      typeof q?.id !== 'string' ||
+      !Array.isArray(q.vector) ||
+      q.vector.length !== file.dimensions ||
+      !q.vector.every((x) => typeof x === 'number' && Number.isFinite(x))
+    ) {
+      const which = typeof q?.id === 'string' ? ` for '${q.id}'` : '';
+      throw new Error(`query vectors at ${path} have a malformed entry${which}. ${REBUILD}`);
     }
     byId.set(q.id, q.vector);
   }

@@ -46,6 +46,7 @@ rows about the *mechanism and structure* are settled now.
 | 12 | The keyless gate catches route flips | `judgeRetrieval` checks presence in top-K only, so it misses a top-slot flip where the note stays retrieved. **Added a keyless route-selection check** (`topSource`) for related-material cases, so a flip that keeps the note in top-K is still caught | `spec` | Note the route check in the spec's §5 harness description |
 | 13 | The answer-mode pass governs the route/refuse verdicts | The keyless headline covers retrieval + route selection + refuse-by-floor; the answer-mode adjudication (related-material routes without restating) is the `--full` keyed pass. `answerQuestion` short-circuits to not-found on empty evidence, so refuse-by-empty-floor is keyless even under `--full`. Route tests selection, not A2 | `spec` | Clarify the two tiers (keyless retrieval gate vs keyed answer gate) in §5 |
 | 14 | (build) the corpus and vectors are produced in this session | Blocked by egress (GitHub-only) and a missing key; deferred to a local agent per `build-handoff.md`. Code, structure, gold, and tests committed and green | `nothing` (process) | Run the handoff to complete the demo |
+| 15 | `.github/STANDARDS.md` line 51: "Don't leak private embeddings/text into committed artifacts" | The demo commits `scaling/corpus/index.json` with the public-domain George "private"-layer vectors, **on purpose** (spec §5): the layer is public-domain (a layer assignment, not secrecy), the file is deliberately not gitignored, and README §2 + manifest §2 explain it with the inversion warning. The automated review flagged the standard. No design change; the standard is about genuinely-private data | `STANDARDS` reconciliation | Add a one-line carve-out at merge (prepared below) so the demo's public-domain exception is named, not re-flagged |
 
 ## Merge-day assembly (do this the day the demo lands, while it's hot)
 
@@ -81,6 +82,17 @@ miniature, for example:
 "A runnable miniature of this lever ships at `scaling/` (see
 `scaling/README.md`); it is the public, gated counterpart to the private
 production figures above."
+
+**`.github/STANDARDS.md` line 51** (row 15, raised by the automated review).
+"Don't leak private embeddings/text into committed artifacts. (The index is
+gitignored for a reason.)" stays true of the core. Name the demo's exception so
+it is not re-flagged, for example:
+
+> The one exception is the `scaling/` demo. Its "private" layer is public-domain
+> text by design (a layer assignment, not secrecy), so it commits
+> `scaling/corpus/index.json` on purpose, to reproduce the headline with no key.
+> See `scaling/README.md` §2 for why that is safe there and must not be
+> generalized to a genuinely-private corpus.
 
 **Paper §5/§6 (author's call, conditional).** The published note's §5 says
 retrieval is "in-memory and unchunked … indexed whole." That stays true of the
