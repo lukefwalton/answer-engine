@@ -5,9 +5,11 @@ owns grounding and refusal rejecting a cheaper encoding. The real-only headline
 now holds cleanly: `npm run demo:run -- --natural` certifies int8 at 7/7 gold
 verdicts, mean rho 1.0000, min rho 1.0000. The synthetic spire is broken out:
 `--natural+synthetic` certifies int8 at 9/9, while `--natural+synthetic --bits 4`
-is rejected at 7/9 because two route cases flip from the private synthetic note
-to the public Amos record. The gate says yes to int8 and no when the encoding is
-pushed.
+holds 7/9 and is rejected because exactly two verdicts fail: both engineered
+route cases flip from the private synthetic note to the public Amos record. The
+seven natural cases still hold, so the caught int4 break is concentrated where
+the demo constructed the near-tie. The gate says yes to int8 and no when the
+encoding is pushed.
 
 The real route case was also tested as an escape hatch. It holds through int4
 and only breaks around int2, so the synthetic spire remains: real text is too
@@ -19,7 +21,7 @@ Run it:
 ```
 npm run demo:run                                  # int8, real corpus: the headline, keyless
 npm run demo:run -- --natural+synthetic           # add the spire and its gold
-npm run demo:run -- --natural+synthetic --bits 4  # int4: the gate rejects the spire's route flip
+npm run demo:run -- --natural+synthetic --bits 4  # int4: the gate rejects the spire route flips
 npm run demo:run -- --full                        # also run the answer-mode pass (needs a key)
 ```
 
@@ -119,8 +121,8 @@ discarded once the code landed:
 - `SCALING-DEMO-spec.md`: what the demo set out to do, and why; the ticket it was
   built from.
 - `scaling-demo-delta-log.md`: every place the build diverged from that spec,
-  what is settled versus pending the keyed build run, and the prepared
-  reconciliations (NEXT-STEPS, STANDARDS, the paper) to apply at merge.
+  the empirical result the harness produced, and the reconciliations
+  (NEXT-STEPS, STANDARDS, the paper) applied or still owed at merge.
 - `build-handoff.md`: the brief for the build run that fetches the public-domain
   texts and generates the committed vectors.
 

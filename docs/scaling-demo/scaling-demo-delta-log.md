@@ -16,20 +16,17 @@ For each assumption the spec makes, record what the build actually did and what 
 
 ## Pre-seeded rows (the deltas most likely to surface)
 
-**Build context (read before the rows).** The session that built `demo/`
-had egress to GitHub only: `api.openai.com`, Gutenberg, and archive.org all
-returned `host_not_allowed`, and no `OPENAI_API_KEY` was set. So the code, the
-gold set, the provenance manifest, and the deterministic harness tests are
-committed and green, but the real text bodies and the committed vectors are
-**pending a build run** (a local agent with network + key; see
-`build-handoff.md`). Rows about what the *real run* produced are marked PENDING;
-rows about the *mechanism and structure* are settled now.
+**Build context (read before the rows).** The first session that authored
+`demo/` had egress to GitHub only: `api.openai.com`, Gutenberg, and archive.org
+all returned `host_not_allowed`, and no `OPENAI_API_KEY` was set. A later local
+build with network + key populated the public-domain text bodies and committed
+vectors; the rows below record what that real run produced.
 
 | # | Spec assumption | What the build actually did | Touches | Downstream action |
 |---|---|---|---|---|
-| 1 | Score floor as shipped (`SCORE_FLOOR`) puts marginal cases where int8 can flip them | Confirmed `SCORE_FLOOR = 0.2` in `src/retrieve.ts` (model-dependent, B1); gold cases authored near it. Real-run margin PENDING build | `spec`, maybe `NEXT-STEPS` (B1) | If the build moves it, document the new floor and that it's model-dependent |
+| 1 | Score floor as shipped (`SCORE_FLOOR`) puts marginal cases where int8 can flip them | RESOLVED. Confirmed `SCORE_FLOOR = 0.2` in `src/retrieve.ts` (model-dependent, B1). The natural route case sits comfortably enough to hold through int4, while the synthetic spire supplies the deliberately marginal route cases | `spec`, maybe `NEXT-STEPS` (B1) | Floor stayed as shipped; margins are documented in rows 3 and 18 |
 | 2 | int8 holds the full gold suite on the real corpus (headline pass) | RESOLVED. `npm run demo:run -- --natural`: 7/7 gold verdicts held, mean rho 1.0000, min rho 1.0000 | `nothing` | Headline number for §6/C1 |
-| 3 | A tightened encoding (int4 / lowered floor) flips a **route** case and the gold suite catches it | RESOLVED with the synthetic spire. `npm run demo:run -- --natural+synthetic`: int8 held 9/9, mean/min rho 1.0000. `npm run demo:run -- --natural+synthetic --bits 4`: rejected 7/9, mean rho 0.9977, min rho 0.9930; both `syn-route-margin` and `syn-route-paraphrase` flipped from the synthetic private note to public Amos | `spec` | The caught failure fires at int4 and is broken out from the real-only headline |
+| 3 | A tightened encoding (int4 / lowered floor) flips a **route** case and the gold suite catches it | RESOLVED with the synthetic spire. `npm run demo:run -- --natural+synthetic`: int8 held 9/9, mean/min rho 1.0000. `npm run demo:run -- --natural+synthetic --bits 4`: held 7/9 and rejected the encoding, mean rho 0.9953, min rho 0.9930. The seven natural cases still held; exactly the two engineered synthetic route cases failed, and both `syn-route-margin` and `syn-route-paraphrase` flipped from the synthetic private note to public Amos | `spec` | The caught failure fires at int4 and is broken out from the real-only headline |
 | 4 | George sermons index as short **whole** units (so "indexes documents whole" stays true) | RESOLVED. Internet Archive OCR for _The Forgiveness of Sins, and Other Sermons_ yielded short whole sermon units. The private ledger uses sermons I-III ("The Forgiveness of Sins," "The Word of God," "Temptation") whole; nothing was split into windows | `nothing` | Paper-reaching chunking watch-item did not fire |
 | 5 | `EXACT_MATCH_BOOST = 0.30` fires (or not) on the "Adam Smith" vs "George Adam Smith" partial match | RESOLVED as a finding. `hasExactMatch` checks whether the query contains the full record title or slug, not whether the record title contains a partial query phrase. Therefore "Adam Smith" in the query does **not** boost "George Adam Smith - ..." titles. `boost-edge-micah` was re-pinned to the observed winner (George's Amos exposition), with the note explaining that the partial-name prediction was wrong | `spec` | Do not tune the boost to confirm the prediction; the observed behavior is the result |
 | 6 | Both-Smith shared theme (e.g. "justice") mis-fires the theme boost, and the gold suite exposes it | RESOLVED as an exposed near-tie. The shared prophet/justice geometry makes Amos beat Micah by a narrow semantic margin on `boost-edge-micah`; themes remain honestly authored and not curated to suppress that result | `spec` | Keep as an exposed near-tie; no corpus/theme special-case |
@@ -51,6 +48,7 @@ rows about the *mechanism and structure* are settled now.
 | 17 | Provenance table source IDs and dates are hypotheses until checked live | RESOLVED. Verified Gutenberg 67363 (_Theory of Moral Sentiments_), 3300 (_Wealth of Nations_), 43847 (_Twelve Prophets_ vol. 1), 39767 (_Isaiah_ vol. 1). Verified direct Internet Archive OCR and metadata XML for `forgivenessofsin00smitrich`: identifier-ARK is `ark:/13960/t0gt5jk4g`, IA metadata says NOT_IN_COPYRIGHT in the US, and the evidence notes visible copyright date 1904. The surfaced `ark:/13960/t0zp4cz00` is recorded as an alternate HathiTrust scan/copy surfaced by search; HathiTrust page view was 403 here, so it is not the OCR source used. Manifest now records "1904; third printing 1905" rather than treating 1905 as first publication | `spec` | Manifest corrected; no PD issue because both dates are pre-1931 and author died 1942 |
 | 18 | The real route margin might supply the deliberate failure without the synthetic spire | Checked. `route-forgiveness` holds at int8 and int4 on the natural corpus; it only flips at about int2. The real sermon route is therefore too stable to be the deliberate int4 failure. This strengthens the positive claim: real well-separated content survives aggressive quantization, so the synthetic spire exists specifically to construct a controlled near-tie tight enough to demonstrate the catch | `nothing` | Keep the synthetic spire; report that the cleaner real-text failure did not fire |
 | 19 | Synthetic route note only needs to be "near" the public Amos record | Calibration finding. Public Amos carries the `justice` theme, so `THEME_BOOST = 0.15` is added to its semantic score. The synthetic note, as a note, receives no theme boost. Therefore a query containing the public theme word hands Amos a 0.15 wall. This is not just a tuning obstacle: it is the boost design showing its teeth, the same B1 calibration story as `boost-edge-micah`. The synthetic route queries were reworded off the generic public theme and onto the specific routeable moment, with a paraphrase guard committed; both hold at int8 and flip at int4 | `spec`, maybe `NEXT-STEPS` (B1) | Keep the paraphrase guard as a real gold case, not an ad hoc check |
+| 20 | The optional `--full` keyed answer pass cleanly certifies the same route tier | Observed residue, not part of the certified artifact. The keyless gate certifies retrieval + route selection + refusal from committed vectors; `--full` adds the answer model as a keyed bonus. On the route tier, the answer model sometimes misdeclares/mis-cites the selected private route (empty `related-material` prose or public-record citation bleed), which the answer validator/judge rejects. This is prompt/mode/citation-shape residue adjacent to A2, not an int8 result and not a reason to bend the harness | `spec` | Keep `--full` scoped as optional keyed answer-mode coverage; do not use it as the certified quantization artifact |
 
 ## Merge-day assembly (do this the day the demo lands, while it's hot)
 
@@ -62,12 +60,12 @@ Walk the log top to bottom:
 
 The reconciliation is then assembly from recorded facts, not authorship under pressure. That was the point of keeping the log.
 
-## Prepared reconciliation text (apply at build, once `demo:run` confirms the headline)
+## Historical reconciliation text
 
-These edits describe what the demo *does*. They are held here, not applied,
-because the demo is not runnable until the vectors are built (rows 2, 14). Apply
-them only after `demo:run --natural` confirms the headline, so "a runnable
-miniature ships" is verified, not asserted.
+These were the prepared edits to apply only after `demo:run --natural` confirmed
+the headline, so "a runnable miniature ships" would be verified, not asserted.
+Rows 10 and 15 now record the applied versions; the paper bridge remains the
+author's call for any submission snapshot that includes `demo/`.
 
 **`NEXT-STEPS.md` §C-intro** (row 10). It currently reads: "This repository is
 full-precision and indexes documents whole; it pulls none of these levers."
