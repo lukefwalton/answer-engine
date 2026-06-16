@@ -24,12 +24,18 @@ test('committed demo index matches the public-domain source allowlist', () => {
   const actual = natural
     .map((entry) => (entry.sourceType === 'record' ? entry.record.id : entry.note.id))
     .sort();
-  assert.deepEqual(actual, EXPECTED_NATURAL_SOURCES);
+  assert.deepEqual(
+    actual,
+    EXPECTED_NATURAL_SOURCES,
+    `committed demo index source ids changed; update the public-domain provenance and allowlist deliberately\n` +
+      `actual: ${actual.join(', ')}`,
+  );
 
   const synthetic = readIndexFile('demo/corpus/index.synthetic.json');
   assert.deepEqual(
     synthetic.map((entry) => (entry.sourceType === 'note' ? entry.note.id : entry.record.id)),
     ['note:syn-amos-justice-margin'],
+    'committed synthetic spire changed; keep it to the single flagged near-tie unless the demo is recalibrated',
   );
 });
 
