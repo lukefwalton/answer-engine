@@ -23,7 +23,9 @@ Every source, with the basis for its public-domain status. Public domain is the 
 - **US:** published before 1931, so public domain in the USA. (As of 1 Jan 2026, works published in 1930 and earlier are PD in the US.)
 - **Life-plus-70 jurisdictions:** public domain once the author has been dead 70 years. In 2026 that covers authors who died in 1955 or earlier; George Adam Smith died 1942 and Adam Smith in 1790, so both are clear.
 
-Verify each ID and date against the source before relying on it; fill OCR-quality notes from the actual file.
+These IDs and dates were verified live during the build run; see the delta log,
+especially row 17, for the source checks and the Internet Archive ARK
+adjudication.
 
 | Work (unit) | Author | Pub. | Layer | Source (ID) | PD basis | Notes |
 |---|---|---|---|---|---|---|

@@ -56,7 +56,7 @@ queries:
       and "faith" are George's, with no economist competitor.
 
   # ── The partial-name boost edge ──────────────────────────────────────────
-  - id: boost-edge-micah
+  - id: partial-name-no-boost
     query: What did Adam Smith say about the prophet Micah?
     expectAnswerMode: partial
     expectSources: [george-adam-smith:twelve-prophets-amos]
@@ -86,7 +86,7 @@ queries:
       confabulation residue.
 
   # ── Refuse: nothing clears the floor ─────────────────────────────────────
-  - id: refuse-quantum
+  - id: refuse-out-of-domain
     query: How should transformer accelerators schedule tensor kernels?
     expectAnswerMode: not-found
     forbidSources:
