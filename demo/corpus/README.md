@@ -1,4 +1,4 @@
-# The scaling-demo corpus
+# The demo corpus
 
 This folder holds the corpus for the int8 scaling demo. This README is the corpus's **answerable half**: the mechanism makes the unauthored move inexpressible; this document owns, in the open, every authored choice behind the data. Each entry names the choice and the reason it was made. None of it is hidden, so none of it is a concession; it is the record of decisions a maintainer signs for.
 
@@ -15,7 +15,7 @@ Both write dense moral prose about justice, society, and ethics, so the two bodi
 
 ## Build status
 
-The text bodies and the embedding vectors are produced by `demo/build.ts`, which needs network access to the public-domain sources and an `OPENAI_API_KEY`. The code, the structure, the gold set, the provenance table below, and the deterministic harness tests are authored and committed; the real bodies and the committed `index.json` / `query-vectors.json` are populated by a build run with those two things. See `docs/scaling-demo/build-handoff.md` for the exact build steps. **Every ID and date below is a claim to verify against the live source during that run, not a confirmation made here.**
+The text bodies are now populated from the public-domain sources below. The embedding vectors are produced by `demo/build.ts`, which needs an `OPENAI_API_KEY`; the committed `index.json` / `query-vectors.json` are populated by that build run. See `docs/scaling-demo/build-handoff.md` for the exact build steps.
 
 ## Provenance and public-domain status
 
@@ -23,20 +23,22 @@ Every source, with the basis for its public-domain status. Public domain is the 
 - **US:** published before 1931, so public domain in the USA. (As of 1 Jan 2026, works published in 1930 and earlier are PD in the US.)
 - **Life-plus-70 jurisdictions:** public domain once the author has been dead 70 years. In 2026 that covers authors who died in 1955 or earlier; George Adam Smith died 1942 and Adam Smith in 1790, so both are clear.
 
-Verify each ID and date against the source before relying on it; fill OCR-quality notes from the actual file.
+These IDs and dates were verified live during the build run; see the delta log,
+especially row 17, for the source checks and the Internet Archive ARK
+adjudication.
 
 | Work (unit) | Author | Pub. | Layer | Source (ID) | PD basis | Notes |
 |---|---|---|---|---|---|---|
-| _Theory of Moral Sentiments_, §\<n\> | Adam Smith | 1759 | public | Gutenberg \<id\> | US: pre-1931 / PD in USA. Life+70: author d. 1790; term expired | _verify; fill: clean / OCR-noisy_ |
-| _Wealth of Nations_, bk\<n\> ch\<n\> | Adam Smith | 1776 | public | Gutenberg \<id\> | US: pre-1931 / PD in USA. Life+70: author d. 1790; term expired | _verify_ |
-| _The Book of the Twelve Prophets_, \<prophet\> | George Adam Smith | 1896-98 | public | Gutenberg 43847 / 50747 | US: pre-1931 / PD in USA. Life+70: author d. 1942; term expired | _verify against Gutenberg_ |
-| _The Book of Isaiah_, ch\<n\> | George Adam Smith | 1888-90 | public | Gutenberg 39767 / 43672 | US: pre-1931 / PD in USA. Life+70: author d. 1942; term expired | _verify against Gutenberg_ |
-| _The Forgiveness of Sins, and Other Sermons_, \<sermon\> | George Adam Smith | 1905 (A. C. Armstrong & Son) | **private** | Internet Archive `forgivenessofsin00smitrich` (ARK `ark:/13960/t0gt5jk4g`); HathiTrust full-view backup record 100136688 | US: pre-1931 / PD in USA. Life+70: author d. 1942; term expired | _verify NOT_IN_COPYRIGHT; OCR-noisy expected, which is fine_ |
+| _Theory of Moral Sentiments_, "Of Sympathy"; "Justice and Beneficence" | Adam Smith | 1759 (Gutenberg source from 1777 printing) | public | Gutenberg 67363 | US: PD in USA per Gutenberg. Life+70: author d. 1790; term expired | verified; clean PG text |
+| _Wealth of Nations_, bk. I ch. 1; bk. I ch. 5 | Adam Smith | 1776 | public | Gutenberg 3300 | US: PD in USA per Gutenberg. Life+70: author d. 1790; term expired | verified; clean PG text |
+| _The Book of the Twelve Prophets_, Amos / Hosea / Micah units | George Adam Smith | 1896-98 | public | Gutenberg 43847 | US: PD in USA per Gutenberg. Life+70: author d. 1942; term expired | verified; clean PG text; vol. 1 contains Amos, Hosea, Micah |
+| _The Book of Isaiah_, "This Is the Victory... Our Faith" | George Adam Smith | 1888-90 | public | Gutenberg 39767 | US: PD in USA per Gutenberg. Life+70: author d. 1942; term expired | verified; clean PG text; unit taken from vol. 1 |
+| _The Forgiveness of Sins, and Other Sermons_, sermons I-III | George Adam Smith | 1904; third printing 1905 | **private** | Internet Archive `forgivenessofsin00smitrich` (ARK `ark:/13960/t0gt5jk4g`); HathiTrust/Online Books Page listing (alternate HathiTrust scan surfaced as ARK `ark:/13960/t0zp4cz00`) | US: pre-1931 / IA metadata says NOT_IN_COPYRIGHT in US; visible notice date 1904. Life+70: author d. 1942; term expired | verified against IA metadata XML + direct IA OCR; HathiTrust page view blocked here, so the alternate ARK is recorded as a separate scan/copy, not the OCR source used. OCR-noisy, kept as source character |
 | \<edge-case note\> | n/a (fabricated) | n/a | **synthetic** | authored here | n/a (no copyright in fabricated demo text) | quarantined in `synthetic/`; tests \<gold id\> |
 
-**Sourcing (resolved, pending verification).** George's *major* commentaries are listed on Project Gutenberg. The private layer rests on *The Forgiveness of Sins, and other Sermons* (1905), a single volume yielding several short, windy sermon units, which is exactly what the private layer needs: short whole units that route without restating. *Jeremiah: Being the Baird Lecture for 1922* (1923) is a further minor source if wanted. The fallback (designating a *section* of a major work private) is therefore **not** required; if a future rebuild loses these sources, that fallback keeps the private layer real rather than padding it with synthetic.
+**Sourcing (resolved).** George's *major* commentaries are confirmed on Project Gutenberg. The private layer rests on *The Forgiveness of Sins, and other Sermons* (copyright 1904; third printing 1905), whose Internet Archive OCR supplies short sermon units that route without restating. *Jeremiah: Being the Baird Lecture for 1922* (1923) remains a further minor source if wanted. The fallback (designating a *section* of a major work private) is therefore **not** required; if a future rebuild loses these sources, that fallback keeps the private layer real rather than padding it with synthetic.
 
-**OPEN: the one sourcing check that can block the build.** Confirm George's minor/windy material (the sermons) actually downloads as clean-enough public-domain text. If only the big commentaries are digitized, the private ledger is thin: use the fallback (a short *section* of a major work, designated private) rather than padding with synthetic, which would turn the spire into a column. Record the outcome here.
+**Sermon-length outcome.** The private ledger uses sermons I-III ("The Forgiveness of Sins," "The Word of God," and "Temptation") as whole units. None was split into windows; the paper-reaching chunking watch-item did not fire.
 
 ## URLs: demo-canonical citations, real route targets
 

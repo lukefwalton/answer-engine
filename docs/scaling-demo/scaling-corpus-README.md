@@ -1,4 +1,8 @@
-# The scaling-demo corpus
+# Historical draft: the scaling-demo corpus
+
+This file is the original corpus-manifest draft kept with the planning notes.
+The live, verified manifest is `demo/corpus/README.md`; it owns the build-run
+provenance, source IDs, dates, and ARK adjudication.
 
 This folder holds the corpus for the int8 scaling demo. This README is the corpus's **answerable half**: the mechanism makes the unauthored move inexpressible; this document owns, in the open, every authored choice behind the data. Each entry names the choice and the reason it was made. None of it is hidden, so none of it is a concession; it is the record of decisions a maintainer signs for.
 
@@ -19,7 +23,8 @@ Every source, with the basis for its public-domain status. Public domain is the 
 - **US:** published before 1931, so public domain in the USA. (As of 1 Jan 2026, works published in 1930 and earlier are PD in the US.)
 - **Life-plus-70 jurisdictions:** public domain once the author has been dead 70 years. In 2026 that covers authors who died in 1955 or earlier; George Adam Smith died 1942 and Adam Smith in 1790, so both are clear.
 
-Verify each ID and date against the source before relying on it; fill OCR-quality notes from the actual file.
+Draft rows below were placeholders to verify during the build. Do not cite this
+table as the live provenance record; use `demo/corpus/README.md`.
 
 | Work (unit) | Author | Pub. | Layer | Source (ID) | PD basis | Notes |
 |---|---|---|---|---|---|---|

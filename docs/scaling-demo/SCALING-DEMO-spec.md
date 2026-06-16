@@ -1,4 +1,8 @@
-# Spec: the runnable scaling demo (`scaling/`)
+# Spec: the runnable scaling demo (`demo/`)
+
+This spec was drafted when the proposed module path was `scaling/`. The module
+shipped as `demo/`; historical notes that still say `scaling` are proposal
+language, while `demo/` is the live path.
 
 A ticket for the agent working on `answer-engine`. Read the repo-agent brief's **frame** first; everything there applies here, especially *confidence not apology*, *verify against the live repo never against this spec*, and *when in doubt prefer the smaller change*. This spec is downstream of `NEXT-STEPS.md` §C1; it is the worked example that backs it, linked from §6 of the paper. **`NEXT-STEPS.md` is created by the repo-agent brief, not yet on `main` — if it isn't present, this ticket waits on it or lands the link when both do.**
 

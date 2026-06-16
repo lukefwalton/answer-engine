@@ -10,18 +10,30 @@
 
 queries:
   - id: syn-route-margin
-    query: What did George Adam Smith note privately about Amos and the justice of God?
+    query: Where is the Amos passage about worship and the wronged poor?
     expectAnswerMode: related-material
     expectSources: [note:syn-amos-justice-margin]
     forbidRecordCitations: true
     forbidAnswerPatterns: ['https?://']
     note: >
-      THE DELIBERATE FAILURE. The synthetic note is tuned to sit at the floor,
-      just above the public Amos exposition (george-adam-smith:twelve-prophets-amos)
-      on the same theme. int8 must hold the route — the private note wins the top
-      slot and the answer routes without restating. A tightened encoding (run with
-      --bits 4) or a lowered floor flips the top slot to the public record, or
-      drops the note below the floor entirely; either way the gold suite catches
-      it. If it does NOT fire, the near-tie is too loose: tighten the margin in the
-      synthetic note (build-handoff §4), do NOT add corpus. This caught failure,
-      not any clean pass, is the result the demo rests on.
+      THE DELIBERATE FAILURE. The synthetic note is tuned to sit just above the
+      public Amos exposition (george-adam-smith:twelve-prophets-amos) for a
+      routeable marginalia query. int8 must hold the route — the private note
+      wins the top slot and the answer routes without restating. A tightened
+      encoding (run with --bits 4) flips the top slot to the public record, and
+      the gold suite catches it. If it does NOT fire, the near-tie is too loose:
+      tighten the margin in the synthetic note (build-handoff §4), do NOT add
+      corpus. This caught failure, not any clean pass, is the result the demo
+      rests on.
+
+  - id: syn-route-paraphrase
+    query: Which route points to Amos about ritual and the poor?
+    expectAnswerMode: related-material
+    expectSources: [note:syn-amos-justice-margin]
+    forbidRecordCitations: true
+    forbidAnswerPatterns: ['https?://']
+    note: >
+      Paraphrase guard for the spire. This asks for the same routeable moment
+      while swapping the main query's surface ("passage", "worship", "wronged
+      poor") for "route", "ritual", and "the poor." If this fails while
+      syn-route-margin passes, the spire was tuned to tokens rather than topic.

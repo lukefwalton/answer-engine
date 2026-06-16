@@ -48,7 +48,7 @@ Fail fast and name the problem. Silent fallbacks hide bugs.
 Not a hardened production service, but a few things matter.
 
 - **Secrets: never commit `.env`; don't log prompts with keys.**
-- **Don't leak private embeddings/text into committed artifacts.** (The index is gitignored for a reason.)
+- **Don't leak private embeddings/text into committed artifacts.** (The index is gitignored for a reason.) The one exception is `demo/`: it commits only the exact public-domain natural sources and flagged synthetic spire allowlisted in `demo/artifacts.test.ts`, on purpose, to reproduce the headline with no key. Some public-domain sources are routed through the no-leak layer to exercise the boundary, but that is a demo layer assignment, not a secrecy claim. Do not generalize it to genuinely-private corpora.
 - **Performance: brute-force cosine is intentional at this scale.** Don't add pgvector, HTTP, or caching in a drive-by PR unless the README's "Where to take it" story is the explicit goal.
 
 ## 6. Style & Naming (Follow the Room)

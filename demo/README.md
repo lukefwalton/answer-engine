@@ -1,26 +1,27 @@
 # The int8 scaling demo
 
-The result this module is built to produce is a **caught failure**: the same
-gold suite that owns grounding and refusal rejecting a cheaper encoding. The
-*mechanism* is proven offline, in `quantize.test.ts` (run by `npm test`): on
-fixture vectors searched to exhibit a near-tie, int8 preserves both the route
-and the disambiguation winner, int4 flips the top slot, and the gate catches it.
+The result this module produces is a **caught failure**: the same gold suite that
+owns grounding and refusal rejecting a cheaper encoding. The real-only headline
+now holds cleanly: `npm run demo:run -- --natural` certifies int8 at 7/7 gold
+verdicts, mean rho 1.0000, min rho 1.0000. The synthetic spire is broken out:
+`--natural+synthetic` certifies int8 at 9/9, while `--natural+synthetic --bits 4`
+holds 7/9 and is rejected because exactly two verdicts fail: both engineered
+route cases flip from the private synthetic note to the public Amos record. The
+seven natural cases still hold, so the caught int4 break is concentrated where
+the demo constructed the near-tie. The gate says yes to int8 and no when the
+encoding is pushed.
 
-Whether the **real Smith corpus** produces that flip at the int8/int4 boundary
-is a separate, empirical question, settled by the build run, not asserted here.
-"int8 held" on a small corpus is expected and proves little on its own; the gate
-saying *no* when pushed is what shows the gold suite, not the encoding, is the
-adjudicator. So: the mechanism is demonstrated; the real-corpus demonstration is
-pending.
+The real route case was also tested as an escape hatch. It holds through int4
+and only breaks around int2, so the synthetic spire remains: real text is too
+stable to demonstrate the catch at int4, and the spire constructs the controlled
+near-tie in the open.
 
-The committed vectors are not built yet (this module was written with no network
-and no key), so `npm run demo:run` errors with a build pointer until then;
-see **Build status**. Once built:
+Run it:
 
 ```
 npm run demo:run                                  # int8, real corpus: the headline, keyless
 npm run demo:run -- --natural+synthetic           # add the spire and its gold
-npm run demo:run -- --natural+synthetic --bits 4  # int4: the gate rejects the spire's route flip
+npm run demo:run -- --natural+synthetic --bits 4  # int4: the gate rejects the spire route flips
 npm run demo:run -- --full                        # also run the answer-mode pass (needs a key)
 ```
 
@@ -103,14 +104,13 @@ approximate content, which is the exposure the core's gitignored index avoids.
 
 ## Build status
 
-The code, the gold set, the provenance manifest, and the deterministic harness
-tests (`quantize.test.ts`, run by `npm test`) are committed. The real text
-bodies and the committed vectors (`corpus/index.json`,
-`corpus/index.synthetic.json`, `corpus/query-vectors.json`) are produced by
-`demo:build`, which needs network access to the public-domain sources and an
-`OPENAI_API_KEY`; the session that wrote the module had neither. See
+The code, gold set, provenance manifest, real text bodies, and committed vectors
+(`corpus/index.json`, `corpus/index.synthetic.json`,
+`corpus/query-vectors.json`) are built. `demo:build` remains the regeneration
+path and needs an `OPENAI_API_KEY`; `demo:run` is keyless because it reads the
+committed source and query vectors. See
 [`docs/scaling-demo/build-handoff.md`](../docs/scaling-demo/build-handoff.md)
-for the exact steps, and the delta log for what is confirmed versus pending.
+for the source-building steps and the delta log for the empirical findings.
 
 ## The spec and the log are kept in the open
 
@@ -121,8 +121,8 @@ discarded once the code landed:
 - `SCALING-DEMO-spec.md`: what the demo set out to do, and why; the ticket it was
   built from.
 - `scaling-demo-delta-log.md`: every place the build diverged from that spec,
-  what is settled versus pending the keyed build run, and the prepared
-  reconciliations (NEXT-STEPS, STANDARDS, the paper) to apply at merge.
+  the empirical result the harness produced, and the reconciliations
+  (NEXT-STEPS, STANDARDS, the paper) applied or still owed at merge.
 - `build-handoff.md`: the brief for the build run that fetches the public-domain
   texts and generates the committed vectors.
 
