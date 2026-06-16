@@ -32,11 +32,11 @@ Verify each ID and date against the source before relying on it; fill OCR-qualit
 | _The Book of the Twelve Prophets_, \<prophet\> | George Adam Smith | 1896-98 | public | Gutenberg 43847 / 50747 | US: pre-1931 / PD in USA. Life+70: author d. 1942; term expired | _verify against Gutenberg_ |
 | _The Book of Isaiah_, ch\<n\> | George Adam Smith | 1888-90 | public | Gutenberg 39767 / 43672 | US: pre-1931 / PD in USA. Life+70: author d. 1942; term expired | _verify against Gutenberg_ |
 | _The Forgiveness of Sins, and Other Sermons_, \<sermon\> | George Adam Smith | 1905 (A. C. Armstrong & Son) | **private** | Internet Archive `forgivenessofsin00smitrich` (ARK `ark:/13960/t0gt5jk4g`); HathiTrust full-view backup record 100136688 | US: pre-1931 / PD in USA. Life+70: author d. 1942; term expired | _verify NOT_IN_COPYRIGHT; OCR-noisy expected, which is fine_ |
-| \<edge-case note\> | — (fabricated) | — | **synthetic** | authored here | n/a (no copyright in fabricated demo text) | quarantined in `synthetic/`; tests \<gold id\> |
+| \<edge-case note\> | n/a (fabricated) | n/a | **synthetic** | authored here | n/a (no copyright in fabricated demo text) | quarantined in `synthetic/`; tests \<gold id\> |
 
 **Sourcing (resolved, pending verification).** George's *major* commentaries are listed on Project Gutenberg. The private layer rests on *The Forgiveness of Sins, and other Sermons* (1905), a single volume yielding several short, windy sermon units, which is exactly what the private layer needs: short whole units that route without restating. *Jeremiah: Being the Baird Lecture for 1922* (1923) is a further minor source if wanted. The fallback (designating a *section* of a major work private) is therefore **not** required; if a future rebuild loses these sources, that fallback keeps the private layer real rather than padding it with synthetic.
 
-**OPEN — the one sourcing check that can block the build.** Confirm George's minor/windy material (the sermons) actually downloads as clean-enough public-domain text. If only the big commentaries are digitized, the private ledger is thin: use the fallback (a short *section* of a major work, designated private) rather than padding with synthetic, which would turn the spire into a column. Record the outcome here.
+**OPEN: the one sourcing check that can block the build.** Confirm George's minor/windy material (the sermons) actually downloads as clean-enough public-domain text. If only the big commentaries are digitized, the private ledger is thin: use the fallback (a short *section* of a major work, designated private) rather than padding with synthetic, which would turn the spire into a column. Record the outcome here.
 
 ## URLs: demo-canonical citations, real route targets
 
