@@ -1,4 +1,4 @@
-// scaling/harness.ts — the int8 gate, as pure logic the CLI drives.
+// demo/harness.ts — the int8 gate, as pure logic the CLI drives.
 //
 // Reuses the core retrieval (src/retrieve.ts) and the gold judge
 // (src/evaluate.ts) untouched: the int8 path is an encode/decode wrapper plus a
@@ -171,7 +171,7 @@ export function runGate(
   const results: QueryGateResult[] = [];
   for (const g of gold) {
     const qv = queryVectorById.get(g.id);
-    if (!qv) throw new Error(`no query vector for gold id '${g.id}' (rebuild scaling:build?)`);
+    if (!qv) throw new Error(`no query vector for gold id '${g.id}' (rebuild demo:build?)`);
     results.push(evaluateQuery(g, index, quantIndex, qv));
   }
   const passed = results.filter((r) => r.pass).length;

@@ -1,9 +1,9 @@
-// scaling.config.ts — points the engine at the int8 scaling-demo corpus.
+// config.ts — points the engine at the int8 scaling-demo corpus.
 //
 // This is the same ArchiveConfig shape the core uses (src/types.ts), pointed at
-// scaling/corpus/ instead of example-content/. The demo reuses the core
+// demo/corpus/ instead of example-content/. The demo reuses the core
 // retrieval, the no-leak boundary, and the eval judges untouched; only the
-// corpus, the gold set, and a thin int8 pass are new (see scaling/README.md).
+// corpus, the gold set, and a thin int8 pass are new (see demo/README.md).
 //
 // Two authors share one colliding name on purpose: Adam Smith the economist
 // (1723-1790) and George Adam Smith the theologian (1856-1942). Both write
@@ -16,7 +16,7 @@
 // On URLs: a record's citation URL is built by the reused corpus path
 // (baseUrl + urlPrefix + slug), so it is a demo-canonical surface under the
 // reserved .example TLD (RFC 2606), not a live page. The real public-domain
-// sources live in scaling/corpus/README.md's provenance table, per work. A
+// sources live in demo/corpus/README.md's provenance table, per work. A
 // private note's `about` is taken verbatim from frontmatter, so those route
 // targets ARE real public George pages. See the delta log for this divergence
 // from the spec's "records carry real public URLs" assumption and why it keeps
@@ -28,7 +28,7 @@ export const config: ArchiveConfig = {
   archiveName: 'Smith Collection (int8 scaling demo)',
   authorName: 'Adam Smith and George Adam Smith',
   baseUrl: 'https://smith-collection.example',
-  contentRoot: './scaling/corpus',
+  contentRoot: './demo/corpus',
   collections: [
     { dir: 'public/adam-smith', urlPrefix: '/adam-smith/', type: 'adam-smith' },
     { dir: 'public/george-adam-smith', urlPrefix: '/george/', type: 'george-adam-smith' },
@@ -36,7 +36,7 @@ export const config: ArchiveConfig = {
   // The private layer: George's minor works (sermons, addresses), searchable
   // but never quotable. Designating published work "private" is a layer
   // assignment enforced by the type, not a claim of secrecy (README §2).
-  privateNotesDir: './scaling/corpus/private',
+  privateNotesDir: './demo/corpus/private',
   // Matches archive.config.ts. The int8 demo depends on this: the committed
   // vectors must be text-embedding-3-large at native dimensionality or the
   // homogeneity invariant (src/store.ts) rejects them.
@@ -44,9 +44,9 @@ export const config: ArchiveConfig = {
   answerModel: 'gpt-4o-mini',
 };
 
-// The quarantined synthetic spire (scaling/corpus/synthetic/) is loaded as an
+// The quarantined synthetic spire (demo/corpus/synthetic/) is loaded as an
 // ADDITIONAL private-notes dir only under --natural+synthetic, never here. Its
 // location is one flag and each file also carries `synthetic: true` in
 // frontmatter (a second flag the PrivateNote type ignores): nothing in
-// scaling/corpus/synthetic/ is real George text. See scaling/run.ts and README §3.
-export const SYNTHETIC_NOTES_DIR = './scaling/corpus/synthetic';
+// demo/corpus/synthetic/ is real George text. See demo/run.ts and README §3.
+export const SYNTHETIC_NOTES_DIR = './demo/corpus/synthetic';

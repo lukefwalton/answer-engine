@@ -12,10 +12,10 @@
     "index": "node --env-file-if-exists=.env --import tsx src/cli/build-index.ts",
     "ask": "node --env-file-if-exists=.env --import tsx src/cli/ask.ts",
     "eval": "node --env-file-if-exists=.env --import tsx src/cli/eval.ts",
-    "scaling:build": "node --env-file-if-exists=.env --import tsx scaling/build.ts",
-    "scaling:run": "node --env-file-if-exists=.env --import tsx scaling/run.ts",
-    "scaling:test": "node --import tsx --test scaling/*.test.ts",
-    "test": "node --import tsx --test test/*.test.ts scaling/*.test.ts",
+    "demo:build": "node --env-file-if-exists=.env --import tsx demo/build.ts",
+    "demo:run": "node --env-file-if-exists=.env --import tsx demo/run.ts",
+    "demo:test": "node --import tsx --test demo/*.test.ts",
+    "test": "node --import tsx --test test/*.test.ts demo/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

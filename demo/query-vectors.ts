@@ -1,8 +1,8 @@
-// scaling/query-vectors.ts — the committed gold-query embeddings.
+// demo/query-vectors.ts — the committed gold-query embeddings.
 //
 // The core eval CLI (src/cli/eval.ts) embeds every gold query at run time, so
 // it always needs a key. The demo's headline must reproduce WITHOUT one, so the
-// gold-query vectors are precomputed by scaling:build and committed here beside
+// gold-query vectors are precomputed by demo:build and committed here beside
 // the index. The runner reads them instead of calling the embedding API; a key
 // is only ever needed to regenerate them or to run the --full answer pass.
 //
@@ -13,7 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-export const QUERY_VECTORS_PATH = resolve('scaling/corpus/query-vectors.json');
+export const QUERY_VECTORS_PATH = resolve('demo/corpus/query-vectors.json');
 export const QUERY_VECTORS_VERSION = 1;
 
 export interface QueryVectorsFile {
@@ -29,7 +29,7 @@ export interface LoadedQueryVectors {
   byId: Map<string, number[]>;
 }
 
-const REBUILD = 'Run `npm run scaling:build` with an OPENAI_API_KEY (see docs/scaling-demo/build-handoff.md).';
+const REBUILD = 'Run `npm run demo:build` with an OPENAI_API_KEY (see docs/scaling-demo/build-handoff.md).';
 
 /** Read the committed query vectors, or null if not built yet. Throws on a
  *  present-but-malformed file so a corrupt artifact fails loudly with a remedy. */

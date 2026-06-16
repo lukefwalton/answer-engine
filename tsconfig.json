@@ -12,6 +12,6 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["archive.config.ts", "src/**/*.ts", "test/**/*.ts", "scaling/**/*.ts"],
+  "include": ["archive.config.ts", "src/**/*.ts", "test/**/*.ts", "demo/**/*.ts"],
   "exclude": ["node_modules", "artifacts"]
 }

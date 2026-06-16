@@ -1,5 +1,5 @@
 # Expanded gold for --natural+synthetic. Loaded ONLY alongside the quarantined
-# synthetic spire (scaling/corpus/synthetic/). Because the spire is fabricated,
+# synthetic spire (demo/corpus/synthetic/). Because the spire is fabricated,
 # these cases never touch the headline (--natural) numbers; the runner reports
 # the spire's effect on its own line, broken out, so a reader can tell whether
 # int8 held because the encoding is sound or because notes were hand-placed.

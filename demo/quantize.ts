@@ -1,9 +1,9 @@
-// scaling/quantize.ts — scalar quantization for the int8 demo.
+// demo/quantize.ts — scalar quantization for the int8 demo.
 //
 // The public, runnable twin of the production site adapter's vector-quant.ts
 // (named in docs/production-scaling.md §2; that adapter is not a public repo).
 // Same scheme: per-vector symmetric scalar quantization. The full-precision
-// vectors stay the source of truth (scaling/corpus/index.json); the demo
+// vectors stay the source of truth (demo/corpus/index.json); the demo
 // quantizes them in process, re-ranks, and lets the gold suite judge the result.
 //
 // Why it is admissible, in two parts of different kinds (the paper's §6 split):

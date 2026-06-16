@@ -7,11 +7,11 @@
 # floor or a route case comfortably clear proves nothing about quantization;
 # the marginal cases are the whole point.
 #
-# These run against scaling/corpus/index.json (committed FP vectors), quantized
-# in process. The harness (scaling/run.ts) checks each case keylessly at the
+# These run against demo/corpus/index.json (committed FP vectors), quantized
+# in process. The harness (demo/run.ts) checks each case keylessly at the
 # retrieval tier and, with --full and a key, the answer-mode tier too. Source
 # ids are `${type}:${slug}` for records and `note:${slug}` for private notes,
-# matching the corpus files in scaling/corpus/ (see docs/scaling-demo/build-handoff.md).
+# matching the corpus files in demo/corpus/ (see docs/scaling-demo/build-handoff.md).
 #
 # Queries name each Smith explicitly rather than using {{author}}, because the
 # demo's whole subject is which Smith a question means.

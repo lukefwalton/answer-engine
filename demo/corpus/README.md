@@ -15,7 +15,7 @@ Both write dense moral prose about justice, society, and ethics, so the two bodi
 
 ## Build status
 
-The text bodies and the embedding vectors are produced by `scaling/build.ts`, which needs network access to the public-domain sources and an `OPENAI_API_KEY`. The code, the structure, the gold set, the provenance table below, and the deterministic harness tests are authored and committed; the real bodies and the committed `index.json` / `query-vectors.json` are populated by a build run with those two things. See `docs/scaling-demo/build-handoff.md` for the exact build steps. **Every ID and date below is a claim to verify against the live source during that run, not a confirmation made here.**
+The text bodies and the embedding vectors are produced by `demo/build.ts`, which needs network access to the public-domain sources and an `OPENAI_API_KEY`. The code, the structure, the gold set, the provenance table below, and the deterministic harness tests are authored and committed; the real bodies and the committed `index.json` / `query-vectors.json` are populated by a build run with those two things. See `docs/scaling-demo/build-handoff.md` for the exact build steps. **Every ID and date below is a claim to verify against the live source during that run, not a confirmation made here.**
 
 ## Provenance and public-domain status
 

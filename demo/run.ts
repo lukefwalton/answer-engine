@@ -1,4 +1,4 @@
-// npm run scaling:run — quantize the committed index in process, re-rank, and
+// npm run demo:run — quantize the committed index in process, re-rank, and
 // run the full gold suite against the quantized index.
 //
 //   --natural             (default) real corpus only; owns the headline numbers.
@@ -9,7 +9,7 @@
 // The headline run is keyless: it reads committed FP vectors and committed
 // gold-query vectors, quantizes in process, and judges with the reused gold
 // logic. --full adds the answer model, which is the only part that needs a key.
-// See scaling/README.md and docs/scaling-demo/build-handoff.md.
+// See demo/README.md and docs/scaling-demo/build-handoff.md.
 
 import { resolve } from 'node:path';
 
@@ -20,10 +20,10 @@ import type { IndexEntry } from '../src/types.js';
 import { requantizeIndex, runGate } from './harness.js';
 import { readQueryVectors } from './query-vectors.js';
 
-const NATURAL_INDEX = resolve('scaling/corpus/index.json');
-const SYNTHETIC_INDEX = resolve('scaling/corpus/index.synthetic.json');
-const NATURAL_GOLD = resolve('scaling/gold.yaml');
-const SYNTHETIC_GOLD = resolve('scaling/gold.synthetic.yaml');
+const NATURAL_INDEX = resolve('demo/corpus/index.json');
+const SYNTHETIC_INDEX = resolve('demo/corpus/index.synthetic.json');
+const NATURAL_GOLD = resolve('demo/gold.yaml');
+const SYNTHETIC_GOLD = resolve('demo/gold.synthetic.yaml');
 
 interface RunArgs {
   synthetic: boolean;
@@ -56,7 +56,7 @@ function parseArgs(argv: string[]): RunArgs {
       case '--help':
       case '-h':
         console.log(
-          'scaling:run [--natural | --natural+synthetic] [--bits <n>] [--full]\n' +
+          'demo:run [--natural | --natural+synthetic] [--bits <n>] [--full]\n' +
             '  --natural             real corpus only (default); owns the headline numbers\n' +
             '  --natural+synthetic   add the quarantined synthetic spire + its gold\n' +
             '  --bits <n>            quantization width (default 8; 4 is the int4 scalpel)\n' +
@@ -76,7 +76,7 @@ function loadIndex(synthetic: boolean): IndexEntry[] {
   if (natural.length === 0) {
     throw new Error(
       `no committed vectors at ${NATURAL_INDEX}. ` +
-        'Run `npm run scaling:build` with an OPENAI_API_KEY (see docs/scaling-demo/build-handoff.md).',
+        'Run `npm run demo:build` with an OPENAI_API_KEY (see docs/scaling-demo/build-handoff.md).',
     );
   }
   if (!synthetic) {
@@ -87,7 +87,7 @@ function loadIndex(synthetic: boolean): IndexEntry[] {
   if (spire.length === 0) {
     throw new Error(
       `--natural+synthetic needs the spire at ${SYNTHETIC_INDEX}, which is not built yet ` +
-        '(author the synthetic notes, then `npm run scaling:build`).',
+        '(author the synthetic notes, then `npm run demo:build`).',
     );
   }
   const union = [...natural, ...spire];
@@ -105,7 +105,7 @@ function loadGoldSet(synthetic: boolean, author: string): GoldQuery[] {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const { config } = await import('./scaling.config.js');
+  const { config } = await import('./config.js');
 
   const index = loadIndex(args.synthetic);
   const gold = loadGoldSet(args.synthetic, config.authorName);
@@ -113,7 +113,7 @@ async function main(): Promise<void> {
   const qv = readQueryVectors();
   if (!qv) {
     throw new Error(
-      'no committed query vectors. Run `npm run scaling:build` with an OPENAI_API_KEY ' +
+      'no committed query vectors. Run `npm run demo:build` with an OPENAI_API_KEY ' +
         '(see docs/scaling-demo/build-handoff.md).',
     );
   }
@@ -121,14 +121,14 @@ async function main(): Promise<void> {
   if (qv.model !== spec.model || qv.dimensions !== spec.dimensions) {
     throw new Error(
       `query vectors (${qv.model}/${qv.dimensions}) do not match the index ` +
-        `(${spec.model}/${spec.dimensions}); rebuild both with scaling:build.`,
+        `(${spec.model}/${spec.dimensions}); rebuild both with demo:build.`,
     );
   }
 
   // Say plainly what this run IS, so a reader knows what they are looking at.
   const label = args.synthetic ? '--natural+synthetic' : '--natural';
   const shipped = args.bits === 8;
-  console.log('scaling:run — int8 quantization gate (Smith collection)');
+  console.log('demo:run — int8 quantization gate (Smith collection)');
   console.log(
     `  encoding: int${args.bits}  ` +
       (shipped
@@ -236,6 +236,6 @@ async function runAnswerPass(
 }
 
 main().catch((err) => {
-  console.error(`scaling:run failed: ${err instanceof Error ? err.message : err}`);
+  console.error(`demo:run failed: ${err instanceof Error ? err.message : err}`);
   process.exitCode = 1;
 });

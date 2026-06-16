@@ -14,14 +14,14 @@ adjudicator. So: the mechanism is demonstrated; the real-corpus demonstration is
 pending.
 
 The committed vectors are not built yet (this module was written with no network
-and no key), so `npm run scaling:run` errors with a build pointer until then;
+and no key), so `npm run demo:run` errors with a build pointer until then;
 see **Build status**. Once built:
 
 ```
-npm run scaling:run                                  # int8, real corpus: the headline, keyless
-npm run scaling:run -- --natural+synthetic           # add the spire and its gold
-npm run scaling:run -- --natural+synthetic --bits 4  # int4: the gate rejects the spire's route flip
-npm run scaling:run -- --full                        # also run the answer-mode pass (needs a key)
+npm run demo:run                                  # int8, real corpus: the headline, keyless
+npm run demo:run -- --natural+synthetic           # add the spire and its gold
+npm run demo:run -- --natural+synthetic --bits 4  # int4: the gate rejects the spire's route flip
+npm run demo:run -- --full                        # also run the answer-mode pass (needs a key)
 ```
 
 ## What it is
@@ -71,7 +71,7 @@ Two facts make int8 admissible, and they differ in kind (the §6 split):
 
 The headline run is **keyless**: it reads committed full-precision vectors and
 committed gold-query vectors, so no embedding call is made. A key is needed only
-to regenerate the vectors (`scaling:build`) or to run the `--full` answer pass.
+to regenerate the vectors (`demo:build`) or to run the `--full` answer pass.
 That answer pass exercises route *selection*, which is what quantization moves;
 it does not touch A2, the answer model's confabulation residue, which the
 encoding never exercises.
@@ -107,7 +107,7 @@ The code, the gold set, the provenance manifest, and the deterministic harness
 tests (`quantize.test.ts`, run by `npm test`) are committed. The real text
 bodies and the committed vectors (`corpus/index.json`,
 `corpus/index.synthetic.json`, `corpus/query-vectors.json`) are produced by
-`scaling:build`, which needs network access to the public-domain sources and an
+`demo:build`, which needs network access to the public-domain sources and an
 `OPENAI_API_KEY`; the session that wrote the module had neither. See
 [`docs/scaling-demo/build-handoff.md`](../docs/scaling-demo/build-handoff.md)
 for the exact steps, and the delta log for what is confirmed versus pending.

@@ -1,13 +1,13 @@
-// npm run scaling:build — embed the scaling corpus and the gold queries, then
+// npm run demo:build — embed the scaling corpus and the gold queries, then
 // commit the vectors. KEYED and run once (or after corpus edits): needs network
 // to the embedding API and an OPENAI_API_KEY. The session that wrote this code
 // had neither; see docs/scaling-demo/build-handoff.md.
 //
 // Reuses the core corpus loaders, embedding, and store writers untouched. The
-// only thing new is pointing them at scaling/corpus/ and splitting the output
+// only thing new is pointing them at demo/corpus/ and splitting the output
 // into the natural index (the headline source of truth), the synthetic spire
 // (a strictly baseline-plus-delta file, unioned only under --natural+synthetic),
-// and the committed gold-query vectors (what makes scaling:run keyless).
+// and the committed gold-query vectors (what makes demo:run keyless).
 
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -19,13 +19,13 @@ import { batchInputs, embedBatch, truncateForEmbedding } from '../src/embedding.
 import { assertHomogeneousIndex, writeIndexFile } from '../src/store.js';
 import type { ArchiveConfig, IndexEntry, PrivateNote } from '../src/types.js';
 import { loadGold } from '../src/evaluate.js';
-import { config, SYNTHETIC_NOTES_DIR } from './scaling.config.js';
+import { config, SYNTHETIC_NOTES_DIR } from './config.js';
 import { writeQueryVectors } from './query-vectors.js';
 
-const NATURAL_INDEX = resolve('scaling/corpus/index.json');
-const SYNTHETIC_INDEX = resolve('scaling/corpus/index.synthetic.json');
-const NATURAL_GOLD = resolve('scaling/gold.yaml');
-const SYNTHETIC_GOLD = resolve('scaling/gold.synthetic.yaml');
+const NATURAL_INDEX = resolve('demo/corpus/index.json');
+const SYNTHETIC_INDEX = resolve('demo/corpus/index.synthetic.json');
+const NATURAL_GOLD = resolve('demo/gold.yaml');
+const SYNTHETIC_GOLD = resolve('demo/gold.synthetic.yaml');
 
 function contentHash(text: string): string {
   return createHash('sha1').update(truncateForEmbedding(text)).digest('hex').slice(0, 16);
@@ -82,7 +82,7 @@ function noteEntries(notes: PrivateNote[], vectors: Map<string, number[]>): Inde
 
 async function main(): Promise<void> {
   if (!process.env.OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY is not set. scaling:build needs it to embed (see build-handoff.md).');
+    throw new Error('OPENAI_API_KEY is not set. demo:build needs it to embed (see build-handoff.md).');
   }
   const client = new OpenAI();
 
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
       `${syntheticNotes.length} synthetic notes`,
   );
   if (records.length === 0) {
-    throw new Error('No records found under scaling/corpus/public — populate it first (build-handoff.md §1).');
+    throw new Error('No records found under demo/corpus/public — populate it first (build-handoff.md §1).');
   }
 
   // Gold queries: natural always, synthetic if authored.
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
     console.log('No synthetic notes authored yet; skipping the spire index.');
   }
 
-  // Committed gold-query vectors (what makes scaling:run keyless). Every gold
+  // Committed gold-query vectors (what makes demo:run keyless). Every gold
   // query must embed, or the keyless runner would later fail on a missing id.
   const queryVectors = goldQueries.map((g) => {
     const vector = vectors.get(`query:${g.id}`);
@@ -145,10 +145,10 @@ async function main(): Promise<void> {
   const dims = queryVectors[0]?.vector.length ?? naturalEntries[0]?.dimensions ?? 0;
   writeQueryVectors(config.embeddingModel, dims, queryVectors);
   console.log(`Wrote ${queryVectors.length} gold-query vectors`);
-  console.log('Done. Commit the *.json artifacts, then `npm run scaling:run`.');
+  console.log('Done. Commit the *.json artifacts, then `npm run demo:run`.');
 }
 
 main().catch((err) => {
-  console.error(`scaling:build failed: ${err instanceof Error ? err.message : err}`);
+  console.error(`demo:build failed: ${err instanceof Error ? err.message : err}`);
   process.exitCode = 1;
 });
