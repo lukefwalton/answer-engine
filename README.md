@@ -317,9 +317,10 @@ the GitHub URL).
 | Code | [github.com/lukefwalton/answer-engine](https://github.com/lukefwalton/answer-engine) |
 | About | [lukefwalton.com/ask/about/](https://lukefwalton.com/ask/about/) |
 
-**Artifact note:** cite [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053)
-for the formal write-up ([`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md)).
-That DOI is separate from the software archive above.
+**Artifact note:** cite [10.5281/zenodo.20710897](https://doi.org/10.5281/zenodo.20710897)
+for v1.2 of the formal write-up ([`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md)).
+Its concept DOI, [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053),
+is separate from the software archive above and resolves to the latest version.
 
 To pin a specific archived snapshot, pick that release's version DOI on the
 [Zenodo versions page](https://zenodo.org/records/20676773) — no README update
@@ -352,7 +353,7 @@ the latest tag already advanced.
 
 Formal description of this implementation:
 [`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md) —
-[DOI](https://doi.org/10.5281/zenodo.20686053) (CC BY-NC-ND 4.0).
+[DOI](https://doi.org/10.5281/zenodo.20710897) (CC BY-NC-ND 4.0).
 
 This repo is a practical companion to the Answerability papers:
 
