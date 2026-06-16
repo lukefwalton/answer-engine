@@ -141,6 +141,13 @@ export function buildPrivateNotes(config: ArchiveConfig): PrivateNote[] {
           `'locator' (where the moment lives) in its frontmatter.`,
       );
     }
+    // ⚠ WARNING — these fields TRAVEL TO THE MODEL. no-leak.ts strips the note's
+    // body, but `label` (the note's title) and `locator` ride along in the
+    // RoutingHint and into the answer prompt. Any frontmatter field that becomes
+    // a label or locator reaches the model: keep titles and locators
+    // public-safe. A privately-titled note leaks through its own label, and
+    // nothing in the type stops it. Making this structural instead of advisory
+    // is tracked in NEXT-STEPS.md (A1).
     notes.push({
       id: `note:${slug}`,
       label: title,

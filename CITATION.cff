@@ -73,7 +73,7 @@ references:
     url: "https://lukefwalton.com/writing/building-answerable-ai/"
     license: CC-BY-NC-ND-4.0
   - type: article
-    title: "Answer Engine: A Small Reference Implementation for Citation-Grounded AI Answers"
+    title: "Answer Engine: A Small Reference Implementation for Citation-Grounded Answerability"
     authors:
       - family-names: Walton
         given-names: Luke F.
