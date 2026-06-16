@@ -4,9 +4,9 @@
 Independent Researcher · [lukefwalton.com](https://lukefwalton.com)
 ORCID: 0009-0005-9263-1954
 
-**DOI:** [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053) (concept DOI; resolves to the latest version) · **Version:** v1.1 ([10.5281/zenodo.20694057](https://doi.org/10.5281/zenodo.20694057)) · **License:** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+**DOI:** [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053) (concept DOI; resolves to the latest version) · **Version:** v1.2 (version DOI assigned by Zenodo on archive) · **License:** [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 
-*Revision history: v1.1 appends §7 (empirical scaling notes from deployment) to the v1.0 text; the abstract and §§1–6 are unchanged.*
+*Revision history: v1.2 aligns the title to "Answerability," corrects a reference attribution, converts the reference list to APA, and lightens punctuation; the argument is unchanged.*
 
 **Abstract.** Chat-style language-model systems collapse five distinct operations (retrieval, use of private context, generation, citation, and refusal) into a single conversational surface, which makes it hard to say what evidence an answer rests on or whether it should have been given at all. This note describes `answer-engine`, a small TypeScript reference implementation that holds those operations apart. The system answers one question at a time against a bounded corpus, cites the public evidence it used, declines when no evidence clears a retrieval floor, and enforces a type-level boundary that keeps private text out of the model prompt while still allowing it to route retrieval. A fixed set of gold queries tests refusal, citation grounding, and the no-leak boundary as regressions. The artifact is a teaching-sized reference pattern, not a benchmark or a production framework.
 
@@ -16,7 +16,7 @@ ORCID: 0009-0005-9263-1954
 
 A conversational assistant pointed at a body of work tends to blur things worth keeping separate. Retrieval, the use of private context, generation, citation, and refusal all happen behind one chat turn, and the seams between them are invisible at the surface. Retrieving and citing doesn't fix this: the citations are asserted rather than guaranteed, the choice to answer rather than decline stays the model's own, and nothing structurally keeps unpublished material out of the response. A chatbot that is right most of the time speaks *for* the author; what an archival setting wants is a system that speaks *from* a bounded record, under a contract held outside the model rather than left to its discretion.
 
-This artifact operationalizes a design pattern, *framed automation*, developed in companion work on answerability and authored frames: hold the junctures at which an evaluative frame enters force, automate what merely executes between them, and make the unauthored move structurally inexpressible at the interface rather than caught after the fact (Walton, 2026b, 2026c, 2026d); the constructive pattern is stated in Walton (2026a). The relevant move is not to forbid the machinery but to keep the frame it must satisfy (what evidence may enter an answer, what must stay out, when to decline) outside the model, where it can be checked rather than trusted.
+This artifact operationalizes a design pattern, *framed automation*, developed in companion work on answerability and authored frames: hold the junctures at which an evaluative frame enters force, automate what merely executes between them, and make the unauthored move structurally inexpressible at the interface rather than caught after the fact (Walton, 2026a, 2026b, 2026d); the constructive pattern is stated in Walton (2026c). The relevant move is not to forbid the machinery but to keep the frame it must satisfy (what evidence may enter an answer, what must stay out, when to decline) outside the model, where it can be checked rather than trusted.
 
 `answer-engine` is a reference implementation of that pattern: the evidence boundary, the citation contract, the refusal modes, and the regression suite are concrete enough to read, run, and check.
 
