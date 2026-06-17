@@ -310,6 +310,39 @@ test('answer: repair snaps mangled citations, converts wrong kinds, dedupes', ()
   assert.equal(converted.mode, 'related-material');
 });
 
+test('answer: repair does not guess among hints that share a url', () => {
+  const sharedUrl = 'https://example.com/lyrics/harbor-lights/';
+  const evidence = evidenceOf(
+    [makeRecord()],
+    [
+      makeNote({ id: 'note:harbor-lights-session', url: sharedUrl }),
+      makeNote({ id: 'note:harbor-lights-overdub', url: sharedUrl, locator: 'studio log, p. 4' }),
+    ],
+  );
+
+  const ambiguousHint = repairCitationsToEvidence(
+    {
+      mode: 'related-material',
+      answer: 'x',
+      citations: [{ kind: 'hint', hintId: 'note:wrong', url: sharedUrl }],
+    },
+    evidence,
+  );
+  assert.deepEqual(ambiguousHint.citations, [{ kind: 'hint', hintId: 'note:wrong', url: sharedUrl }]);
+  assert.throws(() => assertCitationsGroundedInEvidence(ambiguousHint, evidence), /does not match/);
+
+  const ambiguousKindConversion = repairCitationsToEvidence(
+    {
+      mode: 'partial',
+      answer: 'x',
+      citations: [{ kind: 'record', recordId: 'record:wrong-kind', url: sharedUrl }],
+    },
+    evidence,
+  );
+  assert.deepEqual(ambiguousKindConversion.citations, [{ kind: 'record', recordId: 'record:wrong-kind', url: sharedUrl }]);
+  assert.throws(() => assertCitationsGroundedInEvidence(ambiguousKindConversion, evidence), /does not match/);
+});
+
 test('answer: grounding rejects invented citations and mode/mix mismatches', () => {
   const evidence = evidenceOf([makeRecord()], [makeNote()]);
 

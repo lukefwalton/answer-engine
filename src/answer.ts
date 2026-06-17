@@ -5,14 +5,13 @@
 // actually returned. The schema makes failures rare; the gates make them
 // impossible to return. Modes are validated and re-derived here.
 //
-// Scope of these gates: they own *soundness* — every claim that enters force
-// is grounded in retrieved evidence, or the answer is a refusal; nothing
-// ungrounded passes. They do not own *recall*. Whether the right source was
-// retrieved at all is decided upstream at retrieve.ts; the gold set
-// (evaluate.ts, offline only) checks enumerated recall cases in regression,
-// not at serving time. Unanticipated relevant sources remain an irreducible
-// residue. The admission surface certifies that what it admits is sound; it
-// cannot certify that the retrieval behind it was complete.
+// Scope of these gates: every returned answer has citations that exactly match
+// retrieved evidence, or it refuses. They enforce citation/mode/refusal shape;
+// semantic faithfulness sentence by sentence remains prompt- and eval-governed.
+// They also do not own *recall*. Whether the right source was retrieved at all
+// is decided upstream at retrieve.ts; the gold set (evaluate.ts, offline only)
+// checks enumerated recall cases in regression, not at serving time.
+// Unanticipated relevant sources remain an irreducible residue.
 
 import type OpenAI from 'openai';
 import { ANSWER_TEXT_FORMAT, buildSystemPrompt, buildUserPrompt } from './prompt.js';
@@ -68,6 +67,11 @@ function citationKey(c: Citation): string {
   return c.kind === 'record' ? `r|${c.recordId}|${c.url}` : `h|${c.hintId}|${c.url}`;
 }
 
+function uniqueHintByUrl(evidence: AnswerEvidence, url: string): AnswerEvidence['hints'][number] | undefined {
+  const matches = evidence.hints.filter((h) => h.url === url);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 /** What the citation mix says the mode is. The four modes partition the mix,
  *  so after repair the mode is DERIVED, not trusted — the model can't claim
  *  'supported' while citing nothing but hints. */
@@ -82,9 +86,11 @@ export function deriveMode(citations: readonly Citation[]): AnswerMode {
 
 /** Snap citations onto the exact evidence pairs when the model got the id OR
  *  the url right but mangled the other half — including citing one kind when
- *  the evidence holds that url as the other kind. Dedupes (repair can
- *  collapse two citations onto one source) and re-derives the mode from the
- *  final mix. Never invents a citation. */
+ *  the evidence holds that url as the other kind. Hint URLs often repeat across
+ *  private chunks, so URL-only hint repair is allowed only when the retrieved
+ *  hint URL is unique. Dedupes (repair can collapse two citations onto one
+ *  source) and re-derives the mode from the final mix. Never invents a
+ *  citation. */
 export function repairCitationsToEvidence(
   answer: AnswerOutput,
   evidence: AnswerEvidence,
@@ -97,13 +103,13 @@ export function repairCitationsToEvidence(
       const record =
         evidence.records.find((r) => r.id === c.recordId) ??
         evidence.records.find((r) => r.url === c.url);
-      const asHint = record ? undefined : evidence.hints.find((h) => h.url === c.url);
+      const asHint = record ? undefined : uniqueHintByUrl(evidence, c.url);
       if (record) repaired = { kind: 'record', recordId: record.id, url: record.url };
       else if (asHint) repaired = { kind: 'hint', hintId: asHint.hintId, url: asHint.url };
     } else {
       const hint =
         evidence.hints.find((h) => h.hintId === c.hintId) ??
-        evidence.hints.find((h) => h.url === c.url);
+        uniqueHintByUrl(evidence, c.url);
       const asRecord = hint ? undefined : evidence.records.find((r) => r.url === c.url);
       if (hint) repaired = { kind: 'hint', hintId: hint.hintId, url: hint.url };
       else if (asRecord) repaired = { kind: 'record', recordId: asRecord.id, url: asRecord.url };
