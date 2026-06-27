@@ -3,6 +3,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20676773.svg)](https://doi.org/10.5281/zenodo.20676773)
 [![License](https://img.shields.io/github/license/lukefwalton/answer-engine)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/lukefwalton/answer-engine)](https://github.com/lukefwalton/answer-engine/releases)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lukefwalton/answer-engine)
 
 A small answer engine that keeps the authorial frame outside the model:
 sources are bounded, private text cannot leak into the prompt, citations are
