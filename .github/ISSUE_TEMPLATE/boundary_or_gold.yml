@@ -1,5 +1,5 @@
 name: Boundary failure / gold case
-description: The engine answered when it should have declined, leaked a private note, or claimed "supported" while citing only hints.
+description: The engine answered when it should have declined, refused when it had grounded evidence, or claimed "supported" while citing only hints.
 labels: ["gold-case"]
 body:
   - type: markdown
@@ -10,15 +10,23 @@ body:
         scoring, or the prompt — **never** a special case for this one question.
         See [CONTRIBUTING](https://github.com/lukefwalton/answer-engine/blob/main/CONTRIBUTING.md)
         and [eval/README.md](https://github.com/lukefwalton/answer-engine/blob/main/eval/README.md).
+
+        ⚠️ **A private-note leak is not a gold case — it's a security issue.** If
+        private text actually reached an answer, that's the no-leak boundary
+        failing: report it privately via
+        [SECURITY.md](https://github.com/lukefwalton/answer-engine/blob/main/SECURITY.md),
+        not here. This form is for **non-sensitive** grounding/decline
+        regressions — please describe your corpus minimally and don't paste
+        private content.
   - type: dropdown
     id: failure
     attributes:
       label: What broke?
       options:
         - Answered when it should have declined
-        - Leaked / restated a private note instead of routing to it
         - Claimed "supported" while citing only hints (ungrounded)
         - Refused when it had grounded evidence to answer
+        - Something else (non-sensitive — leaks go to SECURITY.md)
     validations:
       required: true
   - type: textarea
@@ -32,7 +40,7 @@ body:
     id: corpus
     attributes:
       label: Corpus shape
-      description: What the engine was pointed at (your own corpus or the bundled example), and any note/document relevant to the failure.
+      description: What the engine was pointed at (your own corpus or the bundled example). Describe the shape — don't paste private content. If private text leaked into an answer, stop and use SECURITY.md instead of this form.
     validations:
       required: true
   - type: textarea

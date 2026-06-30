@@ -6,13 +6,15 @@ body:
     attributes:
       value: |
         Thanks for reporting a bug. For behavior where the engine answered when
-        it should have declined (or leaked, or fabricated a citation), use the
-        **Boundary failure / gold case** template instead — that's the highest-
-        signal report here.
+        it should have declined, refused with grounded evidence, or cited
+        ungrounded, use the **Boundary failure / gold case** template instead —
+        that's the highest-signal report here.
 
-        Found a **security issue** (a boundary bypass, a leaked key)? Don't file
-        it here — see
+        Found a **security issue** — a boundary bypass, a **leaked private
+        note**, or a leaked key? Don't file it here — see
         [SECURITY.md](https://github.com/lukefwalton/answer-engine/blob/main/SECURITY.md).
+        A private-note leak is the no-leak invariant failing, so it's a security
+        disclosure, not a public report.
   - type: textarea
     id: what-happened
     attributes:
