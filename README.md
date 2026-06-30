@@ -1,5 +1,6 @@
 # Answer Engine: An AI that Says "I Don't Know"
 
+[![Tests](https://github.com/lukefwalton/answer-engine/actions/workflows/test.yml/badge.svg)](https://github.com/lukefwalton/answer-engine/actions/workflows/test.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20676773.svg)](https://doi.org/10.5281/zenodo.20676773)
 [![License](https://img.shields.io/github/license/lukefwalton/answer-engine)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/lukefwalton/answer-engine)](https://github.com/lukefwalton/answer-engine/releases)

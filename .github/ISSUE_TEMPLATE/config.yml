@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: The contribution bar (read first)
+    url: https://github.com/lukefwalton/answer-engine/blob/main/.github/STANDARDS.md
+    about: Most additions are correctly out of scope. This is the rubric every PR is read against.
+  - name: Report a security issue
+    url: https://github.com/lukefwalton/answer-engine/blob/main/SECURITY.md
+    about: Boundary bypasses and key leaks — report privately, not as a public issue.

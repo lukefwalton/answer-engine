@@ -1,0 +1,23 @@
+# Normalize line endings on commit. Force LF on everything that runs on Linux CI
+# runners or in a shell, so a checkout on another OS can never introduce CRLF
+# breakage in the scripts or the test corpus.
+* text=auto
+
+*.sh    text eol=lf
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.ts    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.cff   text eol=lf
+
+# Binary assets — never normalize or diff as text.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.pdf   binary
