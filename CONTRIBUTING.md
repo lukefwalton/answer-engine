@@ -96,3 +96,7 @@ while iterating, never the whole gold set on every pass (see
 - **License.** Contributions are accepted under the repo's
   [Apache-2.0](./LICENSE) license; by opening a PR you agree your contribution is
   licensed under it.
+- **Conduct.** Issues and PRs are governed by the
+  [Code of Conduct](./CODE_OF_CONDUCT.md).
+- **Security.** Found a way past the no-leak boundary, or a leaked key? Report it
+  privately — see [SECURITY.md](./SECURITY.md), not a public issue.

@@ -1,0 +1,14 @@
+# EditorConfig — consistent whitespace across editors. https://editorconfig.org
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Two trailing spaces are a hard line break in Markdown — don't strip them.
+[*.md]
+trim_trailing_whitespace = false

@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in the engine or CLI is broken.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. For behavior where the engine answered when
+        it should have declined (or leaked, or fabricated a citation), use the
+        **Boundary failure / gold case** template instead — that's the highest-
+        signal report here.
+
+        Found a **security issue** (a boundary bypass, a leaked key)? Don't file
+        it here — see
+        [SECURITY.md](https://github.com/lukefwalton/answer-engine/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. npm run index …
+        2. npm run ask -- "…"
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - Indexing (npm run index)
+        - Asking (npm run ask)
+        - Eval (npm run eval)
+        - Demo
+        - Typecheck / build / tests
+        - Somewhere else / not sure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Node version & OS
+      placeholder: "e.g. Node 24, macOS 15"
+    validations:
+      required: false
