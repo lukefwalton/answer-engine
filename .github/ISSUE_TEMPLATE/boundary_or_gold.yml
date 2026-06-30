@@ -33,7 +33,7 @@ body:
     id: query
     attributes:
       label: The question
-      description: The exact query you asked.
+      description: The exact query — but only if it's non-sensitive. If it involves private text, paraphrase or redact it and say that you did (issues are public).
     validations:
       required: true
   - type: textarea

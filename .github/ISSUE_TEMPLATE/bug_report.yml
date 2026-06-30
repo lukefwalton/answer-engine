@@ -26,6 +26,7 @@ body:
     id: repro
     attributes:
       label: Steps to reproduce
+      description: If a repro query is sensitive, paraphrase or redact it — issues are public.
       placeholder: |
         1. npm run index …
         2. npm run ask -- "…"
