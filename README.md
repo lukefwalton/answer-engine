@@ -6,37 +6,34 @@
 [![Release](https://img.shields.io/github/v/release/lukefwalton/answer-engine)](https://github.com/lukefwalton/answer-engine/releases)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lukefwalton/answer-engine)
 
-A small answer engine that keeps the authorial frame outside the model:
-sources are bounded, private text cannot leak into the prompt, citations are
-grounded, and refusals are tested.
+A small answer engine for a body of work you own. It answers only from your
+published sources, keeps your private text out of the prompt, cites what it
+uses, and says "I don't know" when it should — and each of those promises is
+tested.
 
-This is site-level search that uses an LLM **without being a chatbot**. You
-point it at a body of work — essays, lyrics, letters, philosophy,
-documentation — and it answers one question at a time, with no conversation
-state, no memory, no persona improvising on your behalf. Each answer is a
-one-shot transaction: question in, cited answer or honest refusal out. A
-chatbot that's right most of the time speaks *for* you; an answer engine that
-cites or declines speaks *from* you.
+It uses an LLM **without being a chatbot**. Point it at essays, lyrics,
+letters, documentation, and it answers one question at a time: no
+conversation state, no memory, no persona improvising on your behalf.
+Question in, cited answer or honest refusal out. A chatbot that's right most
+of the time speaks *for* you; an answer engine that cites or declines speaks
+*from* you.
 
 This repo is the teaching-sized version of the engine behind "Ask the
 Archive" on [lukefwalton.com](https://lukefwalton.com). It runs out of the
 box on a bundled example corpus (by "Person A" — a placeholder, not a
 person), it's small enough to read in one sitting, and the whole design is
-five ideas. Here they are, in the order the data flows.
+five ideas, laid out below in the order the data flows.
 
-**What this is:** a **GitHub example repo** you clone and run locally (`npm
-install`, `npm run …`). It is not published to npm — there is no `bin`,
-`main`, or `exports`; you read the source and invoke the CLI scripts, not
-`npm install answer-engine` as a dependency.
+**What this is:** an example repo you clone and run locally (`npm install`,
+`npm run …`). It is not published to npm, and it is deliberately not a
+framework, hosted app, chatbot UI, or vector-database starter. It is the
+smallest useful version of the answer contract: what evidence may enter the
+prompt, what must stay out, how citations are grounded, and when the system
+must decline.
 
-It is deliberately not a framework, hosted app, chatbot UI, or vector-database
-starter. It is the smallest useful version of the answer contract: what
-evidence may enter the prompt, what must stay out, how citations are grounded,
-and when the system must decline.
-
-**Example content:** everything under `example-content/` is synthetic fiction
-for the demo, including the first-person notebook entries — written to show
-the private-layer boundary, not real notes.
+**Example content:** everything under `example-content/` is synthetic
+fiction, including the first-person notebook entries — written to show the
+private-layer boundary, not real notes.
 
 ## 1. Public records are quotable; private text is not
 
@@ -52,25 +49,23 @@ The corpus has two layers, and the distinction drives everything downstream
   (`locator`). Its text gets embedded, so retrieval can find it. It is never
   shown to the model.
 
-> In production ([Ask the Archive](https://lukefwalton.com/ask/)), podcast
-> transcripts are part of the public archive: published passages are **records**
-> (retrieved and cited). Unpublished transcript text may be embedded for search
-> but reaches the model only as **routing hints** — where to listen, never what
-> was said. The system must not turn transcripts into uncited private knowledge
-> or persona-voice.
-> This repo uses hand-written notebook entries to show the same boundary
-> without the transcription pipeline.
+> In production ([Ask the Archive](https://lukefwalton.com/ask/)), published
+> podcast passages are **records** — retrieved and cited — while unpublished
+> transcript text is embedded for search but reaches the model only as a
+> **routing hint**: where to listen, never what was said. This repo shows the
+> same boundary with hand-written notebook entries instead of a transcription
+> pipeline.
 
 ## 2. Retrieval returns both; assembly strips prose
 
 Both layers share one embedding space in one versioned index file
 (`artifacts/index.json` — gitignored, because vectors derived from private
 text are private). Retrieval (`src/retrieve.ts`) scores everything with
-brute-force cosine plus two conservative boosts — naming a work's title
-(0.30) and using a curated theme verbatim (0.15), because metadata you
-maintain should outrank raw similarity — and drops anything under a score
-floor. Weak matches don't get to masquerade as evidence; an empty result is
-where "I don't know" begins, before any model is involved.
+brute-force cosine plus two conservative boosts: naming a work's title
+(0.30) and using a curated theme verbatim (0.15) — metadata you maintain
+should outrank raw similarity. Anything under a score floor is dropped. Weak
+matches don't get to masquerade as evidence; an empty result is where "I
+don't know" begins, before any model is involved.
 
 The result keeps records and notes in **two separate lists**, because what
 happens next is different for each:
@@ -90,25 +85,25 @@ corpus ─► index ─┤                                         (body travels
                      AnswerEvidence = { records, hints } ──► the model
 ```
 
-`src/no-leak.ts` is small enough to audit by eye — the only thing
-`toRoutingHint` does is drop the note's text — and it is the whole point:
-`RoutingHint` has **no field for the note's text**, so there is nothing through
-which private prose could reach the model: the boundary is the type's *shape*,
-not a guard somebody remembers to write.
+`src/no-leak.ts` is small enough to audit by eye: the only thing
+`toRoutingHint` does is drop the note's text. `RoutingHint` has **no field
+for that text**, so there is no path by which private prose can reach the
+model. The boundary is the type's *shape*, not a guard somebody has to
+remember to write.
 
 ## 3. The model only sees AnswerEvidence
 
 One Responses API call (`src/answer.ts`), with the policy versioned in code
-(`src/prompt.ts`): records render with their bodies; hints render as label,
-locator, and URL — `buildUserPrompt` couldn't leak a hint's text if it wanted
-to, because the field doesn't exist. **What does travel is the label and the
-locator: any frontmatter field that becomes a hint's label or locator reaches
-the model, so keep titles and locators public-safe.** The body is stripped;
-those two are not. (Making that boundary structural rather than advisory is
-[`NEXT-STEPS.md`](./NEXT-STEPS.md) A1.) The model is told what a hint *is*: the
-location of a relevant private moment, to be routed to, never restated. If no
-evidence cleared the floor at all, the engine returns `not-found` without
-making the call — refusal costs nothing.
+(`src/prompt.ts`). Records render with their full bodies. Hints render as
+label, locator, and URL — `buildUserPrompt` couldn't leak a hint's text if it
+wanted to, because the field doesn't exist. **What does travel is the label
+and the locator: any frontmatter field that becomes either one reaches the
+model, so keep titles and locators public-safe.** (Making that boundary
+structural rather than advisory is [`NEXT-STEPS.md`](./NEXT-STEPS.md) A1.)
+The model is told what a hint *is*: the location of a relevant private
+moment, to be routed to, never restated. And if nothing cleared the score
+floor, the engine returns `not-found` without making the call at all —
+refusal costs nothing.
 
 ## 4. Modes are enforced in schema + validator, not vibes
 
@@ -123,22 +118,22 @@ citation mix — which makes honesty checkable:
 | `not-found` | none, empty answer | "I don't know," plainly |
 
 Three layers enforce this, because the first two are requests and only the
-third is a guarantee: the JSON schema constrains the shape; `validateAnswer`
-rejects contract violations (a `not-found` with prose, a sourced mode without
-it); then `repairCitationsToEvidence` snaps almost-right citations onto the
-exact retrieved pairs (models mangle URLs more often than they invent
-sources), dedupes, and **re-derives the mode from the final mix** — the model
-can't claim `supported` while citing nothing but hints. Finally
-`assertCitationsGroundedInEvidence` verifies every citation is the exact
-(id, url) pair of something actually retrieved. An invented source is an
-error, not a footnote.
+third is a guarantee. The JSON schema constrains the shape. `validateAnswer`
+rejects contract violations — a `not-found` with prose, a sourced mode
+without sources. Then `repairCitationsToEvidence` snaps almost-right
+citations onto the exact retrieved pairs (models mangle URLs more often than
+they invent sources), dedupes, and **re-derives the mode from the final
+mix** — the model can't claim `supported` while citing nothing but hints.
+Finally, `assertCitationsGroundedInEvidence` verifies every citation is the
+exact (id, url) pair of something actually retrieved. An invented source is
+an error, not a footnote.
 
-One UI lesson: **retrieved is not cited**.
-Retrieved neighbors are candidates; final citations are evidence. If you build
-a web UI around this, render source cards from the final citation list, not
-from raw retrieval hits — and render none for `not-found`, even if retrieval
-found nearby material. Otherwise a refusal can look like it is backed by the
-very sources the engine declined to use.
+One UI lesson: **retrieved is not cited**. Retrieved neighbors are
+candidates; final citations are evidence. If you build a web UI around this,
+render source cards from the final citation list, not from raw retrieval
+hits — and render none for `not-found`, even if retrieval found nearby
+material. Otherwise a refusal can look like it's backed by the very sources
+the engine declined to use.
 
 ## 5. Gold queries are regression tests for answerability
 
@@ -155,46 +150,38 @@ story, including a real failing-then-passing walkthrough.
 
 ## What this shows, and where it stops
 
-The strongest objection to this approach is that it works only because the
-frame is easy to own: one archive, one named author, a delimited corpus.
-The mechanisms here do not depend on that smallness — none of them refers to
-corpus size. What a bounded demo cannot do, on its own, is prove that holding
-these surfaces at public, plural, or contested scale is affordable, or that
-systems where it is genuinely unsettled *whose* frame holds can be made
-answerable the same way. That is a real limit, and this repo is the bounded
-case on purpose, not a proof about the unbounded one. The public-scale cost
-question is real, but it belongs to the builders of public-scale systems, not
-to a teaching repo note.
+The fair objection: this works because the frame is easy to own — one
+archive, one named author, a bounded corpus. The mechanisms don't depend on
+that smallness (none of them refers to corpus size), but a small demo can't
+prove that holding these boundaries stays affordable at public, plural, or
+contested scale. This repo is the bounded case on purpose, not a proof about
+the unbounded one.
 
-It is worth being exact about *which* limit, because it is narrower than it
-looks. The gate owns **soundness**: nothing enters an answer that isn't
-grounded in retrieved evidence or honestly refused. It does not own
-**completeness** — it cannot certify that what was retrieved is what *should*
-have been. A source that falls below the score floor is simply absent, and a
-gate sees only what reaches it. But absence isn't therefore unowned: the
-scoring, the floor, and the corpus boundary that decide what becomes a
-candidate are authored constants someone maintains (`src/retrieve.ts`,
-`archive.config.ts`), and the gold set tests recall for the cases it names
-(`eval/gold.yaml`). What stays irreducible is the relevant source no one
-thought to test for — and that is irreducible for any system, since
-anticipating it in full would mean knowing the answer in advance.
+The limit is narrower than it looks, though. What the engine guarantees is
+**soundness**: nothing enters an answer that isn't grounded in retrieved
+evidence or honestly refused. What it can't guarantee is **completeness**: a
+source that falls below the score floor is simply absent, and a gate only
+sees what reaches it. That absence still has owners — the scoring, the
+floor, and the corpus boundary are constants someone maintains
+(`src/retrieve.ts`, `archive.config.ts`), and the gold set tests recall for
+the cases it names (`eval/gold.yaml`). What remains out of reach, for any
+system, is the relevant source no one thought to test for.
 
-What the repo does try to show is concrete: that whether a frame is *held* or
-just *inherited* can be settled at control surfaces in running code, not
-promissory labels. The privacy boundary is structural — a type with no field for private prose, not a guard
-someone has to remember (`src/no-leak.ts`); modes are re-derived from the
-evidence, not taken from the model's word for it (`src/answer.ts`); refusals
-are regression-tested like any other behavior (`eval/gold.yaml`).
+What the repo does show is concrete: whether a frame is *held* or merely
+*inherited* can be settled in running code, not in promissory labels. The
+privacy boundary is structural (`src/no-leak.ts`); modes are re-derived from
+the evidence, not taken on the model's word (`src/answer.ts`); refusals are
+regression-tested like any other behavior (`eval/gold.yaml`).
 
-The [Answerability papers](#related-writing) take up the harder cases — plural
-authorship, contested frames, systems where *whose* gate applies is itself
-unsettled. This repo is the bounded reference implementation; discussion, issues,
-and PRs that extend, test, or push against those limits are welcome. The bar
-for new code is the bar the repo sets for itself: least lines that keep the
-promises, boundaries enforced by types or runtime checks, loud failures, and
-no change that makes the eval pass by special-casing a question. Before opening
-one, see [`CONTRIBUTING.md`](./CONTRIBUTING.md): it names what is in scope — a
-failing gold case is the best PR — and what isn't.
+The [Answerability papers](#related-writing) take up the harder cases —
+plural authorship, contested frames, systems where *whose* gate applies is
+itself unsettled. This repo is the bounded reference implementation, and
+issues and PRs that extend, test, or push against those limits are welcome:
+see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for what's in scope (a failing
+gold case is the best PR). The bar for new code is the bar the repo sets for
+itself: the fewest lines that keep the promises, boundaries enforced by types
+or runtime checks, loud failures, and no eval pass by special-casing a
+question.
 
 ---
 
@@ -250,53 +237,57 @@ npm run typecheck   # tsc --noEmit
 
 ## Where to take it
 
-In the order we'd add them: chunk long documents into overlapping windows so
-retrieval points at passages; more retrieval signals (recency for "what do
-you think *now*", author aliases, per-collection weights); a
-document-frequency cap on the theme boost — at four records a verbatim theme
-match is signal, but on a large corpus a theme that appears on half the
-records boosts nothing and should be discounted; an evidence-selection prune
-before synthesis (keep one record per cluster, then the clear winner plus a
-single corroborator when it leads the rest by a margin) for when a large
-corpus makes wide top-k surface correlated neighbors instead of distinct
-sources, which shapes what synthesis *sees*, not what the gate certifies
-(retrieved is still not cited); an HTTP handler
-around `retrieve` + `answerQuestion` with a rate limit, query cap, and cache;
-SQLite or pgvector when the archive outgrows in-memory cosine — the shapes
-don't change. In production we also keep the wire contract's `not-found`
-empty and let the UI roll plain decline copy at display time, so refusals
-stay honest *and* human.
+In the order we'd add them:
+
+- **Chunking** — split long documents into overlapping windows so retrieval
+  points at passages, not whole files.
+- **More retrieval signals** — recency (for "what do you think *now*"),
+  author aliases, per-collection weights.
+- **A document-frequency cap on the theme boost** — at four records a
+  verbatim theme match is signal; on a large corpus, a theme that appears on
+  half the records boosts nothing and should be discounted.
+- **Evidence pruning before synthesis** — on a large corpus, wide top-k
+  surfaces correlated neighbors instead of distinct sources; keep one record
+  per cluster, plus a single corroborator when the winner leads by a margin.
+  This shapes what synthesis *sees*, not what the gate certifies — retrieved
+  is still not cited.
+- **An HTTP handler** around `retrieve` + `answerQuestion`, with a rate
+  limit, query cap, and cache.
+- **SQLite or pgvector** when the archive outgrows in-memory cosine — the
+  shapes don't change.
+
+In production we also keep the wire contract's `not-found` empty and let the
+UI supply plain decline copy at display time, so refusals stay honest *and*
+human.
 
 Code the invariant. Document the scaling pattern. Comment the footgun.
 
-The empirical companion to this list — the two levers it doesn't name (vector
-dimension and wire format), which only appear once the index crosses a network
-boundary, each gated by the eval rather than by vibes — is in
+The empirical companion to this list — plus two levers it doesn't name
+(vector dimension and wire format), which only matter once the index crosses
+a network boundary — is in
 [`docs/production-scaling.md`](./docs/production-scaling.md).
 
 ## Next steps / open problems
 
-[`NEXT-STEPS.md`](./NEXT-STEPS.md) is the standing record of the **seams we can
-see** — where the design leaves something to be *owned* rather than structurally
-guaranteed — and the **levers an adopter might pull** that trade quality for
-cost. It is not a roadmap: nothing in it has to be fixed for the engine to keep
-its promises. Each entry is written to be pulled as a ticket, and the
-performance section is a starter for anyone adapting this to their own system.
-Naming these edges is the program doing what it claims, in the open.
+[`NEXT-STEPS.md`](./NEXT-STEPS.md) is the standing record of the seams we
+can see — places where the design leaves something to be *owned* rather than
+structurally guaranteed — and the levers an adopter might pull to trade
+quality for cost. It is not a roadmap: nothing in it has to be fixed for the
+engine to keep its promises. Each entry is written to be pulled as a ticket.
 
 ## What stays out
 
-A running deployment grows layers this engine deliberately omits: deterministic
-product routes (help, usage, or corpus-count answers that never call a model),
-a domain-specific eval guard taxonomy, an ingestion or transcription pipeline,
-and the site's own config. Those are consumer-adapter concerns. They live in
-the site layer (for "Ask the Archive," the `ask-the-archive/` adapter), not the
-engine, because the value this repo carries is the boundary and the answer
-contract, not feature parity (`.github/STANDARDS.md` §3, "What Matters Less").
-One line worth holding if you add a deterministic route downstream: it may
-shortcut *delivery*, but it must never be how a gold query passes. A route that
-flips an eval outcome is special-casing the question wearing a hat: the same
-thing §5 forbids, one layer up.
+A running deployment grows layers this engine deliberately omits:
+deterministic product routes (help, usage, or corpus-count answers that never
+call a model), a domain-specific eval guard taxonomy, an ingestion or
+transcription pipeline, and the site's own config. Those belong to the site
+layer (for "Ask the Archive," the `ask-the-archive/` adapter), not the
+engine — what this repo carries is the boundary and the answer contract, not
+feature parity (`.github/STANDARDS.md` §3, "What Matters Less"). One line
+worth holding if you add a deterministic route downstream: it may shortcut
+*delivery*, but it must never be how a gold query passes. A route that flips
+an eval outcome is special-casing the question wearing a hat — the same thing
+§5 forbids, one layer up.
 
 ## Citing this software
 
