@@ -128,6 +128,14 @@ Finally, `assertCitationsGroundedInEvidence` verifies every citation is the
 exact (id, url) pair of something actually retrieved. An invented source is
 an error, not a footnote.
 
+One mode gets a fourth layer. A `related-material` answer's prose is not the
+model's: after grounding, the engine replaces it with a fixed sentence
+rendered from the cited hints' label and locator
+(`renderRelatedMaterialAnswer` in `src/public-safe.ts`). A hint citation is
+provenance without backing — the hint carries no text — so free prose there
+was the one place a confabulated "summary" of private material could pass
+every gate. Now the mode can point, never assert content.
+
 One UI lesson: **retrieved is not cited**. Retrieved neighbors are
 candidates; final citations are evidence. If you build a web UI around this,
 render source cards from the final citation list, not from raw retrieval

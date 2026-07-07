@@ -10,6 +10,7 @@ import { config } from '../archive.config.js';
 import {
   assertCitationsGroundedInEvidence,
   deriveMode,
+  finalizeAnswer,
   repairCitationsToEvidence,
   validateAnswer,
 } from '../src/answer.js';
@@ -25,6 +26,7 @@ import {
 } from '../src/evaluate.js';
 import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
 import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
+import { renderRelatedMaterialAnswer } from '../src/public-safe.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
 import { containsPhrase, cosine, hasThemeMatch, retrieve } from '../src/retrieve.js';
 import { assertHomogeneousIndex, readIndexFile, writeIndexFile } from '../src/store.js';
@@ -369,6 +371,90 @@ test('answer: grounding rejects invented citations and mode/mix mismatches', () 
         evidence,
       ),
     /does not match its citation mix/,
+  );
+});
+
+test('public-safe: the related-material template points, never asserts', () => {
+  const hints = [
+    toRoutingHint(makeNote()),
+    toRoutingHint(
+      makeNote({ id: 'note:paper-crown-draft', label: 'Paper Crown — early draft', locator: 'notebook, p. 31' }),
+    ),
+  ];
+
+  assert.equal(
+    renderRelatedMaterialAnswer([HINT_CITE], hints),
+    'There is private material related to this: Harbor Lights — writing session ' +
+      "(notebook, p. 12). It can't be quoted here — the citation links to the " +
+      'public page it belongs to.',
+  );
+  const both = renderRelatedMaterialAnswer(
+    [HINT_CITE, { kind: 'hint', hintId: 'note:paper-crown-draft', url: 'https://example.com/lyrics/harbor-lights/' }],
+    hints,
+  );
+  assert.ok(both.includes('notebook, p. 12'));
+  assert.ok(both.includes('Paper Crown — early draft (notebook, p. 31)'));
+  assert.ok(both.includes('citations link to the public pages'));
+  // The prose never carries a raw URL — the citation object does (gold q07).
+  assert.ok(!/https?:\/\//.test(both));
+
+  assert.throws(() => renderRelatedMaterialAnswer([], hints), /at least one hint citation/);
+  assert.throws(() => renderRelatedMaterialAnswer([RECORD_CITE], hints), /at least one hint citation/);
+  assert.throws(
+    () => renderRelatedMaterialAnswer([{ kind: 'hint', hintId: 'note:unknown', url: 'https://x.com/' }], hints),
+    /matches no hint in evidence/,
+  );
+});
+
+test('answer: finalizeAnswer makes related-material prose deterministic', () => {
+  const evidence = evidenceOf([makeRecord()], [makeNote()]);
+
+  // A confabulated summary of the private note — real hint citation, fake
+  // backing. Before A2 this passed the gate verbatim; now the prose cannot
+  // survive into the mode.
+  const confabulated = finalizeAnswer(
+    {
+      mode: 'related-material',
+      answer: 'The note says the bridge originally modulated up a whole step.',
+      citations: [HINT_CITE],
+    },
+    evidence,
+  );
+  assert.equal(confabulated.mode, 'related-material');
+  assert.ok(!confabulated.answer.includes('modulated'));
+  assert.match(confabulated.answer, /^There is private material related to this/);
+  assert.ok(confabulated.answer.includes('notebook, p. 12'));
+
+  // An answer that only BECOMES related-material through repair's kind
+  // conversion is templated too.
+  const converted = finalizeAnswer(
+    {
+      mode: 'partial',
+      answer: 'The notebook explains the whole step change.',
+      citations: [{ kind: 'record', recordId: 'nope', url: 'https://example.com/lyrics/harbor-lights/' }],
+    },
+    evidence,
+  );
+  assert.equal(converted.mode, 'related-material');
+  assert.match(converted.answer, /^There is private material related to this/);
+  assert.ok(!converted.answer.includes('whole step'));
+
+  // Record-backed prose is untouched — the template governs one mode only.
+  const partial = finalizeAnswer(
+    { mode: 'partial', answer: 'Listening means suspending the verdict.', citations: [RECORD_CITE] },
+    evidence,
+  );
+  assert.equal(partial.answer, 'Listening means suspending the verdict.');
+  const supported = finalizeAnswer(
+    { mode: 'supported', answer: 'Canon plus a session moment.', citations: [RECORD_CITE, HINT_CITE] },
+    evidence,
+  );
+  assert.equal(supported.answer, 'Canon plus a session moment.');
+
+  // Refusals pass through bare.
+  assert.deepEqual(
+    finalizeAnswer({ mode: 'not-found', answer: '', citations: [] }, evidence),
+    { mode: 'not-found', answer: '', citations: [] },
   );
 });
 

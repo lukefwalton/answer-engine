@@ -1,8 +1,9 @@
 // The answer call: one OpenAI Responses request with JSON-schema output, then
-// three steps before anything is returned — validate the shape, repair
+// four steps before anything is returned — validate the shape, repair
 // almost-right citations onto the exact evidence and re-derive the mode from
-// the citation mix, and finally ground every citation against what retrieval
-// actually returned. The schema makes failures rare; the gates make them
+// the citation mix, ground every citation against what retrieval actually
+// returned, and replace related-material prose with the fixed template
+// (src/public-safe.ts). The schema makes failures rare; the gates make them
 // impossible to return. Modes are validated and re-derived here.
 //
 // Scope of these gates: every returned answer has citations that exactly match
@@ -15,6 +16,7 @@
 
 import type OpenAI from 'openai';
 import { ANSWER_TEXT_FORMAT, buildSystemPrompt, buildUserPrompt } from './prompt.js';
+import { renderRelatedMaterialAnswer } from './public-safe.js';
 import type {
   AnswerEvidence,
   AnswerMode,
@@ -164,6 +166,21 @@ export function assertCitationsGroundedInEvidence(
   }
 }
 
+/** Everything between the model's validated JSON and the returned answer:
+ *  repair citations onto the evidence, ground them, and — when the final
+ *  mode is related-material — replace the model's prose with the fixed
+ *  template (src/public-safe.ts). Templating runs AFTER grounding so the
+ *  hint lookup cannot miss, and it applies equally to answers that only
+ *  became related-material through repair's kind conversion. */
+export function finalizeAnswer(validated: AnswerOutput, evidence: AnswerEvidence): AnswerOutput {
+  const repaired = repairCitationsToEvidence(validated, evidence);
+  assertCitationsGroundedInEvidence(repaired, evidence);
+  if (repaired.mode === 'related-material') {
+    return { ...repaired, answer: renderRelatedMaterialAnswer(repaired.citations, evidence.hints) };
+  }
+  return repaired;
+}
+
 /** Reasoning-family models reject non-default temperature. */
 function isReasoningModel(model: string): boolean {
   return /^gpt-5/.test(model) || /^o\d/.test(model);
@@ -199,8 +216,5 @@ export async function answerQuestion(
   // reasoning items, so output[0] is not reliably the message.
   const content = response.output_text;
   if (!content) throw new Error('OpenAI returned an empty answer');
-  const validated = validateAnswer(JSON.parse(content));
-  const repaired = repairCitationsToEvidence(validated, evidence);
-  assertCitationsGroundedInEvidence(repaired, evidence);
-  return repaired;
+  return finalizeAnswer(validateAnswer(JSON.parse(content)), evidence);
 }

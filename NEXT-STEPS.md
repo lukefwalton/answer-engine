@@ -58,27 +58,32 @@ label, and nothing in the type stops it.
   fields is a cheap first step before any of these. Any of them moves this seam
   from "owned" to "inexpressible," which is where it should end up.
 
-### A2. Related-material mode admits confabulation (provenance without backing)
-In related-material mode the answer cites a routing hint and is otherwise free
-prose. The hint is real and was retrieved, so a claim citing it **passes the
-structural grounding gate** (`assertCitationsGroundedInEvidence` in
-`src/answer.ts`) — it has provenance. But the hint carries no text, so there is
-**no backing** for any prose about the moment's actual contents. A model that
-fabricates substance and cites the hint anyway clears the gate. This is exactly
-the provenance-without-backing residue the grounding definition already declines
-to certify; it is not a hole in the gate, it is the edge the gate was honest
-about.
+### A2. Related-material confabulation — closed structurally; the residue moved
+In related-material mode the answer cites a routing hint, and a hint is real
+provenance with **no backing**: it carries no text, so prose about the
+moment's actual contents can never be certified. This was the
+provenance-without-backing edge the grounding gate
+(`assertCitationsGroundedInEvidence` in `src/answer.ts`) was honest about — a
+model that fabricated substance and cited the hint anyway cleared it, held
+only by a soft prompt instruction (route, don't restate).
 
-- **Trade-off:** natural-language routing ("there's a relevant private passage
-  here") is useful and humane; it is also the freedom a confabulation hides in.
-- **Current posture:** held by a soft prompt instruction (route, don't restate —
-  `src/prompt.ts`) and a hand-written set of forbidden-answer patterns (see A3).
-  The model's unbacked claim is disavowable as such, and owned.
-- **For a fork / contributor:** close it structurally by **templating the
-  related-material answer from the hint's public-safe fields** (label, locator,
-  URL), so the mode can only point, never assert content. Confabulation then
-  becomes inexpressible in that mode rather than merely discouraged. This is the
-  highest-value structural ticket in the file.
+- **Current posture:** closed. The related-material answer is no longer model
+  prose: `finalizeAnswer` (`src/answer.ts`) replaces it with a fixed template
+  rendered only from the cited hints' public-safe fields
+  (`renderRelatedMaterialAnswer` in `src/public-safe.ts`), after grounding, so
+  the mode can point and never assert content. Confabulation in this mode is
+  now inexpressible rather than discouraged; the gold suite pins the template
+  (`expectAnswerPatterns` on q07 and the extraction queries) so a regression
+  cannot silently un-template the mode.
+- **What the closure is worth:** exactly the safety of the fields it renders.
+  The template's prose is label + locator — which is A1's seam. Closing A2
+  raised the stakes on closing A1.
+- **The residue, named:** `supported` mode still carries a hint citation under
+  free prose (a record backs the prose; the hint adds where else to look), so
+  a model could still confabulate a note's contents *there*. That residue is
+  owned by gold canary patterns (q15 and the canary comment in
+  `eval/gold.yaml`), not by structure — templating supported-mode prose would
+  mean templating record-backed answers, which is the product.
 
 ### A3. Forbidden-answer patterns are hand-written and partial
 The checks that catch a few specific bad outputs (for example, a raw URL where
@@ -90,10 +95,20 @@ the `forbidAnswerPatterns` field on a gold query, applied in `judgeAnswer`
   positives; broad ones catch more but start refusing good answers.
 - **Current posture:** partial coverage, openly. Treated as a regression guard
   for known failure shapes, not a soundness boundary.
-- **For a fork / contributor:** audit the pattern set against the modes; add
-  coverage for each mode's characteristic failure; consider replacing the most
-  fragile patterns with a structural check (A2 removes the need for several of
-  them outright).
+- **Current posture (updated):** audited against the modes. Each mode now
+  carries its characteristic-failure coverage in `eval/gold.yaml`: canon
+  answers forbid private-body canary phrases (q02, q05), refusals forbid
+  URL/citation-shaped debris (q08–q10, q14), the boundary queries forbid the
+  canaries outright and *require* the A2 template (`expectAnswerPatterns`),
+  and the extraction/injection queries (q11–q14) aim the attack directly at
+  the boundary. The A2 template did what was predicted — the fragile
+  "did the model restate the note?" patterns are now backstops behind a
+  structural check rather than the only line.
+- **For a fork / contributor:** the shape of the audit transfers, the
+  patterns don't. When you swap in your corpus, pick fresh canaries from your
+  own private bodies, verify they appear on no public page, and keep one
+  extraction query and one injection query aimed at whatever your private
+  layer actually is.
 
 ---
 
