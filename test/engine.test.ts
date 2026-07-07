@@ -406,11 +406,14 @@ test('store: assertHomogeneousIndex rejects mixed embedding specs', () => {
 test('eval: gold set loads, substitutes the author, and only references real sources', () => {
   const gold = loadGold('eval/gold.yaml', config.authorName);
   assert.ok(gold.length >= 8);
-  assert.ok(gold.some((g) => g.expectAnswerMode === 'not-found'), 'gold set must include refusals');
-  assert.ok(
-    gold.some((g) => g.expectAnswerMode === 'related-material'),
-    'gold set must exercise the boundary',
-  );
+  // All four modes must stay represented — including 'supported', whose
+  // free prose citing a hint is the residue the A2 template can't close.
+  for (const mode of ['supported', 'partial', 'related-material', 'not-found'] as const) {
+    assert.ok(
+      gold.some((g) => g.expectAnswerMode === mode),
+      `gold set must include an '${mode}' case`,
+    );
+  }
   // {{author}} placeholders resolve to the configured name.
   assert.ok(gold.some((g) => g.query.includes(config.authorName)));
   assert.ok(!gold.some((g) => g.query.includes('{{author}}')));
@@ -507,6 +510,38 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
     ).issues[0]!,
     /record-only citations/,
   );
+  // expectAnswerPatterns is the must-match mirror: every pattern must hit.
+  const routed = {
+    mode: 'related-material' as const,
+    answer: 'There is private material related to this: notebook, p. 12.',
+    citations: [
+      { kind: 'hint' as const, hintId: 'note:harbor-lights-session', url: 'https://example.com' },
+    ],
+  };
+  assert.equal(
+    judgeAnswer(
+      {
+        id: 'test',
+        query: 'q',
+        expectAnswerMode: 'related-material',
+        expectAnswerPatterns: ['^There is private material', 'notebook, p\\. 12'],
+      },
+      routed,
+    ).pass,
+    true,
+  );
+  assert.match(
+    judgeAnswer(
+      {
+        id: 'test',
+        query: 'q',
+        expectAnswerMode: 'related-material',
+        expectAnswerPatterns: ['notebook, p\\. 31'],
+      },
+      routed,
+    ).issues[0]!,
+    /did not match expected pattern/,
+  );
 });
 
 test('eval: parseQueryIdList and filterGoldQueries support targeted runs', () => {
@@ -533,20 +568,22 @@ test('eval: parseQueryIdList and filterGoldQueries support targeted runs', () =>
   );
 });
 
-test('eval: loadGold rejects invalid forbidAnswerPatterns at load time', () => {
+test('eval: loadGold rejects invalid answer patterns at load time', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gold-'));
-  const path = join(dir, 'gold.yaml');
-  writeFileSync(
-    path,
-    `queries:
+  for (const key of ['forbidAnswerPatterns', 'expectAnswerPatterns']) {
+    const path = join(dir, `gold-${key}.yaml`);
+    writeFileSync(
+      path,
+      `queries:
   - id: q01
     query: test
     expectAnswerMode: partial
-    forbidAnswerPatterns: ['(']
+    ${key}: ['(']
 `,
-    'utf8',
-  );
-  assert.throws(() => loadGold(path), /invalid regex/);
+      'utf8',
+    );
+    assert.throws(() => loadGold(path), new RegExp(`${key} contains invalid regex`));
+  }
 });
 
 test('eval: parseEvalReport rejects malformed result entries loudly', () => {

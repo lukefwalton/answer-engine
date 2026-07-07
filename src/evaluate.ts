@@ -27,6 +27,10 @@ export interface GoldQuery {
   forbidRecordCitations?: boolean;
   /** With --full: answer prose must not match these regexes (e.g. raw URLs). */
   forbidAnswerPatterns?: string[];
+  /** With --full: answer prose must match EVERY one of these. Pins behavior
+   *  shape — a template opener, a locator — never facts: a gold query asserts
+   *  how the engine behaves, not what is true (eval/README.md). */
+  expectAnswerPatterns?: string[];
 }
 
 export interface EvalQueryResult {
@@ -208,20 +212,17 @@ export function loadGold(path: string, author = ''): GoldQuery[] {
     if (item.forbidRecordCitations !== undefined && typeof item.forbidRecordCitations !== 'boolean') {
       throw new Error(`${path}: queries[${i}].forbidRecordCitations must be a boolean`);
     }
-    if (item.forbidAnswerPatterns !== undefined) {
-      if (
-        !Array.isArray(item.forbidAnswerPatterns) ||
-        item.forbidAnswerPatterns.some((p) => typeof p !== 'string')
-      ) {
-        throw new Error(`${path}: queries[${i}].forbidAnswerPatterns must be a list of regex strings`);
+    for (const key of ['forbidAnswerPatterns', 'expectAnswerPatterns'] as const) {
+      const patterns = item[key];
+      if (patterns === undefined) continue;
+      if (!Array.isArray(patterns) || patterns.some((p) => typeof p !== 'string')) {
+        throw new Error(`${path}: queries[${i}].${key} must be a list of regex strings`);
       }
-      for (const pattern of item.forbidAnswerPatterns) {
+      for (const pattern of patterns) {
         try {
           new RegExp(pattern, 'i');
         } catch {
-          throw new Error(
-            `${path}: queries[${i}].forbidAnswerPatterns contains invalid regex /${pattern}/`,
-          );
+          throw new Error(`${path}: queries[${i}].${key} contains invalid regex /${pattern}/`);
         }
       }
     }
@@ -252,6 +253,11 @@ export function judgeAnswer(gold: GoldQuery, answer: AnswerOutput): JudgeResult 
   for (const pattern of gold.forbidAnswerPatterns ?? []) {
     if (new RegExp(pattern, 'i').test(answer.answer)) {
       issues.push(`answer matched forbidden pattern /${pattern}/`);
+    }
+  }
+  for (const pattern of gold.expectAnswerPatterns ?? []) {
+    if (!new RegExp(pattern, 'i').test(answer.answer)) {
+      issues.push(`answer did not match expected pattern /${pattern}/`);
     }
   }
   return { pass: issues.length === 0, issues };
