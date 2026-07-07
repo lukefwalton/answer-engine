@@ -1,5 +1,6 @@
 ---
 title: "The Word of God sermon"
+label: "The Word of God sermon"
 about: https://archive.org/details/forgivenessofsin00smitrich
 locator: "The Forgiveness of Sins, and Other Sermons (1904), sermon II"
 ---

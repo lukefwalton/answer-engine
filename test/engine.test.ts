@@ -26,7 +26,11 @@ import {
 } from '../src/evaluate.js';
 import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
 import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
-import { renderRelatedMaterialAnswer } from '../src/public-safe.js';
+import {
+  assertPublicSafeField,
+  PUBLIC_SAFE_MAX_CHARS,
+  renderRelatedMaterialAnswer,
+} from '../src/public-safe.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
 import { containsPhrase, cosine, hasThemeMatch, retrieve } from '../src/retrieve.js';
 import { assertHomogeneousIndex, readIndexFile, writeIndexFile } from '../src/store.js';
@@ -46,14 +50,29 @@ function makeRecord(overrides: Partial<ArchiveRecord> = {}): ArchiveRecord {
   };
 }
 
-function makeNote(overrides: Partial<PrivateNote> = {}): PrivateNote {
+/** Traveling fields go through the real lint, so fixtures can't dodge the
+ *  brand — plain-string overrides are linted against the note's text. */
+function makeNote(
+  overrides: Partial<Omit<PrivateNote, 'label' | 'locator'>> & { label?: string; locator?: string } = {},
+): PrivateNote {
+  const text = overrides.text ?? 'The bridge originally modulated up a whole step.';
+  const path = overrides.id ?? 'note:harbor-lights-session';
   return {
     id: 'note:harbor-lights-session',
-    label: 'Harbor Lights — writing session',
+    title: 'Harbor Lights — writing session',
     url: 'https://example.com/lyrics/harbor-lights/',
-    locator: 'notebook, p. 12',
-    text: 'The bridge originally modulated up a whole step.',
     ...overrides,
+    label: assertPublicSafeField(overrides.label ?? 'Harbor Lights — writing session', {
+      field: 'label',
+      path,
+      privateText: text,
+    }),
+    locator: assertPublicSafeField(overrides.locator ?? 'notebook, p. 12', {
+      field: 'locator',
+      path,
+      privateText: text,
+    }),
+    text,
   };
 }
 
@@ -112,6 +131,10 @@ test('corpus: reads the bundled example content, both layers', () => {
   assert.ok(session);
   assert.equal(session.url, 'https://example.com/lyrics/harbor-lights/');
   assert.ok(session.text.includes('bridge'));
+  // The private title and the traveling label are separate fields; the
+  // bundled notes declare both (and here they match, which is a choice).
+  assert.equal(session.title, 'Harbor Lights — writing session');
+  assert.equal(session.label, 'Harbor Lights — writing session');
 });
 
 test('corpus: a missing collection directory fails loudly, not silently', () => {
@@ -141,13 +164,86 @@ test('corpus: malformed frontmatter and missing required fields name the file', 
     /broken\.md has no 'title'.*draft: true/,
   );
 
-  // Private notes additionally require about + locator.
+  // Private notes additionally require about + locator...
   mkdirSync(join(root, 'notebook'));
   writeFileSync(join(root, 'notebook', 'n.md'), '---\ntitle: "A note"\n---\nprivate text\n', 'utf8');
   assert.throws(
     () => buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') }),
     /n\.md needs 'about'.*'locator'/,
   );
+
+  // ...and an explicit public-safe label: the title never travels by default.
+  writeFileSync(
+    join(root, 'notebook', 'n.md'),
+    '---\ntitle: "A note"\nabout: https://example.com/x/\nlocator: "p. 1"\n---\nprivate text\n',
+    'utf8',
+  );
+  assert.throws(
+    () => buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') }),
+    /n\.md needs 'label'.*'title' stays private/,
+  );
+});
+
+test('corpus: the public-safe lint rejects traveling fields that quote private text', () => {
+  const body =
+    'The bridge originally modulated up a whole step and we scrapped it in the second session.';
+
+  // A 5-word run of the body in a label is a quotation, not a pointer.
+  assert.throws(
+    () =>
+      assertPublicSafeField('Notes: originally modulated up a whole step', {
+        field: 'label',
+        path: 'n.md',
+        privateText: body,
+      }),
+    /n\.md: 'label' quotes the note's private body \("originally modulated up a whole"\)/,
+  );
+  // Four shared words is citation-grade overlap and passes — the demo
+  // corpus's own locators depend on exactly this margin (PUBLIC_SAFE_NGRAM_WORDS).
+  assert.equal(
+    assertPublicSafeField('modulated up a whole octave instead', {
+      field: 'label',
+      path: 'n.md',
+      privateText: body,
+    }),
+    'modulated up a whole octave instead',
+  );
+  // Normalization sees through case and punctuation.
+  assert.throws(
+    () =>
+      assertPublicSafeField('Originally, MODULATED — up; a WHOLE…', {
+        field: 'locator',
+        path: 'n.md',
+        privateText: body,
+      }),
+    /quotes the note's private body/,
+  );
+
+  assert.throws(
+    () => assertPublicSafeField('two\nlines', { field: 'label', path: 'n.md', privateText: body }),
+    /single line/,
+  );
+  assert.throws(
+    () =>
+      assertPublicSafeField('x'.repeat(PUBLIC_SAFE_MAX_CHARS + 1), {
+        field: 'label',
+        path: 'n.md',
+        privateText: body,
+      }),
+    /max 120/,
+  );
+  assert.throws(
+    () => assertPublicSafeField('   ', { field: 'locator', path: 'n.md', privateText: body }),
+    /must not be empty/,
+  );
+
+  // The bundled corpora hold their own bar: every shipped label and locator
+  // passes the lint (buildPrivateNotes runs it on every note it returns).
+  assert.ok(buildPrivateNotes(config).length > 0);
+  const demoDirs = ['./demo/corpus/private', './demo/corpus/synthetic'];
+  for (const privateNotesDir of demoDirs) {
+    assert.ok(buildPrivateNotes({ ...config, privateNotesDir }).length > 0);
+  }
 });
 
 test('corpus: stripMarkdown flattens syntax but keeps link text', () => {
@@ -469,14 +565,24 @@ test('store: index file round-trips; unversioned or malformed files fail fast', 
 
   // Pre-versioning shape (a bare array) and junk both get the rebuild message.
   writeFileSync(path, JSON.stringify(entries), 'utf8');
-  assert.throws(() => readIndexFile(path), /not schema version 2.*npm run index/);
+  assert.throws(() => readIndexFile(path), /not schema version 3.*npm run index/);
   writeFileSync(path, 'not json', 'utf8');
   assert.throws(() => readIndexFile(path), /not valid JSON/);
 
   // Versioned but structurally bad entries get the rebuild message too.
   writeFileSync(
     path,
-    JSON.stringify({ version: 2, entries: [{ sourceType: 'record', record: { id: 'x' }, model: 'm' }] }),
+    JSON.stringify({ version: 3, entries: [{ sourceType: 'record', record: { id: 'x' }, model: 'm' }] }),
+    'utf8',
+  );
+  assert.throws(() => readIndexFile(path), /malformed entry.*npm run index/);
+
+  // A v2-shaped note smuggled under a v3 header (no title) fails the same way.
+  const [, v2Note] = entries;
+  const { title: _title, ...v2Shape } = (v2Note as Extract<IndexEntry, { sourceType: 'note' }>).note;
+  writeFileSync(
+    path,
+    JSON.stringify({ version: 3, entries: [{ ...v2Note, note: v2Shape }] }),
     'utf8',
   );
   assert.throws(() => readIndexFile(path), /malformed entry.*npm run index/);

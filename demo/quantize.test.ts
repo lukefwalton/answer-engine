@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { cosine } from '../src/retrieve.js';
+import { assertPublicSafeField } from '../src/public-safe.js';
 import type { ArchiveRecord, IndexEntry, PrivateNote } from '../src/types.js';
 import type { GoldQuery } from '../src/evaluate.js';
 import { dequantize, levelFor, quantize, requantizeVector } from './quantize.js';
@@ -34,7 +35,15 @@ function makeRecord(id: string, extra: Partial<ArchiveRecord> = {}): ArchiveReco
 }
 
 function makeNote(id: string): PrivateNote {
-  return { id, label: id, url: 'https://en.wikipedia.org/wiki/George_Adam_Smith', locator: 'sermon', text: 'private' };
+  const context = { path: id, privateText: 'private' } as const;
+  return {
+    id,
+    title: id,
+    label: assertPublicSafeField(id, { field: 'label', ...context }),
+    url: 'https://en.wikipedia.org/wiki/George_Adam_Smith',
+    locator: assertPublicSafeField('sermon', { field: 'locator', ...context }),
+    text: 'private',
+  };
 }
 
 function recordEntry(id: string, vector: number[], extra: Partial<ArchiveRecord> = {}): IndexEntry {

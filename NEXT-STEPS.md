@@ -37,26 +37,36 @@ failure mode first.
 These are places where the structure does not (or cannot) catch the unwanted
 move, so it is held by a softer guard and owned openly.
 
-### A1. Routing-hint metadata travels unguarded
+### A1. Routing-hint metadata — the boundary is now structural; its edges named
 The type that crosses to the model (`RoutingHint` in `src/types.ts`) has no
 field for a note's body text, so the body cannot leak along that path
-(`src/no-leak.ts`). But two fields do travel: the **label** (currently the
-note's title, set in `buildPrivateNotes` in `src/corpus.ts`) and the
-**locator** (from frontmatter). A note with a sensitive title leaks through its
-label, and nothing in the type stops it.
+(`src/no-leak.ts`). Two fields do travel — the **label** and the **locator**
+— and they used to be raw frontmatter guarded by a warning comment: a note
+with a sensitive title leaked through its own label, and nothing in the type
+stopped it.
 
-- **Trade-off:** richer labels and locators help the model route well; every
-  field that travels is also a leak surface.
-- **Current posture:** documented, with a loud warning at the population site
-  (`src/corpus.ts`) and in the README — keep titles and locators public-safe.
-  The guard is discipline, not structure.
-- **For a fork / contributor:** make the boundary structural instead of
-  advisory. Options: derive the label from a public-safe identifier rather than
-  the raw title; whitelist or sanitize the fields that may travel; or carry a
-  separate, explicitly-public "display label" distinct from the private title.
-  A build-time lint that flags obviously-private patterns in the traveling
-  fields is a cheap first step before any of these. Any of them moves this seam
-  from "owned" to "inexpressible," which is where it should end up.
+- **Current posture:** structural, three layers deep. The traveling label is
+  an explicit `label:` frontmatter field, distinct from the private `title`
+  (which is embedded for retrieval and never travels) — a fork upgrading past
+  this change fails loudly until each note declares one, which is the point:
+  what travels is now an authored decision per note, not a default. Both
+  traveling fields are typed `PublicSafe`, whose only constructor is the
+  build-time lint (`assertPublicSafeField` in `src/public-safe.ts`): single
+  line, capped length, and no run of five consecutive words shared with the
+  note's private body — a field that quotes the note fails the build, not the
+  answer. The index schema versioned past the split (v3, `src/store.ts`), so
+  a stale artifact fails fast with the remedy.
+- **The residue, named:** the lint is a tripwire, not a classifier — a short
+  private phrase, or private meaning carried in public words, still passes
+  it. `url` (`about:`) travels unlinted as a declared public page. And the
+  brand erases at JSON boundaries: an index read from disk is trusted to have
+  been built through the lint, not re-checked. The gold canaries
+  (`eval/gold.yaml`) backstop all three at answer time.
+- **For a fork / contributor:** tune `PUBLIC_SAFE_NGRAM_WORDS` against your
+  corpus (5 is calibrated so bibliographic locators pass; see the constant's
+  comment), and if your private layer has a known sensitive vocabulary, add a
+  denylist check beside the n-gram tripwire — the lint is one function with
+  one call site, built to take it.
 
 ### A2. Related-material confabulation — closed structurally; the residue moved
 In related-material mode the answer cites a routing hint, and a hint is real

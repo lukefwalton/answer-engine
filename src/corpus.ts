@@ -8,6 +8,7 @@
 import matter from 'gray-matter';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { assertPublicSafeField } from './public-safe.js';
 import type { ArchiveConfig, ArchiveRecord, CollectionConfig, PrivateNote } from './types.js';
 
 /** Reduce markdown to plain text for indexing (link text kept, syntax dropped). */
@@ -125,9 +126,10 @@ export function buildCorpus(config: ArchiveConfig): ArchiveRecord[] {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
-/** Read the private layer. Each note needs `title`, `about` (the public URL
- *  a citation routes to), and `locator` (where in the private material the
- *  moment lives). The body is the private text — indexed, never quoted. */
+/** Read the private layer. Each note needs `title` (private, embedded),
+ *  `label` (the public-safe display name that travels), `about` (the public
+ *  URL a citation routes to), and `locator` (where in the private material
+ *  the moment lives). The body is the private text — indexed, never quoted. */
 export function buildPrivateNotes(config: ArchiveConfig): PrivateNote[] {
   if (!config.privateNotesDir) return [];
   const dir = resolve(config.privateNotesDir);
@@ -141,19 +143,30 @@ export function buildPrivateNotes(config: ArchiveConfig): PrivateNote[] {
           `'locator' (where the moment lives) in its frontmatter.`,
       );
     }
-    // ⚠ WARNING — these fields TRAVEL TO THE MODEL. no-leak.ts strips the note's
-    // body, but `label` (the note's title) and `locator` ride along in the
-    // RoutingHint and into the answer prompt. Any frontmatter field that becomes
-    // a label or locator reaches the model: keep titles and locators
-    // public-safe. A privately-titled note leaks through its own label, and
-    // nothing in the type stops it. Making this structural instead of advisory
-    // is tracked in NEXT-STEPS.md (A1).
+    const label = firstString(data.label);
+    if (!label) {
+      throw new Error(
+        `${path} needs 'label' in its frontmatter — the public-safe display name ` +
+          `that travels to the model ('title' stays private and is only embedded). ` +
+          `It may simply repeat the title when the title is safe to publish; ` +
+          `writing it out is the point — the choice is yours, made per note.`,
+      );
+    }
+    const text = stripMarkdown(content);
+    // `label` and `locator` travel to the model (RoutingHint, the answer
+    // prompt, the related-material template). They are typed PublicSafe and
+    // constructible only through the build lint below — a field that quotes
+    // the private body fails the build here, not in an answer. What the lint
+    // can't catch stays owned: it is a 5-gram tripwire, so a short private
+    // phrase (or private meaning in public words) still passes. See
+    // NEXT-STEPS.md A1 and src/public-safe.ts.
     notes.push({
       id: `note:${slug}`,
-      label: title,
+      title,
+      label: assertPublicSafeField(label, { field: 'label', path, privateText: text }),
       url: about,
-      locator,
-      text: stripMarkdown(content),
+      locator: assertPublicSafeField(locator, { field: 'locator', path, privateText: text }),
+      text,
     });
   }
   return notes.sort((a, b) => a.id.localeCompare(b.id));
@@ -168,7 +181,10 @@ export function embedText(record: ArchiveRecord): string {
     .join('\n\n');
 }
 
-/** Private vectors come from private text: label + the note body. */
+/** Private vectors come from private text: the note's own title + body. The
+ *  private title (not the traveling label) is what retrieval searches — and
+ *  for any corpus whose labels repeated their titles, this is byte-identical
+ *  to the pre-split embed text, so existing vectors stay valid. */
 export function noteEmbedText(note: PrivateNote): string {
-  return [note.label, note.text].filter((s) => s.length > 0).join('\n\n');
+  return [note.title, note.text].filter((s) => s.length > 0).join('\n\n');
 }

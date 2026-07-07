@@ -1,5 +1,6 @@
 ---
 title: "Paper Crown — early draft"
+label: "Paper Crown — early draft"
 about: https://example.com/lyrics/paper-crown/
 locator: "notebook, p. 31"
 ---

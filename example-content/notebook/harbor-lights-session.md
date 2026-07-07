@@ -1,5 +1,6 @@
 ---
 title: "Harbor Lights — writing session"
+label: "Harbor Lights — writing session"
 about: https://example.com/lyrics/harbor-lights/
 locator: "notebook, p. 12"
 ---
