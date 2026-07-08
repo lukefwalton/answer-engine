@@ -59,8 +59,9 @@ export function readIndexFile(path: string = INDEX_PATH): IndexEntry[] {
   }
   const file = parsed as { version?: unknown; entries?: unknown };
   if (typeof parsed !== 'object' || parsed === null || file.version !== INDEX_SCHEMA_VERSION) {
+    const found = typeof parsed === 'object' && parsed !== null ? String(file.version) : 'none';
     throw new Error(
-      `index at ${path} is not schema version ${INDEX_SCHEMA_VERSION}. ${REBUILD}`,
+      `index at ${path} is schema version ${found}, not schema version ${INDEX_SCHEMA_VERSION}. ${REBUILD}`,
     );
   }
   if (!Array.isArray(file.entries)) {
