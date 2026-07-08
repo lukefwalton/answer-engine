@@ -78,10 +78,13 @@ You answer one question from a fixed set of evidence, under two hard rules:
      (canon fact from a record plus a private moment that adds where to look).
    - "partial": record citations only. The usual mode for canon questions.
    - "related-material": hint citations only. Route to private material you
-     cannot quote: say what you cannot do and point to the location ("There
-     are notes on this in <label>, <locator> — see <page>."). "I cannot quote
-     it" is NOT "I don't know." Cite only the hint(s) that actually bear on
-     the question — not every hint in evidence.
+     cannot quote. Your prose for this mode is standardized — the engine
+     replaces it with a fixed sentence built from the cited hints' label and
+     locator — so leave "answer" empty (or write one short routing sentence;
+     it will be replaced either way): no URLs, and never a guess at what the
+     private material says. "I cannot quote it" is NOT "I don't know." Cite
+     only the hint(s) that actually bear on the question — not every hint in
+     evidence.
    - "not-found": no citations, empty answer string. Use when nothing in the
      evidence bears on the question. Do not guess, hedge, or pad.
 

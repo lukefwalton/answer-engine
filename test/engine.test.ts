@@ -10,6 +10,7 @@ import { config } from '../archive.config.js';
 import {
   assertCitationsGroundedInEvidence,
   deriveMode,
+  finalizeAnswer,
   repairCitationsToEvidence,
   validateAnswer,
 } from '../src/answer.js';
@@ -25,6 +26,11 @@ import {
 } from '../src/evaluate.js';
 import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
 import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
+import {
+  assertPublicSafeField,
+  PUBLIC_SAFE_MAX_CHARS,
+  renderRelatedMaterialAnswer,
+} from '../src/public-safe.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
 import { containsPhrase, cosine, hasThemeMatch, retrieve } from '../src/retrieve.js';
 import { assertHomogeneousIndex, readIndexFile, writeIndexFile } from '../src/store.js';
@@ -44,14 +50,29 @@ function makeRecord(overrides: Partial<ArchiveRecord> = {}): ArchiveRecord {
   };
 }
 
-function makeNote(overrides: Partial<PrivateNote> = {}): PrivateNote {
+/** Traveling fields go through the real lint, so fixtures can't dodge the
+ *  brand — plain-string overrides are linted against the note's text. */
+function makeNote(
+  overrides: Partial<Omit<PrivateNote, 'label' | 'locator'>> & { label?: string; locator?: string } = {},
+): PrivateNote {
+  const text = overrides.text ?? 'The bridge originally modulated up a whole step.';
+  const path = overrides.id ?? 'note:harbor-lights-session';
   return {
     id: 'note:harbor-lights-session',
-    label: 'Harbor Lights — writing session',
+    title: 'Harbor Lights — writing session',
     url: 'https://example.com/lyrics/harbor-lights/',
-    locator: 'notebook, p. 12',
-    text: 'The bridge originally modulated up a whole step.',
     ...overrides,
+    label: assertPublicSafeField(overrides.label ?? 'Harbor Lights — writing session', {
+      field: 'label',
+      path,
+      privateText: text,
+    }),
+    locator: assertPublicSafeField(overrides.locator ?? 'notebook, p. 12', {
+      field: 'locator',
+      path,
+      privateText: text,
+    }),
+    text,
   };
 }
 
@@ -110,6 +131,10 @@ test('corpus: reads the bundled example content, both layers', () => {
   assert.ok(session);
   assert.equal(session.url, 'https://example.com/lyrics/harbor-lights/');
   assert.ok(session.text.includes('bridge'));
+  // The private title and the traveling label are separate fields; the
+  // bundled notes declare both (and here they match, which is a choice).
+  assert.equal(session.title, 'Harbor Lights — writing session');
+  assert.equal(session.label, 'Harbor Lights — writing session');
 });
 
 test('corpus: a missing collection directory fails loudly, not silently', () => {
@@ -139,13 +164,86 @@ test('corpus: malformed frontmatter and missing required fields name the file', 
     /broken\.md has no 'title'.*draft: true/,
   );
 
-  // Private notes additionally require about + locator.
+  // Private notes additionally require about + locator...
   mkdirSync(join(root, 'notebook'));
   writeFileSync(join(root, 'notebook', 'n.md'), '---\ntitle: "A note"\n---\nprivate text\n', 'utf8');
   assert.throws(
     () => buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') }),
     /n\.md needs 'about'.*'locator'/,
   );
+
+  // ...and an explicit public-safe label: the title never travels by default.
+  writeFileSync(
+    join(root, 'notebook', 'n.md'),
+    '---\ntitle: "A note"\nabout: https://example.com/x/\nlocator: "p. 1"\n---\nprivate text\n',
+    'utf8',
+  );
+  assert.throws(
+    () => buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') }),
+    /n\.md needs 'label'.*'title' stays private/,
+  );
+});
+
+test('corpus: the public-safe lint rejects traveling fields that quote private text', () => {
+  const body =
+    'The bridge originally modulated up a whole step and we scrapped it in the second session.';
+
+  // A 5-word run of the body in a label is a quotation, not a pointer.
+  assert.throws(
+    () =>
+      assertPublicSafeField('Notes: originally modulated up a whole step', {
+        field: 'label',
+        path: 'n.md',
+        privateText: body,
+      }),
+    /n\.md: 'label' quotes the note's private body \("originally modulated up a whole"\)/,
+  );
+  // Four shared words is citation-grade overlap and passes — the demo
+  // corpus's own locators depend on exactly this margin (PUBLIC_SAFE_NGRAM_WORDS).
+  assert.equal(
+    assertPublicSafeField('modulated up a whole octave instead', {
+      field: 'label',
+      path: 'n.md',
+      privateText: body,
+    }),
+    'modulated up a whole octave instead',
+  );
+  // Normalization sees through case and punctuation.
+  assert.throws(
+    () =>
+      assertPublicSafeField('Originally, MODULATED — up; a WHOLE…', {
+        field: 'locator',
+        path: 'n.md',
+        privateText: body,
+      }),
+    /quotes the note's private body/,
+  );
+
+  assert.throws(
+    () => assertPublicSafeField('two\nlines', { field: 'label', path: 'n.md', privateText: body }),
+    /single line/,
+  );
+  assert.throws(
+    () =>
+      assertPublicSafeField('x'.repeat(PUBLIC_SAFE_MAX_CHARS + 1), {
+        field: 'label',
+        path: 'n.md',
+        privateText: body,
+      }),
+    /max 120/,
+  );
+  assert.throws(
+    () => assertPublicSafeField('   ', { field: 'locator', path: 'n.md', privateText: body }),
+    /must not be empty/,
+  );
+
+  // The bundled corpora hold their own bar: every shipped label and locator
+  // passes the lint (buildPrivateNotes runs it on every note it returns).
+  assert.ok(buildPrivateNotes(config).length > 0);
+  const demoDirs = ['./demo/corpus/private', './demo/corpus/synthetic'];
+  for (const privateNotesDir of demoDirs) {
+    assert.ok(buildPrivateNotes({ ...config, privateNotesDir }).length > 0);
+  }
 });
 
 test('corpus: stripMarkdown flattens syntax but keeps link text', () => {
@@ -254,6 +352,14 @@ test('answer: validateAnswer enforces the mode/answer contract in both direction
   assert.throws(() => validateAnswer({ mode: 'maybe', answer: '', citations: [] }), /not a valid mode/);
   assert.throws(() => validateAnswer({ mode: 'not-found', answer: 'guess', citations: [] }), /no prose/);
   assert.throws(() => validateAnswer({ mode: 'partial', answer: '  ', citations: [] }), /requires prose/);
+  assert.throws(() => validateAnswer({ mode: 'supported', answer: '', citations: [HINT_CITE] }), /requires prose/);
+  // The one deliberate gap: related-material prose is engine-rendered, so
+  // the model may (and, told the prose is standardized, often does) leave it
+  // empty. finalizeAnswer re-enforces the prose contract after templating.
+  assert.equal(
+    validateAnswer({ mode: 'related-material', answer: '', citations: [HINT_CITE] }).mode,
+    'related-material',
+  );
 });
 
 test('answer: mode is derived from the citation mix, not taken on faith', () => {
@@ -372,6 +478,116 @@ test('answer: grounding rejects invented citations and mode/mix mismatches', () 
   );
 });
 
+test('public-safe: the related-material template points, never asserts', () => {
+  const hints = [
+    toRoutingHint(makeNote()),
+    toRoutingHint(
+      makeNote({ id: 'note:paper-crown-draft', label: 'Paper Crown — early draft', locator: 'notebook, p. 31' }),
+    ),
+  ];
+
+  assert.equal(
+    renderRelatedMaterialAnswer([HINT_CITE], hints),
+    'There is private material related to this: Harbor Lights — writing session ' +
+      "(notebook, p. 12). It can't be quoted here — the citation links to the " +
+      'public page it belongs to.',
+  );
+  const both = renderRelatedMaterialAnswer(
+    [HINT_CITE, { kind: 'hint', hintId: 'note:paper-crown-draft', url: 'https://example.com/lyrics/harbor-lights/' }],
+    hints,
+  );
+  assert.ok(both.includes('notebook, p. 12'));
+  assert.ok(both.includes('Paper Crown — early draft (notebook, p. 31)'));
+  assert.ok(both.includes('citations link to the public pages'));
+  // The prose never carries a raw URL — the citation object does (gold q07).
+  assert.ok(!/https?:\/\//.test(both));
+
+  assert.throws(() => renderRelatedMaterialAnswer([], hints), /at least one hint citation/);
+  assert.throws(() => renderRelatedMaterialAnswer([RECORD_CITE], hints), /at least one hint citation/);
+  assert.throws(
+    () => renderRelatedMaterialAnswer([{ kind: 'hint', hintId: 'note:unknown', url: 'https://x.com/' }], hints),
+    /matches no hint in evidence/,
+  );
+});
+
+test('answer: finalizeAnswer makes related-material prose deterministic', () => {
+  const evidence = evidenceOf([makeRecord()], [makeNote()]);
+
+  // A confabulated summary of the private note — real hint citation, fake
+  // backing. Before A2 this passed the gate verbatim; now the prose cannot
+  // survive into the mode.
+  const confabulated = finalizeAnswer(
+    {
+      mode: 'related-material',
+      answer: 'The note says the bridge originally modulated up a whole step.',
+      citations: [HINT_CITE],
+    },
+    evidence,
+  );
+  assert.equal(confabulated.mode, 'related-material');
+  assert.ok(!confabulated.answer.includes('modulated'));
+  assert.match(confabulated.answer, /^There is private material related to this/);
+  assert.ok(confabulated.answer.includes('notebook, p. 12'));
+
+  // An answer that only BECOMES related-material through repair's kind
+  // conversion is templated too.
+  const converted = finalizeAnswer(
+    {
+      mode: 'partial',
+      answer: 'The notebook explains the whole step change.',
+      citations: [{ kind: 'record', recordId: 'nope', url: 'https://example.com/lyrics/harbor-lights/' }],
+    },
+    evidence,
+  );
+  assert.equal(converted.mode, 'related-material');
+  assert.match(converted.answer, /^There is private material related to this/);
+  assert.ok(!converted.answer.includes('whole step'));
+
+  // Record-backed prose is untouched — the template governs one mode only.
+  const partial = finalizeAnswer(
+    { mode: 'partial', answer: 'Listening means suspending the verdict.', citations: [RECORD_CITE] },
+    evidence,
+  );
+  assert.equal(partial.answer, 'Listening means suspending the verdict.');
+  const supported = finalizeAnswer(
+    { mode: 'supported', answer: 'Canon plus a session moment.', citations: [RECORD_CITE, HINT_CITE] },
+    evidence,
+  );
+  assert.equal(supported.answer, 'Canon plus a session moment.');
+
+  // Refusals pass through bare.
+  assert.deepEqual(
+    finalizeAnswer({ mode: 'not-found', answer: '', citations: [] }, evidence),
+    { mode: 'not-found', answer: '', citations: [] },
+  );
+
+  // The empty-prose path end to end (the shape the model actually returns
+  // once told its related-material prose is standardized): validate admits
+  // it, finalize renders the template.
+  const emptyProse = finalizeAnswer(
+    validateAnswer({ mode: 'related-material', answer: '', citations: [HINT_CITE] }),
+    evidence,
+  );
+  assert.match(emptyProse.answer, /^There is private material related to this/);
+
+  // But the gap does not leak past the mode it exists for: if repair
+  // re-derives an empty-prose answer OUT of related-material, the sourced
+  // prose contract is enforced at the door...
+  assert.throws(
+    () =>
+      finalizeAnswer(
+        { mode: 'related-material', answer: '', citations: [RECORD_CITE] },
+        evidence,
+      ),
+    /'partial' answer requires prose/,
+  );
+  // ...and with no citations at all it normalizes to a bare refusal.
+  assert.deepEqual(
+    finalizeAnswer({ mode: 'related-material', answer: '', citations: [] }, evidence),
+    { mode: 'not-found', answer: '', citations: [] },
+  );
+});
+
 test('store: index file round-trips; unversioned or malformed files fail fast', () => {
   const dir = mkdtempSync(join(tmpdir(), 'ae-store-'));
   const path = join(dir, 'index.json');
@@ -383,14 +599,24 @@ test('store: index file round-trips; unversioned or malformed files fail fast', 
 
   // Pre-versioning shape (a bare array) and junk both get the rebuild message.
   writeFileSync(path, JSON.stringify(entries), 'utf8');
-  assert.throws(() => readIndexFile(path), /not schema version 2.*npm run index/);
+  assert.throws(() => readIndexFile(path), /not schema version 3.*npm run index/);
   writeFileSync(path, 'not json', 'utf8');
   assert.throws(() => readIndexFile(path), /not valid JSON/);
 
   // Versioned but structurally bad entries get the rebuild message too.
   writeFileSync(
     path,
-    JSON.stringify({ version: 2, entries: [{ sourceType: 'record', record: { id: 'x' }, model: 'm' }] }),
+    JSON.stringify({ version: 3, entries: [{ sourceType: 'record', record: { id: 'x' }, model: 'm' }] }),
+    'utf8',
+  );
+  assert.throws(() => readIndexFile(path), /malformed entry.*npm run index/);
+
+  // A v2-shaped note smuggled under a v3 header (no title) fails the same way.
+  const [, v2Note] = entries;
+  const { title: _title, ...v2Shape } = (v2Note as Extract<IndexEntry, { sourceType: 'note' }>).note;
+  writeFileSync(
+    path,
+    JSON.stringify({ version: 3, entries: [{ ...v2Note, note: v2Shape }] }),
     'utf8',
   );
   assert.throws(() => readIndexFile(path), /malformed entry.*npm run index/);
@@ -406,11 +632,14 @@ test('store: assertHomogeneousIndex rejects mixed embedding specs', () => {
 test('eval: gold set loads, substitutes the author, and only references real sources', () => {
   const gold = loadGold('eval/gold.yaml', config.authorName);
   assert.ok(gold.length >= 8);
-  assert.ok(gold.some((g) => g.expectAnswerMode === 'not-found'), 'gold set must include refusals');
-  assert.ok(
-    gold.some((g) => g.expectAnswerMode === 'related-material'),
-    'gold set must exercise the boundary',
-  );
+  // All four modes must stay represented — including 'supported', whose
+  // free prose citing a hint is the residue the A2 template can't close.
+  for (const mode of ['supported', 'partial', 'related-material', 'not-found'] as const) {
+    assert.ok(
+      gold.some((g) => g.expectAnswerMode === mode),
+      `gold set must include an '${mode}' case`,
+    );
+  }
   // {{author}} placeholders resolve to the configured name.
   assert.ok(gold.some((g) => g.query.includes(config.authorName)));
   assert.ok(!gold.some((g) => g.query.includes('{{author}}')));
@@ -507,6 +736,38 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
     ).issues[0]!,
     /record-only citations/,
   );
+  // expectAnswerPatterns is the must-match mirror: every pattern must hit.
+  const routed = {
+    mode: 'related-material' as const,
+    answer: 'There is private material related to this: notebook, p. 12.',
+    citations: [
+      { kind: 'hint' as const, hintId: 'note:harbor-lights-session', url: 'https://example.com' },
+    ],
+  };
+  assert.equal(
+    judgeAnswer(
+      {
+        id: 'test',
+        query: 'q',
+        expectAnswerMode: 'related-material',
+        expectAnswerPatterns: ['^There is private material', 'notebook, p\\. 12'],
+      },
+      routed,
+    ).pass,
+    true,
+  );
+  assert.match(
+    judgeAnswer(
+      {
+        id: 'test',
+        query: 'q',
+        expectAnswerMode: 'related-material',
+        expectAnswerPatterns: ['notebook, p\\. 31'],
+      },
+      routed,
+    ).issues[0]!,
+    /did not match expected pattern/,
+  );
 });
 
 test('eval: parseQueryIdList and filterGoldQueries support targeted runs', () => {
@@ -533,20 +794,22 @@ test('eval: parseQueryIdList and filterGoldQueries support targeted runs', () =>
   );
 });
 
-test('eval: loadGold rejects invalid forbidAnswerPatterns at load time', () => {
+test('eval: loadGold rejects invalid answer patterns at load time', () => {
   const dir = mkdtempSync(join(tmpdir(), 'gold-'));
-  const path = join(dir, 'gold.yaml');
-  writeFileSync(
-    path,
-    `queries:
+  for (const key of ['forbidAnswerPatterns', 'expectAnswerPatterns']) {
+    const path = join(dir, `gold-${key}.yaml`);
+    writeFileSync(
+      path,
+      `queries:
   - id: q01
     query: test
     expectAnswerMode: partial
-    forbidAnswerPatterns: ['(']
+    ${key}: ['(']
 `,
-    'utf8',
-  );
-  assert.throws(() => loadGold(path), /invalid regex/);
+      'utf8',
+    );
+    assert.throws(() => loadGold(path), new RegExp(`${key} contains invalid regex`));
+  }
 });
 
 test('eval: parseEvalReport rejects malformed result entries loudly', () => {

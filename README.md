@@ -45,8 +45,9 @@ The corpus has two layers, and the distinction drives everything downstream
   The body travels all the way to the model, because you already published it.
 - **Private notes** are material you want *searchable but never quotable* —
   here, the songwriter's notebook in `example-content/notebook/`. Each note
-  declares the public page it routes to (`about`) and where the moment lives
-  (`locator`). Its text gets embedded, so retrieval can find it. It is never
+  declares the public page it routes to (`about`), where the moment lives
+  (`locator`), and a public-safe display name (`label`) — its `title` and
+  text stay private, embedded so retrieval can find the moment but never
   shown to the model.
 
 > In production ([Ask the Archive](https://lukefwalton.com/ask/)), published
@@ -97,9 +98,14 @@ One Responses API call (`src/answer.ts`), with the policy versioned in code
 (`src/prompt.ts`). Records render with their full bodies. Hints render as
 label, locator, and URL — `buildUserPrompt` couldn't leak a hint's text if it
 wanted to, because the field doesn't exist. **What does travel is the label
-and the locator: any frontmatter field that becomes either one reaches the
-model, so keep titles and locators public-safe.** (Making that boundary
-structural rather than advisory is [`NEXT-STEPS.md`](./NEXT-STEPS.md) A1.)
+and the locator, and both are typed `PublicSafe`:** the label comes from an
+explicit `label:` frontmatter field (the private `title` never travels), and
+the only way to construct the type is the build-time lint
+(`assertPublicSafeField` in `src/public-safe.ts`), which rejects a traveling
+field that quotes the note's own body. The lint is a tripwire, not a
+classifier — a short private phrase still passes it — so write labels and
+locators like captions; what the lint can and can't catch is owned in
+[`NEXT-STEPS.md`](./NEXT-STEPS.md) A1.
 The model is told what a hint *is*: the location of a relevant private
 moment, to be routed to, never restated. And if nothing cleared the score
 floor, the engine returns `not-found` without making the call at all —
@@ -127,6 +133,14 @@ mix** — the model can't claim `supported` while citing nothing but hints.
 Finally, `assertCitationsGroundedInEvidence` verifies every citation is the
 exact (id, url) pair of something actually retrieved. An invented source is
 an error, not a footnote.
+
+One mode gets a fourth layer. A `related-material` answer's prose is not the
+model's: after grounding, the engine replaces it with a fixed sentence
+rendered from the cited hints' label and locator
+(`renderRelatedMaterialAnswer` in `src/public-safe.ts`). A hint citation is
+provenance without backing — the hint carries no text — so free prose there
+was the one place a confabulated "summary" of private material could pass
+every gate. Now the mode can point, never assert content.
 
 One UI lesson: **retrieved is not cited**. Retrieved neighbors are
 candidates; final citations are evidence. If you build a web UI around this,
@@ -216,12 +230,16 @@ get `temperature: 0`).
    files the way you want your citations to read. Frontmatter the engine
    reads: `title` (required), `description`/`summary`/`meaning`,
    `themes`/`keywords`/`topics`, `date`, `draft: true` to skip a file.
-3. Private notes additionally need `about` (the public URL to route to) and
-   `locator` (where the moment lives). One contract to respect: a note's
-   `title` and `locator` ARE public-safe surface — they travel into hints and
-   answers — so write them like captions, not like the note itself. Only the
-   body is private. No private layer? Remove `privateNotesDir` from the
-   config and the engine runs public-only.
+3. Private notes additionally need `about` (the public URL to route to),
+   `locator` (where the moment lives), and `label` — the display name that
+   travels into hints and answers. The `title` and body stay private (they
+   are embedded for search, never shown to the model); the `label` and
+   `locator` ARE public surface, so write them like captions, not like the
+   note itself. A build-time lint rejects a label or locator that quotes the
+   note's body — repeating the title as the label is fine *when the title is
+   safe to publish*, and declaring that per note is the point. No private
+   layer? Remove `privateNotesDir` from the config and the engine runs
+   public-only.
 4. Replace `example-content/` with your corpus and rerun `npm run index`.
 5. Rewrite `eval/gold.yaml` for your corpus — keep the refusals.
 

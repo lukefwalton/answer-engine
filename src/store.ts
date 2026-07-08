@@ -14,8 +14,10 @@ import type { IndexEntry } from './types.js';
 export const INDEX_PATH = resolve('artifacts/index.json');
 
 /** Bump when IndexEntry changes shape; old artifacts then fail fast with a
- *  rebuild message instead of generic type errors deep in retrieval. */
-export const INDEX_SCHEMA_VERSION = 2;
+ *  rebuild message instead of generic type errors deep in retrieval.
+ *  v3: PrivateNote split `title` (private, embedded) from `label` (the
+ *  public-safe field that travels) — see NEXT-STEPS.md A1. */
+export const INDEX_SCHEMA_VERSION = 3;
 
 const REBUILD = 'Delete artifacts/index.json and rerun `npm run index`.';
 
@@ -32,7 +34,17 @@ function entryIsValid(e: Partial<IndexEntry>): boolean {
     return typeof e.record?.id === 'string' && typeof e.record.url === 'string';
   }
   if (e.sourceType === 'note') {
-    return typeof e.note?.id === 'string' && typeof e.note.url === 'string';
+    // title/label/locator are dereferenced by embedding, prompts, and the
+    // related-material template — an unmigrated v2 note (no title) or a
+    // hand-edited entry must fail here with the remedy, not downstream
+    // with 'undefined' in a label.
+    return (
+      typeof e.note?.id === 'string' &&
+      typeof e.note.url === 'string' &&
+      typeof e.note.title === 'string' &&
+      typeof e.note.label === 'string' &&
+      typeof e.note.locator === 'string'
+    );
   }
   return false;
 }
@@ -47,8 +59,9 @@ export function readIndexFile(path: string = INDEX_PATH): IndexEntry[] {
   }
   const file = parsed as { version?: unknown; entries?: unknown };
   if (typeof parsed !== 'object' || parsed === null || file.version !== INDEX_SCHEMA_VERSION) {
+    const found = typeof parsed === 'object' && parsed !== null ? String(file.version) : 'none';
     throw new Error(
-      `index at ${path} is not schema version ${INDEX_SCHEMA_VERSION}. ${REBUILD}`,
+      `index at ${path} is schema version ${found}, not schema version ${INDEX_SCHEMA_VERSION}. ${REBUILD}`,
     );
   }
   if (!Array.isArray(file.entries)) {

@@ -1,5 +1,6 @@
 ---
 title: "Forgiveness of Sins sermon"
+label: "Forgiveness of Sins sermon"
 about: https://archive.org/details/forgivenessofsin00smitrich
 locator: "The Forgiveness of Sins, and Other Sermons (1904), sermon I"
 ---

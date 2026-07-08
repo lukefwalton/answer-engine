@@ -42,7 +42,7 @@ Note the deliberate theme collision: Amos and Micah carry "justice," which Adam 
 
 ### Private ledger — George sermons, dir `demo/corpus/private/`
 
-These are **real George minor works**, designated private (a layer assignment, not secrecy). Note frontmatter: `title` (the label that travels — keep it public-safe), `about` (a **real** public George page to route to, e.g. the work's Wikisource/IA page or `https://en.wikipedia.org/wiki/George_Adam_Smith`), `locator` (where the moment lives, e.g. "Forgiveness of Sins (1905), sermon II"). Body: the real sermon text. The id is `note:<slug>`.
+These are **real George minor works**, designated private (a layer assignment, not secrecy). Note frontmatter: `title` (private — embedded for retrieval, never travels), `label` (required since the core's A1 split: the display name that DOES travel; here it can simply repeat the title, since this "private" layer is public-domain by design), `about` (a **real** public George page to route to, e.g. the work's Wikisource/IA page or `https://en.wikipedia.org/wiki/George_Adam_Smith`), `locator` (where the moment lives, e.g. "Forgiveness of Sins (1905), sermon II"). `label` and `locator` must pass the build lint (`assertPublicSafeField` in `src/public-safe.ts`): single line, ≤120 chars, no 5-token run shared with the note body — a bibliographic locator that names the volume is fine (4-token overlap is the calibrated margin; see delta-log row 21). Body: the real sermon text. The id is `note:<slug>`.
 
 | slug (filename) | unit to extract |
 |---|---|

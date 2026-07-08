@@ -1,5 +1,6 @@
 ---
 title: "Private Amos marginalia on divine justice"
+label: "Private Amos marginalia on divine justice"
 about: https://en.wikipedia.org/wiki/George_Adam_Smith
 locator: "study marginalia, Amos"
 synthetic: true

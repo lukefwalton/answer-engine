@@ -21,6 +21,17 @@ export interface ArchiveRecord {
 }
 
 /**
+ * A traveling string the build-time lint has passed. The only constructor is
+ * `assertPublicSafeField` (src/public-safe.ts), so corpus code cannot put a
+ * raw frontmatter string on the path toward the model — the same trick as
+ * RoutingHint's missing text field, applied to the fields that DO travel.
+ * Honest scope: the brand erases at JSON boundaries, so an index read from
+ * disk is trusted to have been built through the lint; the guarantee is
+ * "linted when the corpus was built", not "re-checked on every read".
+ */
+export type PublicSafe = string & { readonly __publicSafe: 'lint-passed' };
+
+/**
  * One piece of the PRIVATE layer — searchable, never quotable. The text is
  * embedded so retrieval can find the moment, but it is stripped before the
  * model sees anything (see no-leak.ts). In production these are chunked
@@ -29,27 +40,33 @@ export interface ArchiveRecord {
 export interface PrivateNote {
   /** Stable id: `note:${slug}`. */
   id: string;
-  /** What the note is (e.g. "Harbor Lights — writing session"). Public-safe. */
-  label: string;
+  /** The note's own name (frontmatter `title`). PRIVATE — embedded for
+   *  retrieval alongside the body, never shown to the model. */
+  title: string;
+  /** The display label that travels (frontmatter `label`, required). May
+   *  simply repeat the title when the title is safe to publish — but that is
+   *  a decision the author makes explicitly, per note. */
+  label: PublicSafe;
   /** The PUBLIC page a citation routes the reader to. */
   url: string;
   /** Where in the private material the moment lives ("notebook, p. 12").
-   *  Public-safe like the label — both travel into hints and answers. */
-  locator: string;
+   *  Travels like the label, linted like the label. */
+  locator: PublicSafe;
   /** The private text. Embedded for retrieval; never rendered into a prompt. */
   text: string;
 }
 
 /**
  * A private note reduced to its public-safe routing surface. Deliberately has
- * NO field for the note's text — code that tried to hand private prose to the
- * model would not compile.
+ * NO field for the note's text or title — code that tried to hand private
+ * prose to the model would not compile — and the fields it does carry are
+ * PublicSafe: constructible only through the build-time lint.
  */
 export interface RoutingHint {
   hintId: string;
-  label: string;
+  label: PublicSafe;
   url: string;
-  locator: string;
+  locator: PublicSafe;
 }
 
 /** Everything the answer model is allowed to see. */

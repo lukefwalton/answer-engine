@@ -37,48 +37,63 @@ failure mode first.
 These are places where the structure does not (or cannot) catch the unwanted
 move, so it is held by a softer guard and owned openly.
 
-### A1. Routing-hint metadata travels unguarded
+### A1. Routing-hint metadata — the boundary is now structural; its edges named
 The type that crosses to the model (`RoutingHint` in `src/types.ts`) has no
 field for a note's body text, so the body cannot leak along that path
-(`src/no-leak.ts`). But two fields do travel: the **label** (currently the
-note's title, set in `buildPrivateNotes` in `src/corpus.ts`) and the
-**locator** (from frontmatter). A note with a sensitive title leaks through its
-label, and nothing in the type stops it.
+(`src/no-leak.ts`). Two fields do travel — the **label** and the **locator**
+— and they used to be raw frontmatter guarded by a warning comment: a note
+with a sensitive title leaked through its own label, and nothing in the type
+stopped it.
 
-- **Trade-off:** richer labels and locators help the model route well; every
-  field that travels is also a leak surface.
-- **Current posture:** documented, with a loud warning at the population site
-  (`src/corpus.ts`) and in the README — keep titles and locators public-safe.
-  The guard is discipline, not structure.
-- **For a fork / contributor:** make the boundary structural instead of
-  advisory. Options: derive the label from a public-safe identifier rather than
-  the raw title; whitelist or sanitize the fields that may travel; or carry a
-  separate, explicitly-public "display label" distinct from the private title.
-  A build-time lint that flags obviously-private patterns in the traveling
-  fields is a cheap first step before any of these. Any of them moves this seam
-  from "owned" to "inexpressible," which is where it should end up.
+- **Current posture:** structural, three layers deep. The traveling label is
+  an explicit `label:` frontmatter field, distinct from the private `title`
+  (which is embedded for retrieval and never travels) — a fork upgrading past
+  this change fails loudly until each note declares one, which is the point:
+  what travels is now an authored decision per note, not a default. Both
+  traveling fields are typed `PublicSafe`, whose only constructor is the
+  build-time lint (`assertPublicSafeField` in `src/public-safe.ts`): single
+  line, capped length, and no run of five consecutive words shared with the
+  note's private body — a field that quotes the note fails the build, not the
+  answer. The index schema versioned past the split (v3, `src/store.ts`), so
+  a stale artifact fails fast with the remedy.
+- **The residue, named:** the lint is a tripwire, not a classifier — a short
+  private phrase, or private meaning carried in public words, still passes
+  it. `url` (`about:`) travels unlinted as a declared public page. And the
+  brand erases at JSON boundaries: an index read from disk is trusted to have
+  been built through the lint, not re-checked. The gold canaries
+  (`eval/gold.yaml`) backstop all three at answer time.
+- **For a fork / contributor:** tune `PUBLIC_SAFE_NGRAM_WORDS` against your
+  corpus (5 is calibrated so bibliographic locators pass; see the constant's
+  comment), and if your private layer has a known sensitive vocabulary, add a
+  denylist check beside the n-gram tripwire — the lint is one function with
+  one call site, built to take it.
 
-### A2. Related-material mode admits confabulation (provenance without backing)
-In related-material mode the answer cites a routing hint and is otherwise free
-prose. The hint is real and was retrieved, so a claim citing it **passes the
-structural grounding gate** (`assertCitationsGroundedInEvidence` in
-`src/answer.ts`) — it has provenance. But the hint carries no text, so there is
-**no backing** for any prose about the moment's actual contents. A model that
-fabricates substance and cites the hint anyway clears the gate. This is exactly
-the provenance-without-backing residue the grounding definition already declines
-to certify; it is not a hole in the gate, it is the edge the gate was honest
-about.
+### A2. Related-material confabulation — closed structurally; the residue moved
+In related-material mode the answer cites a routing hint, and a hint is real
+provenance with **no backing**: it carries no text, so prose about the
+moment's actual contents can never be certified. This was the
+provenance-without-backing edge the grounding gate
+(`assertCitationsGroundedInEvidence` in `src/answer.ts`) was honest about — a
+model that fabricated substance and cited the hint anyway cleared it, held
+only by a soft prompt instruction (route, don't restate).
 
-- **Trade-off:** natural-language routing ("there's a relevant private passage
-  here") is useful and humane; it is also the freedom a confabulation hides in.
-- **Current posture:** held by a soft prompt instruction (route, don't restate —
-  `src/prompt.ts`) and a hand-written set of forbidden-answer patterns (see A3).
-  The model's unbacked claim is disavowable as such, and owned.
-- **For a fork / contributor:** close it structurally by **templating the
-  related-material answer from the hint's public-safe fields** (label, locator,
-  URL), so the mode can only point, never assert content. Confabulation then
-  becomes inexpressible in that mode rather than merely discouraged. This is the
-  highest-value structural ticket in the file.
+- **Current posture:** closed. The related-material answer is no longer model
+  prose: `finalizeAnswer` (`src/answer.ts`) replaces it with a fixed template
+  rendered only from the cited hints' public-safe fields
+  (`renderRelatedMaterialAnswer` in `src/public-safe.ts`), after grounding, so
+  the mode can point and never assert content. Confabulation in this mode is
+  now inexpressible rather than discouraged; the gold suite pins the template
+  (`expectAnswerPatterns` on q07 and the extraction queries) so a regression
+  cannot silently un-template the mode.
+- **What the closure is worth:** exactly the safety of the fields it renders.
+  The template's prose is label + locator — which is A1's seam. Closing A2
+  raised the stakes on closing A1.
+- **The residue, named:** `supported` mode still carries a hint citation under
+  free prose (a record backs the prose; the hint adds where else to look), so
+  a model could still confabulate a note's contents *there*. That residue is
+  owned by gold canary patterns (q15 and the canary comment in
+  `eval/gold.yaml`), not by structure — templating supported-mode prose would
+  mean templating record-backed answers, which is the product.
 
 ### A3. Forbidden-answer patterns are hand-written and partial
 The checks that catch a few specific bad outputs (for example, a raw URL where
@@ -90,10 +105,20 @@ the `forbidAnswerPatterns` field on a gold query, applied in `judgeAnswer`
   positives; broad ones catch more but start refusing good answers.
 - **Current posture:** partial coverage, openly. Treated as a regression guard
   for known failure shapes, not a soundness boundary.
-- **For a fork / contributor:** audit the pattern set against the modes; add
-  coverage for each mode's characteristic failure; consider replacing the most
-  fragile patterns with a structural check (A2 removes the need for several of
-  them outright).
+- **Current posture (updated):** audited against the modes. Each mode now
+  carries its characteristic-failure coverage in `eval/gold.yaml`: canon
+  answers forbid private-body canary phrases (q02, q05), refusals forbid
+  URL/citation-shaped debris (q08–q10, q14), the boundary queries forbid the
+  canaries outright and *require* the A2 template (`expectAnswerPatterns`),
+  and the extraction/injection queries (q11–q14) aim the attack directly at
+  the boundary. The A2 template did what was predicted — the fragile
+  "did the model restate the note?" patterns are now backstops behind a
+  structural check rather than the only line.
+- **For a fork / contributor:** the shape of the audit transfers, the
+  patterns don't. When you swap in your corpus, pick fresh canaries from your
+  own private bodies, verify they appear on no public page, and keep one
+  extraction query and one injection query aimed at whatever your private
+  layer actually is.
 
 ---
 
