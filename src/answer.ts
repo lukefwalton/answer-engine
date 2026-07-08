@@ -35,7 +35,10 @@ const MODES: ReadonlySet<AnswerMode> = new Set([
 ]);
 
 /** Validate the model's JSON against AnswerOutput, including the contract
- *  that runs both ways: not-found ⇒ empty answer; sourced modes ⇒ prose. */
+ *  that runs both ways: not-found ⇒ empty answer; sourced modes ⇒ prose.
+ *  One deliberate gap: a declared related-material answer may arrive with
+ *  empty prose, because its prose is engine-rendered (finalizeAnswer) — the
+ *  full prose contract is re-enforced there, after the mode is final. */
 export function validateAnswer(raw: unknown): AnswerOutput {
   if (typeof raw !== 'object' || raw === null) throw new Error('answer must be an object');
   const obj = raw as Record<string, unknown>;
@@ -47,7 +50,7 @@ export function validateAnswer(raw: unknown): AnswerOutput {
   if (mode === 'not-found' && obj.answer !== '') {
     throw new Error("a 'not-found' answer must carry no prose");
   }
-  if (mode !== 'not-found' && obj.answer.trim().length === 0) {
+  if (mode !== 'not-found' && mode !== 'related-material' && obj.answer.trim().length === 0) {
     throw new Error(`a '${mode}' answer requires prose; use 'not-found' to decline`);
   }
   if (!Array.isArray(obj.citations)) throw new Error('answer.citations must be an array');
@@ -177,6 +180,13 @@ export function finalizeAnswer(validated: AnswerOutput, evidence: AnswerEvidence
   assertCitationsGroundedInEvidence(repaired, evidence);
   if (repaired.mode === 'related-material') {
     return { ...repaired, answer: renderRelatedMaterialAnswer(repaired.citations, evidence.hints) };
+  }
+  // validateAnswer admits empty prose only for a declared related-material,
+  // whose prose is rendered above. If repair re-derived the mode out of
+  // related-material (e.g. its citations snapped to a record), the sourced
+  // prose contract still has to hold at the door.
+  if (repaired.mode !== 'not-found' && repaired.answer.trim().length === 0) {
+    throw new Error(`a '${repaired.mode}' answer requires prose; use 'not-found' to decline`);
   }
   return repaired;
 }

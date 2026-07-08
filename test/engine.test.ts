@@ -352,6 +352,14 @@ test('answer: validateAnswer enforces the mode/answer contract in both direction
   assert.throws(() => validateAnswer({ mode: 'maybe', answer: '', citations: [] }), /not a valid mode/);
   assert.throws(() => validateAnswer({ mode: 'not-found', answer: 'guess', citations: [] }), /no prose/);
   assert.throws(() => validateAnswer({ mode: 'partial', answer: '  ', citations: [] }), /requires prose/);
+  assert.throws(() => validateAnswer({ mode: 'supported', answer: '', citations: [HINT_CITE] }), /requires prose/);
+  // The one deliberate gap: related-material prose is engine-rendered, so
+  // the model may (and, told the prose is standardized, often does) leave it
+  // empty. finalizeAnswer re-enforces the prose contract after templating.
+  assert.equal(
+    validateAnswer({ mode: 'related-material', answer: '', citations: [HINT_CITE] }).mode,
+    'related-material',
+  );
 });
 
 test('answer: mode is derived from the citation mix, not taken on faith', () => {
@@ -550,6 +558,32 @@ test('answer: finalizeAnswer makes related-material prose deterministic', () => 
   // Refusals pass through bare.
   assert.deepEqual(
     finalizeAnswer({ mode: 'not-found', answer: '', citations: [] }, evidence),
+    { mode: 'not-found', answer: '', citations: [] },
+  );
+
+  // The empty-prose path end to end (the shape the model actually returns
+  // once told its related-material prose is standardized): validate admits
+  // it, finalize renders the template.
+  const emptyProse = finalizeAnswer(
+    validateAnswer({ mode: 'related-material', answer: '', citations: [HINT_CITE] }),
+    evidence,
+  );
+  assert.match(emptyProse.answer, /^There is private material related to this/);
+
+  // But the gap does not leak past the mode it exists for: if repair
+  // re-derives an empty-prose answer OUT of related-material, the sourced
+  // prose contract is enforced at the door...
+  assert.throws(
+    () =>
+      finalizeAnswer(
+        { mode: 'related-material', answer: '', citations: [RECORD_CITE] },
+        evidence,
+      ),
+    /'partial' answer requires prose/,
+  );
+  // ...and with no citations at all it normalizes to a bare refusal.
+  assert.deepEqual(
+    finalizeAnswer({ mode: 'related-material', answer: '', citations: [] }, evidence),
     { mode: 'not-found', answer: '', citations: [] },
   );
 });
