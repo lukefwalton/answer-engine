@@ -162,6 +162,36 @@ When you point the engine at your own corpus, rewrite `gold.yaml` against it
 `archive.config.ts`). Add a query every time the engine surprises you —
 that's the regression suite writing itself.
 
+## Growing the gold set past a handful
+
+Fourteen queries fit in one head. When the production set behind this engine
+grew from 44 to 218, the things that kept it honest were mechanical, and they
+transfer:
+
+- **Slice by collection, one author per slice.** Give each writer a list of
+  files, not the whole corpus, and make them read the files they write about.
+  A gold query grounded in a page the writer never opened is a guess dressed
+  as a test.
+- **Keep the mix.** Roughly 60% supported retrieval, 15% partial or
+  related-material (the record bears on it but does not settle it), and 25%
+  honest declines: a wrong premise, an invented work or award, a demand for
+  private text, a third party's words rephrased as the author's, a namesake,
+  a number inflated one notch. The declines are the half that protects the
+  second promise; a set that grows only its supported rows grows a
+  hallucination detector with no refusal floor.
+- **Namespace sources per slice.** Prefix new source-class names by slice so
+  two writers never collide, and verify every id against the corpus before it
+  goes in — the offline test that loads the gold set and checks its sources
+  against real records caught a stale id in production that had passed for
+  months because the same class also matched by URL substring.
+- **Must-haves are vetoable.** A brief can say "this page should answer X";
+  the writer still opens the page, and if it does not support X, the query is
+  written as a decline or not at all. Stamping an expected source the page
+  cannot carry is special-casing the question from the other side.
+- **Grow it when you grow the corpus.** Every new public surface gets at
+  least one query, so a page that never became a record fails the eval
+  instead of producing a polite, wrong `not-found` (NEXT-STEPS B7).
+
 ## What the gold set cannot catch
 
 The set checks recall for the cases it names: a listed source must surface, a

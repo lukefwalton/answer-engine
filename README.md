@@ -269,6 +269,13 @@ In the order we'd add them:
   per cluster, plus a single corroborator when the winner leads by a margin.
   This shapes what synthesis *sees*, not what the gate certifies — retrieved
   is still not cited.
+- **Aggregate records per theme** — a spanning question ("which essays and
+  songs are about X?") has no single record to cite until each theme becomes
+  one: an authored blurb, the member titles grouped by collection, a real
+  URL. Derive the members at index time; author only the blurb (NEXT-STEPS B5).
+- **A tested theme vocabulary** — one alias file with lowercase, multi-word
+  aliases, a blurb on every public theme, and a test that bans the bare words
+  you have already watched match the wrong sense (NEXT-STEPS B6).
 - **An HTTP handler** around `retrieve` + `answerQuestion`, with a rate
   limit, query cap, and cache.
 - **SQLite or pgvector** when the archive outgrows in-memory cosine — the

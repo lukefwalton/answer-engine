@@ -196,6 +196,73 @@ operational discipline, not something the type system enforces across time.
   refuse to serve a mixed store; make a partial re-index impossible to commit
   rather than merely inadvisable.
 
+### B5. Themes are per-record; cross-medium questions have no record to land on
+Each markdown file becomes one record, and `themes` are strings on that record
+(`asThemes` in `src/corpus.ts`). A question that spans records — "which essays
+and songs are about staying?" — has to be answered by retrieving several
+individual records and hoping synthesis stitches them, with no single page to
+cite for the through-line. In the production deployment this failed until each
+curated theme became its own citable record: a short authored blurb stating the
+through-line, the member titles grouped by collection, and the canonical URL of
+the theme's browse page. Retrieval then lands the aggregate for the spanning
+question and the individual record for the specific one.
+
+- **Trade-off:** aggregate records are derived, so they must be rebuilt whenever
+  membership changes, and they double as an attractive target for a lazy theme
+  boost (a record whose body is a list of titles matches many queries a little).
+- **Current posture:** not modeled here, by scope — the teaching corpus is four
+  works, small enough that a reader holds the themes in their head. The
+  README's "Where to take it" names it as a step.
+- **For a fork / contributor:** derive one record per theme from the corpus at
+  index time (never hand-write the member list), give it a real URL a reader
+  can open, keep its blurb authored and its member list generated, and add a
+  gold query that spans two collections so the aggregate has to surface.
+
+### B6. A theme vocabulary is only as clean as its loosest alias
+The theme boost rewards a verbatim theme match anywhere in a record
+(`hasThemeMatch` in `src/retrieve.ts`) with no guard for ambiguity. Production
+learned this the slow way: single-word aliases such as `effect`, `modes`,
+`keyboard`, and `classical` matched philosophy essays in a different sense and
+pulled them onto audio-craft theme pages, so the aggregate records in B5
+carried wrong members and the blurb writers had to argue with their own
+dossiers. The fix was vocabulary, not scoring: multi-word aliases
+(`classically trained`, `musical modes`, `keyboardist`), a test that bans the
+known collision words, a required blurb on every public theme, and a minimum
+count of primary members before a theme earns a page (a theme that matches one
+or two files is an alias of an existing theme, not a page).
+
+- **Trade-off:** specific aliases miss some legitimate mentions; bare words
+  catch everything, including the wrong sense. On a small corpus the miss is
+  invisible and the pollution is cheap to spot by hand; on a large one the
+  reverse holds.
+- **Current posture:** themes here are freeform frontmatter strings and the
+  boost is unguarded (see also the document-frequency cap in "Where to take
+  it"); the example corpus is small enough that no collision has bitten.
+- **For a fork / contributor:** keep one vocabulary file with lowercase,
+  multi-word aliases; test it (no duplicate alias inside a theme, no bare
+  collision words, a blurb on every public theme); and judge a new theme by
+  its primary members, not its total matches — hub themes match half the
+  corpus and make every small theme look "contained".
+
+### B7. A public surface with no record is invisible, and the engine calls that a refusal
+The engine declines honestly when the archive has nothing bearing on a
+question. It declines just as honestly, and wrongly, when the site *does*
+answer the question on a page that never became a record. Production found
+four such pages (an apps hub, an academic CV, a Japanese-language landing page,
+a press kit) only when a gold writer went looking for questions those pages
+settle and every one came back `not-found`.
+
+- **Trade-off:** none in the engine — this is the site adapter's job, and this
+  repository deliberately has no page or sitemap concept. But the failure
+  presents as a correct refusal, which is exactly the failure the eval is
+  worst at noticing.
+- **Current posture:** out of scope here; `buildCorpus` only sees the files it
+  is pointed at.
+- **For a fork / contributor:** in your adapter, diff the set of published
+  URLs against the set of record URLs at build time and fail on the gap; and
+  when you grow the gold set, write at least one query per public surface so a
+  missing record fails loudly instead of politely.
+
 ---
 
 ## C. Performance levers that trade quality for cost
