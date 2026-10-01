@@ -1,23 +1,32 @@
-// npm run index — read both layers, embed what changed, write artifacts/index.json.
+// npm run index — read both layers, draft the gists the author asked for,
+// resolve each fragment's exposure, embed what changed, and write the private
+// index (artifacts/index.json) and the author's projections file
+// (artifacts/projections.json). Both are private material and gitignored.
 //
-// Idempotent by content hash: a source only re-embeds when its embedded text
-// or the configured model changed. Sources that disappeared are pruned
-// automatically because the index is rewritten from live sources.
+// Idempotent by content hash on two axes: a fragment only re-embeds when its
+// embed string or the configured embedding model changed, and a gist is only
+// redrafted when its text, the drafter's model, or the prompt version changed
+// (src/ingest/gist.ts). An author's edited gist is never redrafted. Sources
+// that disappeared are pruned automatically because both files are rewritten
+// from live sources. A run with nothing to draft and nothing to embed needs no
+// key.
 
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 
 import { config } from '../../archive.config.js';
-import { buildCorpus, buildPrivateNotes, embedText, noteEmbedText } from '../corpus.js';
+import { fromArchiveRecord, fromPrivateNote } from '../adapters/teaching.js';
+import type { Entity, Fragment, SemanticProjection } from '../contract.js';
+import { buildCorpus, buildPrivateNotes } from '../corpus.js';
+import { embedStringFor } from '../embed-string.js';
 import { batchInputs, embedBatch, truncateForEmbedding } from '../embedding.js';
-import {
-  assertHomogeneousIndex,
-  entrySourceId,
-  INDEX_PATH,
-  readIndexFile,
-  writeIndexFile,
-} from '../store.js';
-import type { ArchiveRecord, IndexEntry, PrivateNote } from '../types.js';
+import { resolveDisclosure } from '../ingest/disclosure.js';
+import { createOpenAIGistDrafter, draftProjections } from '../ingest/gist.js';
+import type { GistDrafter, ProjectionDraftInput } from '../ingest/gist.js';
+import { PROJECTIONS_PATH, readProjections, writeProjections } from '../ingest/projections.js';
+import { PublicSafeLintError } from '../public-safe.js';
+import { assertHomogeneousEntries, INDEX_PATH, INDEX_SCHEMA_VERSION, readIndex, writeIndex } from '../store.js';
+import type { FragmentEntry } from '../store.js';
 
 /** Hash the text actually sent to OpenAI, so edits past the truncation point
  *  don't force a paid re-embed the model would never see. */
@@ -25,9 +34,43 @@ function contentHash(text: string): string {
   return createHash('sha1').update(truncateForEmbedding(text)).digest('hex').slice(0, 16);
 }
 
-type Source =
-  | { sourceType: 'record'; id: string; record: ArchiveRecord; text: string }
-  | { sourceType: 'note'; id: string; note: PrivateNote; text: string };
+let cachedClient: OpenAI | undefined;
+function client(): OpenAI {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not set. Put it in .env or the environment.');
+  }
+  return (cachedClient ??= new OpenAI());
+}
+
+/** Opens the client on first use, so a run with every gist current needs no key. */
+function lazyDrafter(model: string): GistDrafter {
+  let inner: GistDrafter | undefined;
+  return {
+    model,
+    draft: (request) => (inner ??= createOpenAIGistDrafter(client(), { model })).draft(request),
+  };
+}
+
+/** The previous index's entries by fragment id, for vector reuse. A previous
+ *  index that fails the metadata lint (the rule tightened, or the author just
+ *  fixed the string this run will rewrite) is simply not reused; any other
+ *  failure (an old schema, junk) keeps its own remedy. */
+function previousEntries(): Map<string, FragmentEntry> {
+  try {
+    return new Map(readIndex().entries.map((e) => [e.fragment.id, e]));
+  } catch (err) {
+    if (err instanceof PublicSafeLintError) {
+      console.warn(`Previous index not reused (${err.message}); re-embedding every fragment.`);
+      return new Map();
+    }
+    throw err;
+  }
+}
+
+interface Source {
+  entity: Entity;
+  fragment: Fragment;
+}
 
 async function main(): Promise<void> {
   const records = buildCorpus(config);
@@ -39,69 +82,109 @@ async function main(): Promise<void> {
   const notes = buildPrivateNotes(config);
   console.log(`Corpus: ${records.length} records, ${notes.length} private notes`);
 
-  const sources: Source[] = [
-    ...records.map((record): Source => ({ sourceType: 'record', id: record.id, record, text: embedText(record) })),
-    ...notes.map((note): Source => ({ sourceType: 'note', id: note.id, note, text: noteEmbedText(note) })),
-  ];
-
-  const stored = new Map(readIndexFile().map((e) => [entrySourceId(e), e]));
-  const entries: IndexEntry[] = [];
-  const toEmbed: { source: Source; hash: string }[] = [];
-
+  const sources: Source[] = [...records.map(fromArchiveRecord), ...notes.map(fromPrivateNote)];
+  const entities = new Map<string, Entity>();
+  const byEntity = new Map<string, Source[]>();
   for (const source of sources) {
-    const hash = contentHash(source.text);
-    const existing = stored.get(source.id);
-    if (
-      existing &&
-      existing.contentHash === hash &&
-      existing.model === config.embeddingModel &&
-      existing.sourceType === source.sourceType
-    ) {
-      // Vector is current; refresh the source (metadata may have changed).
-      entries.push(
-        source.sourceType === 'record'
-          ? { ...existing, sourceType: 'record', record: source.record }
-          : { ...existing, sourceType: 'note', note: source.note },
-      );
-    } else {
-      toEmbed.push({ source, hash });
+    const { entity } = source;
+    if (entities.has(entity.id)) {
+      throw new Error(`two sources share the id '${entity.id}'; ids must be unique across collections and notes.`);
     }
+    entities.set(entity.id, entity);
+    byEntity.set(entity.id, [source]);
   }
 
+  // Projections: draft where the author asked for a gist, keep edits, carry the rest.
+  const stored = readProjections(PROJECTIONS_PATH);
+  const drafter = lazyDrafter(config.gist?.model ?? config.answerModel);
+  const projections = new Map<string, SemanticProjection>();
+  const unservable: { fragmentId: string; reason: string }[] = [];
+  const totals = { drafted: 0, skipped: 0, kept: 0, failed: 0 };
+  for (const [entityId, group] of byEntity) {
+    const entity = entities.get(entityId)!;
+    const inputs: ProjectionDraftInput[] = group.map(({ fragment }) => ({
+      id: fragment.id,
+      text: fragment.text,
+      locator: fragment.locator,
+      requested: entity.disclosure.exposure,
+    }));
+    const result = await draftProjections(entity, inputs, drafter, {
+      existing: stored,
+      allowedNames: config.gist?.allowedNames?.[entity.id],
+      maxChars: config.gist?.maxChars,
+      ngramWords: config.gist?.ngramWords,
+    });
+    for (const [id, projection] of result.projections) projections.set(id, projection);
+    unservable.push(...result.unservable);
+    totals.drafted += result.stats.drafted;
+    totals.skipped += result.stats.skipped;
+    totals.kept += result.stats.kept;
+    totals.failed += result.stats.failed;
+  }
+  if (projections.size > 0 || stored.size > 0) {
+    writeProjections(projections, PROJECTIONS_PATH);
+    console.log(
+      `Projections: ${totals.drafted} drafted, ${totals.skipped} unchanged, ${totals.kept} edited and kept, ` +
+        `${totals.failed} failed the lint → ${PROJECTIONS_PATH}`,
+    );
+  }
+
+  // Resolve every fragment's exposure from the entity default and its projection
+  // (docs/CONTRACT.md §3): the one place the policy is decided, stored on the fragment.
+  for (const { entity, fragment } of sources) {
+    const projection = projections.get(fragment.id);
+    if (projection) fragment.projection = projection;
+    fragment.disclosure = resolveDisclosure(entity, { exposure: entity.disclosure.exposure, projection }, { path: fragment.id });
+  }
+  for (const { fragmentId, reason } of unservable) {
+    console.log(`  ${fragmentId}: asked for 'semantic', resolved to 'locator' — ${reason}`);
+  }
+
+  // Embed what changed.
+  const previous = previousEntries();
+  const entries: FragmentEntry[] = [];
+  const toEmbed: { source: Source; text: string; hash: string }[] = [];
+  for (const source of sources) {
+    const text = embedStringFor(source.fragment, source.entity);
+    const hash = contentHash(text);
+    const existing = previous.get(source.fragment.id);
+    if (existing && existing.contentHash === hash && existing.model === config.embeddingModel) {
+      // Vector is current; the fragment (metadata, resolved disclosure, projection) is refreshed.
+      entries.push({ ...existing, fragment: source.fragment });
+    } else {
+      toEmbed.push({ source, text, hash });
+    }
+  }
   console.log(`Embedding ${toEmbed.length} new/changed, ${entries.length} unchanged`);
 
   if (toEmbed.length > 0) {
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY is not set. Put it in .env or the environment.');
-    }
-    const client = new OpenAI();
-    const byId = new Map(toEmbed.map((j) => [j.source.id, j]));
+    const byId = new Map(toEmbed.map((job) => [job.source.fragment.id, job]));
     let done = 0;
-    for (const batch of batchInputs(toEmbed.map((j) => ({ id: j.source.id, text: j.source.text })))) {
-      const results = await embedBatch(client, batch, { model: config.embeddingModel });
+    for (const batch of batchInputs(toEmbed.map((job) => ({ id: job.source.fragment.id, text: job.text })))) {
+      const results = await embedBatch(client(), batch, { model: config.embeddingModel });
       for (const result of results) {
         const job = byId.get(result.id)!;
-        const vec = {
+        entries.push({
           model: config.embeddingModel,
           dimensions: result.vector.length,
           vector: result.vector,
           contentHash: job.hash,
-        };
-        entries.push(
-          job.source.sourceType === 'record'
-            ? { ...vec, sourceType: 'record', record: job.source.record }
-            : { ...vec, sourceType: 'note', note: job.source.note },
-        );
+          fragment: job.source.fragment,
+        });
       }
       done += batch.length;
       console.log(`  embedded ${done}/${toEmbed.length}`);
     }
   }
 
-  entries.sort((a, b) => entrySourceId(a).localeCompare(entrySourceId(b)));
-  assertHomogeneousIndex(entries);
-  writeIndexFile(entries);
-  console.log(`Wrote ${entries.length} entries to ${INDEX_PATH}`);
+  entries.sort((a, b) => a.fragment.id.localeCompare(b.fragment.id));
+  assertHomogeneousEntries(entries);
+  writeIndex({
+    version: INDEX_SCHEMA_VERSION,
+    entities: [...entities.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    entries,
+  });
+  console.log(`Wrote ${entries.length} fragments across ${entities.size} entities to ${INDEX_PATH}`);
 }
 
 main().catch((err) => {

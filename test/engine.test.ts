@@ -21,14 +21,18 @@ import {
   judgeAnswerMode,
   judgeRetrieval,
   loadGold,
+  loadGoldFile,
+  sweepCanaries,
   parseEvalReport,
   parseEvalReportJson,
 } from '../src/evaluate.js';
 import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
 import { toAnswerEvidence } from '../src/evidence.js';
-import { project } from '../src/no-leak.js';
+import { fromPrivateNote, toPrivateNote } from '../src/adapters/teaching.js';
+import { project, search } from '../src/no-leak.js';
 import {
   assertPublicSafeField,
+  assertSemanticProjection,
   PUBLIC_SAFE_MAX_CHARS,
   renderRelatedMaterialAnswer,
 } from '../src/public-safe.js';
@@ -205,6 +209,38 @@ test('corpus: malformed frontmatter and missing required fields name the file', 
   );
 });
 
+test('corpus: a note may request its exposure; anything but semantic, locator, or none names the file', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ae-exposure-'));
+  mkdirSync(join(root, 'notebook'));
+  const front = (exposure: string) =>
+    `---\ntitle: "A note"\nlabel: "A note"\nabout: https://example.com/x/\nlocator: "p. 1"\nexposure: ${exposure}\n---\nprivate text\n`;
+  writeFileSync(join(root, 'notebook', 'semantic.md'), front('semantic'), 'utf8');
+  writeFileSync(join(root, 'notebook', 'none.md'), front('none'), 'utf8');
+  writeFileSync(join(root, 'notebook', 'plain.md'), front('locator').replace('exposure: locator\n', ''), 'utf8');
+  const notes = buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') });
+  assert.deepEqual(
+    notes.map((n) => [n.id, n.exposure]),
+    [
+      ['note:none', 'none'],
+      ['note:plain', undefined],
+      ['note:semantic', 'semantic'],
+    ],
+  );
+  // Through the adapter: the request is the entity default; the fragment is resolved without a gist.
+  const semantic = fromPrivateNote(notes.find((n) => n.id === 'note:semantic')!);
+  assert.deepEqual(semantic.entity.disclosure, { raw: 'private', exposure: 'semantic' });
+  assert.deepEqual(semantic.fragment.disclosure, { raw: 'private', exposure: 'locator' });
+  assert.equal(toPrivateNote(semantic.entity, semantic.fragment).exposure, 'semantic');
+  const plain = fromPrivateNote(notes.find((n) => n.id === 'note:plain')!);
+  assert.equal('exposure' in toPrivateNote(plain.entity, plain.fragment), false);
+
+  writeFileSync(join(root, 'notebook', 'text.md'), front('text'), 'utf8');
+  assert.throws(
+    () => buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') }),
+    /text\.md: 'exposure' must be semantic, locator, or none \(got "text"\)/,
+  );
+});
+
 test('corpus: the public-safe lint rejects traveling fields that quote private text', () => {
   const body =
     'The bridge originally modulated up a whole step and we scrapped it in the second session.';
@@ -359,7 +395,57 @@ test('no-leak: project() crosses a private hit as WHERE and structurally cannot 
   assert.deepEqual(evidence.hints, [
     { hintId: 'note:harbor-lights-session#notebook-p-12', label: note.label, url: note.url, locator: 'notebook, p. 12' },
   ]);
+  assert.deepEqual(evidence.gists, {}); // a locator hit has no gist to carry
   assert.equal(evidence.records[0]!.id, 'essay:on-listening#whole');
+});
+
+test('no-leak: a semantic hit carries its gist beside the hints, never in the prompt, and search() skips none', () => {
+  const gist = assertSemanticProjection('A session note about changing the key of a bridge.', {
+    path: 't',
+    fragmentText: 'The bridge originally modulated up a whole step.',
+  });
+  const note = makeNote({ exposure: 'semantic' });
+  const file = indexFileFromLegacyEntries([recordEntry(makeRecord(), [1, 0]), noteEntry(note, [1, 0])]);
+  // The build attaches the projection and resolves again; do the same by hand.
+  const semantic = file.entries.find((e) => e.fragment.disclosure.raw === 'private')!;
+  semantic.fragment.projection = {
+    lint: 'passed',
+    gist,
+    source: 'generated',
+    review: 'unreviewed',
+    contentHash: 'h',
+  };
+  semantic.fragment.disclosure = { raw: 'private', exposure: 'semantic' };
+  const hits = search([1, 0], 'q', buildRetrievalIndex(file));
+  const hit = hits.find((h) => h.raw === 'private')!;
+  assert.equal(hit.exposure, 'semantic');
+  assert.ok(hit.exposure === 'semantic' && hit.gist === gist && hit.gistSource === 'generated');
+
+  const evidence = toAnswerEvidence(hits);
+  assert.equal(evidence.hints.length, 1);
+  assert.ok(!JSON.stringify(evidence.hints).includes('changing the key'));
+  assert.deepEqual(evidence.gists, { 'note:harbor-lights-session#notebook-p-12': gist });
+  // The prompt builder's signature takes records and hints: the gist has no way in.
+  const user = buildUserPrompt('how was the bridge written?', evidence.records, evidence.hints);
+  assert.ok(!user.includes('changing the key'));
+  assert.ok(!user.includes('modulated'));
+  // The template renders it after the mode is final, after the fixed sentence.
+  const cite = { kind: 'hint' as const, hintId: 'note:harbor-lights-session#notebook-p-12', url: note.url };
+  const answer = finalizeAnswer({ mode: 'related-material', answer: 'The note says it modulated.', citations: [cite] }, evidence);
+  assert.match(
+    answer.answer,
+    /^There is private material related to this: Harbor Lights — writing session \(notebook, p\. 12\)\. It can't be quoted here — the citation links to the public page it belongs to\. What Harbor Lights — writing session \(notebook, p\. 12\) is about, as a description the author authorized \(not a quotation\): A session note about changing the key of a bridge\.$/,
+  );
+  assert.ok(!answer.answer.includes('modulated'));
+
+  // A `none` fragment is in the private index and is never served: retrieve() sees it, search() does not.
+  const none = indexFileFromLegacyEntries([noteEntry(makeNote({ id: 'note:hidden', exposure: 'none' }), [1, 0])]);
+  assert.equal(none.entries[0]!.fragment.disclosure.exposure, 'none');
+  const index = buildRetrievalIndex(none);
+  assert.equal(retrieve([1, 0], 'q', index).length, 1);
+  assert.deepEqual(search([1, 0], 'q', index), []);
+  // Naming exposures explicitly still cannot ask for `none`.
+  assert.throws(() => search([1, 0], 'q', index, { filters: { exposure: ['none' as never] } }), /not a served exposure/);
 });
 
 test('prompt: renders records with bodies and hints without text', () => {
@@ -703,6 +789,78 @@ test('eval: gold set loads, substitutes the author, and only references real sou
   }
   const goldIds = gold.map((g) => g.id);
   assert.equal(new Set(goldIds).size, goldIds.length, 'gold ids must be unique');
+
+  // The canary list is the private wording the queries forbid, in one place,
+  // and every canary is absent from every public record.
+  const { canaries } = loadGoldFile('eval/gold.yaml', config.authorName);
+  assert.ok(canaries.length >= 4);
+  for (const r of buildCorpus(config)) {
+    for (const c of canaries) assert.ok(!new RegExp(c, 'i').test(embedText(r)), `canary /${c}/ appears in public record ${r.id}`);
+  }
+  const forbidden = new Set(gold.flatMap((g) => g.forbidAnswerPatterns ?? []));
+  for (const c of canaries) assert.ok(forbidden.has(c), `canary /${c}/ should also be a forbidAnswerPattern somewhere`);
+});
+
+test('eval: the canary sweep checks every served gist and each entity\'s gists together', () => {
+  const lint = (text: string, fragmentText: string) => assertSemanticProjection(text, { path: 't', fragmentText });
+  const projection = (gist: ReturnType<typeof lint>) => ({
+    lint: 'passed' as const,
+    gist,
+    source: 'generated' as const,
+    review: 'unreviewed' as const,
+    contentHash: 'h',
+  });
+  const entry = (id: string, entityId: string, exposure: 'semantic' | 'locator', gist?: ReturnType<typeof lint>) => ({
+    fragment: {
+      id,
+      entityId,
+      disclosure: { raw: 'private' as const, exposure },
+      ...(gist !== undefined ? { projection: projection(gist) } : {}),
+    },
+  });
+  const clean = lint('A note about a key change in a bridge.', 'The bridge originally modulated up a whole step.');
+  const leaky = lint('The ferry horn sounds as the keeper waits.', 'Some other private text entirely.');
+  const half1 = lint('A note on the lighthouse.', 'x');
+  const half2 = lint('Keeper of the light appears later.', 'y');
+  const unspaced = lint('署名の重みに気づく女性の場面。', 'z');
+
+  const index = {
+    entries: [
+      entry('note:a#1', 'note:a', 'semantic', clean),
+      entry('note:b#1', 'note:b', 'semantic', leaky),
+      entry('note:c#1', 'note:c', 'semantic', half1),
+      entry('note:c#2', 'note:c', 'semantic', half2),
+      entry('note:d#1', 'note:d', 'locator', leaky), // not served as a gist: resolved locator
+      entry('note:e#1', 'note:e', 'semantic', unspaced),
+    ],
+  };
+  const canaries = ['ferry horn', 'lighthouse\\.? keeper', '署名の重み'];
+  const sweep = sweepCanaries(index, canaries);
+  assert.equal(sweep.gists, 5);
+  assert.equal(sweep.pass, false);
+  assert.deepEqual(sweep.issues, [
+    "canary /ferry horn/ appears in the served gist of 'note:b#1'",
+    "canary /署名の重み/ appears in the served gist of 'note:e#1'",
+    "canary /lighthouse\\.? keeper/ appears across the served gists of 'note:c' (composition)",
+  ]);
+  assert.deepEqual(sweepCanaries({ entries: [entry('note:a#1', 'note:a', 'semantic', clean)] }, canaries), {
+    pass: true,
+    issues: [],
+    gists: 1,
+  });
+  assert.equal(sweepCanaries(index, []).pass, true);
+
+  // loadGoldFile validates the list.
+  const dir = mkdtempSync(join(tmpdir(), 'ae-gold-'));
+  const good = join(dir, 'good.yaml');
+  writeFileSync(good, 'canaries: [one]\nqueries:\n  - id: a\n    query: q\n    expectAnswerMode: not-found\n', 'utf8');
+  assert.deepEqual(loadGoldFile(good).canaries, ['one']);
+  const bad = join(dir, 'bad.yaml');
+  writeFileSync(bad, 'canaries: ["("]\nqueries:\n  - id: a\n    query: q\n    expectAnswerMode: not-found\n', 'utf8');
+  assert.throws(() => loadGoldFile(bad), /canaries contains invalid regex/);
+  const shape = join(dir, 'shape.yaml');
+  writeFileSync(shape, 'canaries: nope\nqueries:\n  - id: a\n    query: q\n    expectAnswerMode: not-found\n', 'utf8');
+  assert.throws(() => loadGoldFile(shape), /'canaries' must be a list/);
 });
 
 test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {

@@ -11,6 +11,14 @@ import { parse } from 'yaml';
 import type { ScoredHit } from './contract.js';
 import type { AnswerMode, AnswerOutput } from './types.js';
 
+/** A gold file: the queries, and the leakage canaries swept over every served
+ *  gist (docs/CONTRACT.md §11). */
+export interface GoldFile {
+  queries: GoldQuery[];
+  /** Case-insensitive regexes over wording that exists only in private text. */
+  canaries: string[];
+}
+
 export interface GoldQuery {
   /** Stable id for targeted runs (--ids, --from-report). */
   id: string;
@@ -182,12 +190,31 @@ const GOLD_MODES: ReadonlySet<string> = new Set([
   'not-found',
 ]);
 
-/** Load the gold set. `{{author}}` in a query resolves to the configured
- *  authorName, so renaming the author never silently detunes the eval. */
+/** Load the gold set's queries. `{{author}}` in a query resolves to the
+ *  configured authorName, so renaming the author never silently detunes the eval. */
 export function loadGold(path: string, author = ''): GoldQuery[] {
-  const parsed = parse(readFileSync(path, 'utf8')) as { queries?: unknown };
+  return loadGoldFile(path, author).queries;
+}
+
+/** Load the whole gold file: queries plus the canary list (absent means none). */
+export function loadGoldFile(path: string, author = ''): GoldFile {
+  const parsed = parse(readFileSync(path, 'utf8')) as { queries?: unknown; canaries?: unknown };
   if (!parsed || !Array.isArray(parsed.queries) || parsed.queries.length === 0) {
     throw new Error(`${path} must contain a non-empty 'queries' list`);
+  }
+  const canaries: string[] = [];
+  if (parsed.canaries !== undefined) {
+    if (!Array.isArray(parsed.canaries) || parsed.canaries.some((c) => typeof c !== 'string' || !c.trim())) {
+      throw new Error(`${path}: 'canaries' must be a list of non-empty regex strings`);
+    }
+    for (const pattern of parsed.canaries as string[]) {
+      try {
+        new RegExp(pattern, 'i');
+      } catch {
+        throw new Error(`${path}: canaries contains invalid regex /${pattern}/`);
+      }
+      canaries.push(pattern);
+    }
   }
   const queries = parsed.queries.map((q, i): GoldQuery => {
     const item = q as Partial<GoldQuery>;
@@ -233,7 +260,61 @@ export function loadGold(path: string, author = ''): GoldQuery[] {
     if (seen.has(q.id)) throw new Error(`${path}: duplicate gold query id '${q.id}'`);
     seen.add(q.id);
   }
-  return queries;
+  return { queries, canaries };
+}
+
+/** The slice of an index entry the sweep reads; a private or a served index
+ *  file satisfies it. */
+export interface SweepableEntry {
+  fragment: {
+    id: string;
+    entityId: string;
+    disclosure: { exposure: string };
+    projection?: { lint: string; gist?: string };
+  };
+}
+
+export interface CanarySweepResult extends JudgeResult {
+  /** Served gists checked. */
+  gists: number;
+}
+
+/**
+ * The canary sweep (docs/CONTRACT.md §11): every canary against every gist a
+ * served index would release, not only the gists a gold query retrieves,
+ * because a retrieval-only consumer can surface any of them; and, per entity,
+ * against the concatenation of its gists, so a phrase that straddles two gists
+ * is at least watched. Keyless; runs before the embedding call in `npm run eval`.
+ */
+export function sweepCanaries(index: { entries: readonly SweepableEntry[] }, canaries: readonly string[]): CanarySweepResult {
+  const patterns = canaries.map((c) => ({ source: c, regex: new RegExp(c, 'i') }));
+  const issues: string[] = [];
+  const perEntity = new Map<string, { gists: string[]; tripped: Set<string> }>();
+  let gists = 0;
+  for (const { fragment } of index.entries) {
+    const p = fragment.projection;
+    if (fragment.disclosure.exposure !== 'semantic' || !p || p.lint !== 'passed' || typeof p.gist !== 'string') continue;
+    gists += 1;
+    let entry = perEntity.get(fragment.entityId);
+    if (!entry) perEntity.set(fragment.entityId, (entry = { gists: [], tripped: new Set() }));
+    entry.gists.push(p.gist);
+    for (const { source, regex } of patterns) {
+      if (regex.test(p.gist)) {
+        issues.push(`canary /${source}/ appears in the served gist of '${fragment.id}'`);
+        entry.tripped.add(source);
+      }
+    }
+  }
+  for (const [entityId, { gists: list, tripped }] of perEntity) {
+    if (list.length < 2) continue;
+    const composed = list.join(' ');
+    for (const { source, regex } of patterns) {
+      if (!tripped.has(source) && regex.test(composed)) {
+        issues.push(`canary /${source}/ appears across the served gists of '${entityId}' (composition)`);
+      }
+    }
+  }
+  return { pass: issues.length === 0, issues, gists };
 }
 
 /** Answer behavior: mode match plus citation guards aligned with mode semantics. */

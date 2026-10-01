@@ -164,7 +164,7 @@ interface ProjectionBase {
   review: 'unreviewed' | 'reviewed';
   vetoed?: boolean;
   stale?: boolean;            // an edited gist whose fragment text changed afterwards
-  contentHash: string;        // sha1(fragment.text + promptVersion + model)
+  contentHash: string;        // sha1 of the fragment text the gist was drafted or edited against
   model?: string; promptVersion?: string; generatedAt?: string;
 }
 export type SemanticProjection =
@@ -391,16 +391,24 @@ drafter's configuration (the pre-publication default forbids naming characters,
 places, and invented terms). The names rule is drafter configuration keyed by
 entity id, not a contract type.
 
-Each gist is stored with a content hash over the fragment text, the prompt
-version, and the model. The ingest order is: read the requested exposure, draft
-where it is `semantic`, lint, resolve, store. Re-running ingest skips unchanged
-generated gists, never overwrites a gist whose `source` is `edited`, and marks an
-edited gist `stale` when its fragment text has changed; a stale gist is not
-servable (rule 2) until a person re-edits or re-reviews it, because it describes
-text the author has since changed. A draft that fails the lint is retried once
-with an instruction to describe rather than quote; a second failure is stored as
-`lint: 'failed'` with the draft kept for editing, and the fragment resolves to
-`locator`.
+Each gist is stored with a content hash over the fragment text it was drafted
+or edited against, with the drafter's model and the prompt version beside it: a
+generated gist is current while all three match, and an edited gist is stale
+when the text alone moved, whatever model drafted the original. The ingest
+order is: read the requested exposure, draft where it is `semantic`, lint,
+resolve, store. Re-running ingest skips unchanged generated gists, never
+overwrites a gist whose `source` is `edited` (it re-lints it against the current
+text, so an edit that quotes fails at build), and marks an edited gist `stale`
+when its fragment text has changed; a stale gist is not servable (rule 2) until
+a person re-edits or re-reviews it, because it describes text the author has
+since changed. A draft that fails the lint is retried once with the lint's
+reason and an instruction to describe rather than quote; a second failure is
+stored as `lint: 'failed'` with the draft kept for editing, and the fragment
+resolves to `locator`. A veto survives a redraft; review does not. A projection
+stored for a fragment the author no longer exposes as `semantic` is carried,
+not deleted, so flipping a policy back costs no call. The teaching build keeps
+the projections in `artifacts/projections.json`, gitignored with the index and
+keyed by fragment id; the author works in that file (`src/ingest/projections.ts`).
 
 **The author authorizes.** A stored gist is private material. It is in the same
 custody class as the fragment text it describes: never committed, never served,

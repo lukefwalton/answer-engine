@@ -12,6 +12,7 @@
 // eval and demo code keep running on a schema-4 index without changes.
 
 import type { Entity, Fragment } from '../contract.js';
+import { resolveDisclosure } from '../ingest/disclosure.js';
 import { locatorKey, renderLocatorLabel } from '../locator.js';
 import { assertPublicSafeField } from '../public-safe.js';
 import type { ArchiveRecord, PrivateNote } from '../types.js';
@@ -70,8 +71,11 @@ export function joinNoteText(title: string, body: string): string {
   return [title, body].filter((s) => s.length > 0).join('\n\n');
 }
 
+/** The note's requested exposure becomes the entity default; the fragment's
+ *  disclosure is RESOLVED with no projection attached, so a requested
+ *  `semantic` reads `locator` here until the build drafts a gist and resolves
+ *  again (src/cli/build-index.ts). */
 export function fromPrivateNote(note: PrivateNote): { entity: Entity; fragment: Fragment } {
-  const disclosure = { raw: 'private', exposure: 'locator' } as const;
   const locator = [{ scheme: 'note', value: note.locator as string }];
   const entity: Entity = {
     id: note.id,
@@ -80,14 +84,14 @@ export function fromPrivateNote(note: PrivateNote): { entity: Entity; fragment: 
     attribution: [],
     url: note.url,
     identifiers: [],
-    disclosure,
+    disclosure: { raw: 'private', exposure: note.exposure ?? 'locator' },
   };
   const fragment: Fragment = {
     id: `${note.id}#${locatorKey(locator)}`,
     entityId: note.id,
     locator,
     text: joinNoteText(note.title, note.text),
-    disclosure,
+    disclosure: resolveDisclosure(entity, {}),
   };
   return { entity, fragment };
 }
@@ -108,6 +112,8 @@ export function toPrivateNote(entity: Entity, fragment: Fragment): PrivateNote {
   const noteLocator = fragment.locator.find((l) => l.scheme === 'note');
   const locator = noteLocator ? noteLocator.value : renderLocatorLabel(fragment.locator);
   const path = fragment.id;
+  // The REQUESTED exposure is the entity default; the fragment carries the resolved one.
+  const requested = entity.disclosure.raw === 'private' ? entity.disclosure.exposure : 'locator';
   return {
     id: entity.id,
     title,
@@ -115,5 +121,6 @@ export function toPrivateNote(entity: Entity, fragment: Fragment): PrivateNote {
     url: entity.url,
     locator: assertPublicSafeField(locator, { field: 'locator', path, privateText: text }),
     text,
+    ...(requested !== 'locator' ? { exposure: requested } : {}),
   };
 }

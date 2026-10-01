@@ -51,6 +51,15 @@ export const GIST_NGRAM_CHARS = 12;
 /** A gist the lint has passed. Constructible only through assertSemanticProjection. */
 export type LintedGist = string & { readonly __lint: 'gist' };
 
+/** What the traveling-string lint throws, so a caller can tell a lint failure
+ *  (fix the authored string) from a malformed file. */
+export class PublicSafeLintError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PublicSafeLintError';
+  }
+}
+
 /** Unicode-aware word normalization: NFKC, lowercase, every run of characters
  *  that is not a letter or a digit becomes one space. For ASCII text this is
  *  what the 2.x `[a-z0-9]` rule did; for accented and non-Latin text it keeps
@@ -164,19 +173,19 @@ function assertPublicSafeString(
   sharedRun: (field: string) => SharedRun | null,
 ): PublicSafe {
   if (!value.trim()) {
-    throw new Error(`${where} must not be empty — it travels as a display string.`);
+    throw new PublicSafeLintError(`${where} must not be empty — it travels as a display string.`);
   }
   if (/[\r\n]/.test(value)) {
-    throw new Error(`${where} must be a single line; a traveling field is a display string, not prose.`);
+    throw new PublicSafeLintError(`${where} must be a single line; a traveling field is a display string, not prose.`);
   }
   if (value.length > PUBLIC_SAFE_MAX_CHARS) {
-    throw new Error(
+    throw new PublicSafeLintError(
       `${where} is ${value.length} chars (max ${PUBLIC_SAFE_MAX_CHARS}); a traveling field is a display string, not prose.`,
     );
   }
   const run = sharedRun(value);
   if (run !== null) {
-    throw new Error(
+    throw new PublicSafeLintError(
       `${where} quotes private text ("${run.gram}"). ` +
         `A traveling field must not contain ${run.n} consecutive ${run.unit} of private text — reword it to point, not quote.`,
     );
@@ -334,10 +343,13 @@ export function assertSemanticProjection(
 
 /**
  * Deterministic related-material prose, built ONLY from the cited hints'
- * public-safe fields (label, locator). No model prose survives into this
- * mode, which is what turns "route, don't restate" from a prompt instruction
- * into a structural guarantee: a confabulated summary of a private note is
- * inexpressible, not merely discouraged.
+ * linted fields (label, locator) and, for a hint whose fragment is exposed as
+ * `semantic`, the lint-passed gist the author authorized. No model prose
+ * survives into this mode, which is what turns "route, don't restate" from a
+ * prompt instruction into a structural guarantee: a confabulated summary of a
+ * private note is inexpressible, not merely discouraged. The gist arrives
+ * here through project() and toAnswerEvidence, never through the prompt
+ * (docs/CONTRACT.md §9).
  *
  * Deliberately NO raw URL in the prose — the citation object carries the
  * link, and the gold suite forbids URLs in this mode's answer (q07).
@@ -349,6 +361,7 @@ export function assertSemanticProjection(
 export function renderRelatedMaterialAnswer(
   citations: readonly Citation[],
   hints: readonly RoutingHint[],
+  gists: Readonly<Record<string, LintedGist>> = {},
 ): string {
   const cited = citations.filter((c) => c.kind === 'hint');
   if (cited.length === 0) {
@@ -359,11 +372,15 @@ export function renderRelatedMaterialAnswer(
     if (!hint) {
       throw new Error(`related-material citation '${c.hintId}' matches no hint in evidence`);
     }
-    return `${hint.label} (${hint.locator})`;
+    return { ref: `${hint.label} (${hint.locator})`, gist: gists[c.hintId] };
   });
   const tail =
     refs.length === 1
       ? 'the citation links to the public page it belongs to'
       : 'the citations link to the public pages they belong to';
-  return `There is private material related to this: ${refs.join('; ')}. It can't be quoted here — ${tail}.`;
+  const routed = `There is private material related to this: ${refs.map((r) => r.ref).join('; ')}. It can't be quoted here — ${tail}.`;
+  const described = refs
+    .filter((r) => r.gist !== undefined)
+    .map((r) => ` What ${r.ref} is about, as a description the author authorized (not a quotation): ${r.gist}`);
+  return routed + described.join('');
 }

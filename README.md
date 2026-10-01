@@ -237,8 +237,12 @@ get `temperature: 0`).
    `locator` ARE public surface, so write them like captions, not like the
    note itself. A build-time lint rejects a label or locator that quotes the
    note's body — repeating the title as the label is fine *when the title is
-   safe to publish*, and declaring that per note is the point. No private
-   layer? Remove `privateNotesDir` from the config and the engine runs
+   safe to publish*, and declaring that per note is the point. A note may also
+   set `exposure: semantic` to have `npm run index` draft a one-paragraph gist
+   of it that you then authorize, edit, or veto in `artifacts/projections.json`
+   (the gist is what travels; the text never does), or `exposure: none` to
+   index it without ever serving it — see `docs/CONTRACT.md` §3 and §5. No
+   private layer? Remove `privateNotesDir` from the config and the engine runs
    public-only.
 4. Replace `example-content/` with your corpus and rerun `npm run index`.
 5. Rewrite `eval/gold.yaml` for your corpus — keep the refusals.

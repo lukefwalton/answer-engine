@@ -38,6 +38,14 @@ is 1974" would be the accuracy-trivia test this file opens by refusing to be.
 `npm run eval -- --full` also runs the answer engine and checks modes. Either
 exits non-zero on any failure, so it can gate a deploy.
 
+A top-level `canaries` list carries the same phrases once, for the **canary
+sweep**: before any API call, every gist the index would serve (a note whose
+frontmatter asks for `exposure: semantic` gets a machine-drafted description the
+author authorizes; see `docs/CONTRACT.md` §5) is checked against every canary,
+and each entity's gists are checked together for a phrase that straddles two. A
+retrieval-only consumer can surface any served gist, so the sweep does not wait
+for a query to retrieve one. The sweep is keyless and fails the run.
+
 ## Cost model (read this first)
 
 | Mode | API spend | When to use |

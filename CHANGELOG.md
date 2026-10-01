@@ -71,6 +71,33 @@ workflow and archived on Zenodo under the concept DOI
   `assertPublicSafeField` accepts any field name and reports "quotes private
   text" for every caller. `npm run migrate:index` fails with the file and the
   remedy on a missing or unparseable path instead of a stack trace.
+- Step 4 of 3.0.0, projections and the canary sweep (docs/CONTRACT.md §5, §11).
+  `src/ingest/gist.ts`: the `GistDrafter` seam, `createOpenAIGistDrafter`
+  (Responses API, `store: false`, JSON-schema output, `GIST_PROMPT_VERSION`
+  `gist/1`), and `draftProjections`, which drafts only where the author asked
+  for `semantic`, lints every draft against the fragment and the whole entity,
+  retries once with the lint's reason, stores a second failure as
+  `lint: 'failed'`, skips a generated gist whose text, model, and prompt version
+  are unchanged, never overwrites an edit (re-linted; `stale` when the text
+  moved), carries a veto across a redraft, and carries a projection for a
+  fragment no longer exposed as `semantic`. `contentHash` is the sha1 of the
+  fragment text alone, with model and prompt version beside it, so an edited
+  gist's staleness does not depend on which model drafted the original.
+  `src/ingest/projections.ts`: the author's file, `artifacts/projections.json`,
+  gitignored with the index. `npm run index` now builds entities and fragments
+  directly (no legacy view), runs the draft step, resolves each fragment's
+  exposure, and reuses vectors by fragment id; a run with nothing to draft or
+  embed needs no key. A private note may set `exposure: semantic | locator |
+  none` in frontmatter; `text` is refused with the file. `archive.config.ts`
+  takes an optional `gist` block (model, caps, allowed names per entity).
+  `eval/gold.yaml` gains a top-level `canaries` list and `npm run eval` runs
+  `sweepCanaries` keylessly over every served gist and each entity's gists
+  together before any API call, failing the run on a hit. The related-material
+  template renders a `semantic` hit's gist after the fixed sentence; the gist
+  travels in `AnswerEvidence.gists`, beside the hints and never into the prompt.
+  `search()` excludes `none` fragments before scoring (they are never served);
+  `retrieve()` still sees them. The demo's `semantic` entity (a public-domain
+  novel with committed gists) is a separate, keyed pull request.
 
 ### Planned for 3.0.0 (breaking)
 

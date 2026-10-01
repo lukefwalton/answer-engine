@@ -2,6 +2,8 @@
 // AnswerEvidence: RoutingHint has no field for private text, which makes
 // the privacy boundary a compile-time constraint rather than a review note.
 
+import type { LintedGist } from './public-safe.js';
+
 /** One piece of the PUBLIC archive — quotable, citable, body travels. */
 export interface ArchiveRecord {
   /** Stable id: `${type}:${slug}`. Citations point at this. */
@@ -55,6 +57,11 @@ export interface PrivateNote {
   locator: PublicSafe;
   /** The private text. Embedded for retrieval; never rendered into a prompt. */
   text: string;
+  /** Frontmatter `exposure`: what may travel about this note (docs/CONTRACT.md
+   *  §3). `locator` (the default) is where it is; `semantic` asks the build to
+   *  draft a gist the author then authorizes; `none` is indexed, never served.
+   *  `text` is not an option for private material. */
+  exposure?: 'semantic' | 'locator' | 'none';
 }
 
 /**
@@ -72,10 +79,15 @@ export interface RoutingHint {
   locator: string;
 }
 
-/** Everything the answer model is allowed to see. */
+/** What the consumer holds after the crossing. `records` and `hints` are
+ *  everything the answer model is allowed to see (buildUserPrompt takes those
+ *  two and nothing else). `gists` never reach the prompt: the related-material
+ *  template renders them after the mode is final, keyed by hintId, so the
+ *  model has no description of private material to restate in any mode. */
 export interface AnswerEvidence {
   records: ArchiveRecord[];
   hints: RoutingHint[];
+  gists?: Record<string, LintedGist>;
 }
 
 /** One entry of artifacts/index.json: a source plus its embedding. */
@@ -137,4 +149,16 @@ export interface ArchiveConfig {
    *  enough; raise it if the model starts applying the mode boundaries
    *  inconsistently — policy adherence costs reasoning. */
   reasoningEffort?: 'low' | 'medium' | 'high';
+  /** The gist drafter (docs/CONTRACT.md §5), used only for notes whose
+   *  frontmatter asks for `exposure: semantic`. */
+  gist?: {
+    /** Model that drafts gists. Default: answerModel. */
+    model?: string;
+    /** Default GIST_MAX_CHARS (400). */
+    maxChars?: number;
+    /** Default GIST_NGRAM_WORDS (5). Dry-run at 4 and count the trips before choosing. */
+    ngramWords?: number;
+    /** Proper names a gist may use, keyed by entity id. Default: none at all. */
+    allowedNames?: Record<string, string[]>;
+  };
 }

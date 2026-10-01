@@ -19,7 +19,7 @@
 // vector, and a caller who can embed its own queries would otherwise take as
 // many measurements as it had queries.
 
-import type { EvidenceHit, EvidenceHitBase, ScoredHit } from './contract.js';
+import type { EvidenceHit, EvidenceHitBase, ScoredHit, ServedExposure } from './contract.js';
 import { effectiveDate } from './dates.js';
 import { isServableGist } from './ingest/disclosure.js';
 import { renderLocatorLabel } from './locator.js';
@@ -90,13 +90,19 @@ export function project(hit: ScoredHit): EvidenceHit {
   }
 }
 
+const SERVED_EXPOSURES: readonly ServedExposure[] = ['text', 'semantic', 'locator'];
+
 /** retrieve().map(project): the path a retrieval-only consumer takes, so it
- *  never holds a ScoredHit. */
+ *  never holds a ScoredHit. A `none` fragment is never served (CONTRACT.md §3
+ *  rule 3), and a private index still holds them, so this path excludes them
+ *  before scoring unless the caller named the exposures it wants. */
 export function search(
   queryVector: readonly number[],
   query: string,
   index: RetrievalIndex,
   options: RetrieveOptions = {},
 ): EvidenceHit[] {
-  return retrieve(queryVector, query, index, options).map(project);
+  const exposure = options.filters?.exposure ?? SERVED_EXPOSURES;
+  const filters = { ...options.filters, exposure: [...exposure] };
+  return retrieve(queryVector, query, index, { ...options, filters }).map(project);
 }
