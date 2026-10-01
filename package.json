@@ -75,6 +75,7 @@
     "demo:test": "node --import tsx --test demo/*.test.ts",
     "build": "tsc -p tsconfig.build.json",
     "test:dist": "npm run build && node scripts/smoke-dist.mjs",
+    "prepare": "npm run build",
     "test": "node --import tsx --test test/*.test.ts demo/*.test.ts",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build && node scripts/smoke-dist.mjs"
