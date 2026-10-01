@@ -22,6 +22,13 @@ workflow and archived on Zenodo under the concept DOI
   implemented, and the 2.x code and the gold suite's semantics remain the
   source of truth until 3.0.0 ships.
 - This changelog.
+- Step 1 of 3.0.0 (additive; no 2.x behaviour changes): `src/contract.ts` with the
+  contract types; `assertSemanticProjection` and the `LintedGist` brand in
+  `src/public-safe.ts`, with Unicode-aware word normalization for both lints and a
+  character-run check for scripts without word spacing; `src/ingest/disclosure.ts`
+  (`isServableGist`, `resolveDisclosure`); `src/ingest/fragment.ts`
+  (`fragmentByHeadings`, `fragmentByPageMarkers`, `splitLong`); `src/locator.ts`
+  (`renderLocatorLabel`, `locatorKey`, `formatTimecode`).
 
 ### Planned for 3.0.0 (breaking)
 

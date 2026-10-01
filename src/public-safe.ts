@@ -1,7 +1,9 @@
 // The counterpart to no-leak.ts: that file owns what must NOT travel toward
-// the model; this one owns the shape of what MAY. Two things live here:
+// the model; this one owns the shape of what MAY. Three things live here:
 // the build-time lint that every traveling private-note field must pass
-// (the only constructor of the PublicSafe brand — NEXT-STEPS.md A1), and
+// (the only constructor of the PublicSafe brand — NEXT-STEPS.md A1), the
+// build-time lint a semantic projection must pass before it may be served
+// (the only constructor of the LintedGist brand — docs/CONTRACT.md §6), and
 // the related-material answer template, rendered here instead of written by
 // the model so the mode can only point at private material and never assert
 // its contents (NEXT-STEPS.md A2). The template's safety is exactly the
@@ -20,13 +22,81 @@ export const PUBLIC_SAFE_MAX_CHARS = 120;
  *  corpora; retune against yours if it flags honest locators. */
 export const PUBLIC_SAFE_NGRAM_WORDS = 5;
 
-function normalizeWords(s: string): string[] {
+/** A gist is a paragraph: two or three sentences describing what a passage
+ *  is about. Past this it has room to retell (docs/CONTRACT.md §6). */
+export const GIST_MAX_CHARS = 400;
+
+/** The gist lint's word-run window. Same reasoning as PUBLIC_SAFE_NGRAM_WORDS:
+ *  four trips on function-word runs any honest description shares with its
+ *  source; three is unusable. Exported so a consumer can tune it per entity. */
+export const GIST_NGRAM_WORDS = 5;
+
+/** For text in a script without word spacing (Japanese, Chinese, Thai, ...),
+ *  a word-run tripwire is vacuous: the whole passage is one "word". The lint
+ *  then counts the run in characters instead, over the normalized text with
+ *  whitespace removed. Twelve characters is roughly the width five words
+ *  occupy in such scripts. */
+export const GIST_NGRAM_CHARS = 12;
+
+/** A gist the lint has passed. Constructible only through assertSemanticProjection. */
+export type LintedGist = string & { readonly __lint: 'gist' };
+
+/** Unicode-aware word normalization: NFKC, lowercase, every run of characters
+ *  that is not a letter or a digit becomes one space. For ASCII text this is
+ *  what the 2.x `[a-z0-9]` rule did; for accented and non-Latin text it keeps
+ *  the letters instead of deleting them. */
+export function normalizeWords(s: string): string[] {
   return s
+    .normalize('NFKC')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(/\s+/)
     .filter(Boolean);
+}
+
+/** The first run of `n` consecutive words that `field` shares with `body`, or null. */
+export function findSharedWordRun(field: string, body: string, n: number): string | null {
+  const fieldWords = normalizeWords(field);
+  if (fieldWords.length < n) return null;
+  const bodyWords = normalizeWords(body);
+  if (bodyWords.length < n) return null;
+  const grams = new Set<string>();
+  for (let i = 0; i + n <= bodyWords.length; i++) {
+    grams.add(bodyWords.slice(i, i + n).join(' '));
+  }
+  for (let i = 0; i + n <= fieldWords.length; i++) {
+    const gram = fieldWords.slice(i, i + n).join(' ');
+    if (grams.has(gram)) return gram;
+  }
+  return null;
+}
+
+const UNSPACED_SCRIPT =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+
+/** True when the text contains a script written without word spacing. */
+export function hasUnspacedScript(text: string): boolean {
+  return UNSPACED_SCRIPT.test(text);
+}
+
+function normalizeChars(s: string): string {
+  return s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+/** The first run of `n` consecutive characters (letters and digits only, no
+ *  whitespace) that `field` shares with `body`, or null. */
+export function findSharedCharRun(field: string, body: string, n: number): string | null {
+  const f = normalizeChars(field);
+  const b = normalizeChars(body);
+  if (f.length < n || b.length < n) return null;
+  const grams = new Set<string>();
+  for (let i = 0; i + n <= b.length; i++) grams.add(b.slice(i, i + n));
+  for (let i = 0; i + n <= f.length; i++) {
+    const gram = f.slice(i, i + n);
+    if (grams.has(gram)) return gram;
+  }
+  return null;
 }
 
 /**
@@ -57,24 +127,77 @@ export function assertPublicSafeField(
       `${where} is ${value.length} chars (max ${PUBLIC_SAFE_MAX_CHARS}); a traveling field is a display string, not prose.`,
     );
   }
-  const fieldWords = normalizeWords(value);
-  if (fieldWords.length >= PUBLIC_SAFE_NGRAM_WORDS) {
-    const bodyWords = normalizeWords(context.privateText);
-    const bodyGrams = new Set<string>();
-    for (let i = 0; i + PUBLIC_SAFE_NGRAM_WORDS <= bodyWords.length; i++) {
-      bodyGrams.add(bodyWords.slice(i, i + PUBLIC_SAFE_NGRAM_WORDS).join(' '));
+  const gram = findSharedWordRun(value, context.privateText, PUBLIC_SAFE_NGRAM_WORDS);
+  if (gram !== null) {
+    throw new Error(
+      `${where} quotes the note's private body ("${gram}"). ` +
+        `A traveling field must not contain ${PUBLIC_SAFE_NGRAM_WORDS} consecutive words of private text — reword it to point, not quote.`,
+    );
+  }
+  return value as PublicSafe;
+}
+
+/**
+ * The sole constructor of LintedGist: the build-time lint a semantic
+ * projection passes before a policy may release it (docs/CONTRACT.md §6).
+ * Checks, each failing loudly with the path: non-empty; one paragraph; at
+ * most `maxChars`; no run of `ngramWords` consecutive words shared with the
+ * fragment's text, and none shared with the whole entity's text when it is
+ * supplied (so the gist of one page cannot quote the page before it). For
+ * text in a script without word spacing the run is counted in characters.
+ *
+ * Like assertPublicSafeField, this is a tripwire, not a classifier: close
+ * paraphrase, plot, a name, a number, and a run shorter than the window all
+ * pass it. Those are owned by the exposure policy, the veto, review, and the
+ * evaluation's canaries (CONTRACT.md §11, §13), not by this function.
+ */
+export function assertSemanticProjection(
+  gist: string,
+  context: {
+    path: string;
+    fragmentText: string;
+    entityText?: string;
+    maxChars?: number;
+    ngramWords?: number;
+    ngramChars?: number;
+  },
+): LintedGist {
+  const where = `${context.path}: gist`;
+  const maxChars = context.maxChars ?? GIST_MAX_CHARS;
+  const ngramWords = context.ngramWords ?? GIST_NGRAM_WORDS;
+  const ngramChars = context.ngramChars ?? GIST_NGRAM_CHARS;
+  if (!gist.trim()) {
+    throw new Error(`${where} must not be empty; a fragment with no gist resolves to 'locator' instead.`);
+  }
+  if (/[\r\n]/.test(gist)) {
+    throw new Error(`${where} must be one paragraph (no line breaks).`);
+  }
+  if (gist.length > maxChars) {
+    throw new Error(
+      `${where} is ${gist.length} chars (max ${maxChars}); a gist describes a passage, it does not retell it.`,
+    );
+  }
+  const sources: Array<[string, string]> = [['fragment', context.fragmentText]];
+  if (context.entityText !== undefined) sources.push(['entity', context.entityText]);
+  for (const [name, text] of sources) {
+    const wordGram = findSharedWordRun(gist, text, ngramWords);
+    if (wordGram !== null) {
+      throw new Error(
+        `${where} quotes the ${name}'s text ("${wordGram}"). ` +
+          `A projection must not contain ${ngramWords} consecutive words of the source — describe, do not quote.`,
+      );
     }
-    for (let i = 0; i + PUBLIC_SAFE_NGRAM_WORDS <= fieldWords.length; i++) {
-      const gram = fieldWords.slice(i, i + PUBLIC_SAFE_NGRAM_WORDS).join(' ');
-      if (bodyGrams.has(gram)) {
+    if (hasUnspacedScript(gist) || hasUnspacedScript(text)) {
+      const charGram = findSharedCharRun(gist, text, ngramChars);
+      if (charGram !== null) {
         throw new Error(
-          `${where} quotes the note's private body ("${gram}"). ` +
-            `A traveling field must not contain ${PUBLIC_SAFE_NGRAM_WORDS} consecutive words of private text — reword it to point, not quote.`,
+          `${where} quotes the ${name}'s text ("${charGram}"). ` +
+            `A projection must not contain ${ngramChars} consecutive characters of the source — describe, do not quote.`,
         );
       }
     }
   }
-  return value as PublicSafe;
+  return gist as LintedGist;
 }
 
 /**
