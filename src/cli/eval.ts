@@ -23,8 +23,8 @@ import {
 } from '../evaluate.js';
 import type { EvalQueryResult } from '../evaluate.js';
 import { toAnswerEvidence } from '../evidence.js';
-import { project } from '../no-leak.js';
-import { buildRetrievalIndex, retrieve } from '../retrieve.js';
+import { search } from '../no-leak.js';
+import { buildRetrievalIndex } from '../retrieve.js';
 import { readIndex } from '../store.js';
 
 const GOLD_PATH = resolve('eval/gold.yaml');
@@ -209,12 +209,15 @@ async function main(): Promise<void> {
     if (!vector) {
       throw new Error(`embedding missing for query '${g.id}'`);
     }
-    const hits = retrieve(vector, g.query, index);
+    // search() is the one served path (retrieve().map(project) behind the
+    // exposure filter): the eval judges what a consumer would be handed, so a
+    // `none` fragment is never retrieved here and never reaches project().
+    const hits = search(vector, g.query, index);
 
     const issues = [...judgeRetrieval(g, hits).issues];
     if (args.full) {
       try {
-        const evidence = toAnswerEvidence(hits.map(project));
+        const evidence = toAnswerEvidence(hits);
         const answer = await answerQuestion(client, g.query, evidence, config);
         issues.push(...judgeAnswer(g, answer).issues);
       } catch (err) {

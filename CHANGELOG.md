@@ -154,7 +154,10 @@ workflow and archived on Zenodo under the concept DOI
   `answer matched forbidAnswerPatterns[0]`), never by its text: canaries are
   private wording, and `npm run eval` prints the issues. A private note's
   malformed `exposure` is named by field, not echoed, and so is a caller's
-  malformed `filters.dateFrom` / `filters.dateTo`. `projectionContentHash` moves to
+  malformed `filters.dateFrom` / `filters.dateTo`. `npm run eval` retrieves
+  through `search()`, the one served path, so a `none` fragment is judged as
+  not retrieved and never reaches `project()`; `judgeRetrieval` accepts hits
+  from either side of the crossing. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed

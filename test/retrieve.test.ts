@@ -19,6 +19,8 @@ import {
 } from '../src/boosts.js';
 import type { Entity, Fragment } from '../src/contract.js';
 import { intervalsIntersect, parseDateInterval } from '../src/dates.js';
+import { judgeRetrieval } from '../src/evaluate.js';
+import { toAnswerEvidence } from '../src/evidence.js';
 import { project, search } from '../src/no-leak.js';
 import { assertSemanticProjection } from '../src/public-safe.js';
 import {
@@ -247,6 +249,40 @@ test('boosts: the theme cap excludes archive-wide themes only once the corpus is
   assert.equal(themeMatch({ dfCap: false }).prepare!(idx, ctx), null);
   assert.equal(exactTitleMatch().score(priv, idx.entities.get('transcript:ep1')!, { ...ctx, query: 'episode one' }, undefined), 0.3);
   assert.equal(disclosure().score(priv, idx.entities.get('transcript:ep1')!, ctx, undefined), 0.15);
+});
+
+test('eval path: a none fragment above the floor is excluded by search(), judged as not retrieved, and never reaches project()', () => {
+  // The eval and the teaching consumer go through search(); only retrieve() sees `none`.
+  const hidden = entity('note:hidden', { disclosure: { raw: 'private', exposure: 'none' } });
+  const base = corpus();
+  const index: RetrievalIndex = {
+    ...base,
+    entities: new Map([...base.entities, [hidden.id, hidden]]),
+    entries: [
+      ...base.entries,
+      {
+        fragment: fragment(hidden.id, 'whole', 'kept for a future authenticated consumer', {
+          disclosure: { raw: 'private', exposure: 'none' },
+        }),
+        vector: [1, 0, 0],
+      },
+    ],
+  };
+  const raw = retrieve(Q, 'q', index, { limit: 10 });
+  assert.ok(raw.some((h) => h.fragment.id === 'note:hidden#whole'), 'retrieve() sees the none fragment');
+  assert.throws(() => raw.map(project), /has exposure 'none' and is never served/);
+
+  const served = search(Q, 'q', index, { limit: 10 });
+  assert.ok(!served.some((h) => h.entity.id === 'note:hidden'));
+  assert.ok(!JSON.stringify(served).includes('future authenticated'));
+  const evidence = toAnswerEvidence(served);
+  assert.ok(evidence.records.length > 0);
+
+  // The retrieval judge reads either side of the crossing and matches entity or fragment ids.
+  const gold = { id: 'g', query: 'q', expectAnswerMode: 'supported' as const, expectSources: ['essay:old-view'], forbidSources: ['note:hidden#whole'] };
+  assert.deepEqual(judgeRetrieval(gold, served), { pass: true, issues: [] });
+  assert.deepEqual(judgeRetrieval(gold, raw).issues, ["forbidden source 'note:hidden#whole' was retrieved"]);
+  assert.deepEqual(judgeRetrieval({ ...gold, expectSources: ['note:hidden'] }, served).issues, ["expected source 'note:hidden' not retrieved"]);
 });
 
 test('no-leak: search() returns hits whose type cannot carry private text; private scores are coarse', () => {

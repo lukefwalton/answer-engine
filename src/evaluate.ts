@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
-import type { ScoredHit } from './contract.js';
+import type { EvidenceHit, ScoredHit } from './contract.js';
 import type { AnswerMode, AnswerOutput } from './types.js';
 
 /** A gold file: the queries, and the leakage canaries swept over every served
@@ -365,8 +365,11 @@ export interface JudgeResult {
  *  surface in regression. The relevant source no gold query names is residue
  *  the suite can never reach — it catches what it lists, not the omission it
  *  never thought of. */
-export function judgeRetrieval(gold: GoldQuery, hits: readonly ScoredHit[]): JudgeResult {
-  const hitIds = new Set(hits.flatMap((h) => [h.entity.id, h.fragment.id]));
+export function judgeRetrieval(gold: GoldQuery, hits: readonly (ScoredHit | EvidenceHit)[]): JudgeResult {
+  // Either side of the crossing: a ScoredHit (retrieve(), the demo's ranking
+  // gate) or an EvidenceHit (search(), what `npm run eval` judges, so a `none`
+  // fragment counts as not retrieved exactly as a consumer would see it).
+  const hitIds = new Set(hits.flatMap((h) => [h.entity.id, 'fragment' in h ? h.fragment.id : h.fragmentId]));
   const issues: string[] = [];
   for (const id of gold.expectSources ?? []) {
     if (!hitIds.has(id)) issues.push(`expected source '${id}' not retrieved`);
