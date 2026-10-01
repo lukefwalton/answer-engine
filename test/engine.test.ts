@@ -599,27 +599,34 @@ test('store: index file round-trips; unversioned or malformed files fail fast', 
 
   // Pre-versioning shape (a bare array) and junk both get the rebuild message.
   writeFileSync(path, JSON.stringify(entries), 'utf8');
-  assert.throws(() => readIndexFile(path), /not schema version 3.*npm run index/);
+  assert.throws(() => readIndexFile(path), /not schema version 4.*npm run index/);
   writeFileSync(path, 'not json', 'utf8');
   assert.throws(() => readIndexFile(path), /not valid JSON/);
 
   // Versioned but structurally bad entries get the rebuild message too.
   writeFileSync(
     path,
-    JSON.stringify({ version: 3, entries: [{ sourceType: 'record', record: { id: 'x' }, model: 'm' }] }),
+    JSON.stringify({ version: 4, entities: [], entries: [{ fragment: { id: 'x' }, model: 'm' }] }),
     'utf8',
   );
   assert.throws(() => readIndexFile(path), /malformed entry.*npm run index/);
 
-  // A v2-shaped note smuggled under a v3 header (no title) fails the same way.
-  const [, v2Note] = entries;
-  const { title: _title, ...v2Shape } = (v2Note as Extract<IndexEntry, { sourceType: 'note' }>).note;
+  // A fragment claiming the unrepresentable cell (private + text) under a v4
+  // header fails the same way: the cell is checked at load, not trusted.
   writeFileSync(
     path,
-    JSON.stringify({ version: 3, entries: [{ ...v2Note, note: v2Shape }] }),
+    JSON.stringify({
+      version: 4,
+      entities: [{ id: 'note:x', type: 'note', title: 'x', url: 'https://example.com/x/', attribution: [], identifiers: [], disclosure: { raw: 'private', exposure: 'locator' } }],
+      entries: [{ model: 'm', dimensions: 1, vector: [1], contentHash: 'h', fragment: { id: 'note:x#n', entityId: 'note:x', locator: [{ scheme: 'note', value: 'p. 1' }], text: 'secret', disclosure: { raw: 'private', exposure: 'text' } } }],
+    }),
     'utf8',
   );
   assert.throws(() => readIndexFile(path), /malformed entry.*npm run index/);
+
+  // A v3 file is pointed at the migration, not at a paid rebuild.
+  writeFileSync(path, JSON.stringify({ version: 3, entries }), 'utf8');
+  assert.throws(() => readIndexFile(path), /schema version 3, not schema version 4.*migrate:index/);
 });
 
 test('store: assertHomogeneousIndex rejects mixed embedding specs', () => {

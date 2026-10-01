@@ -727,17 +727,23 @@ is not `semantic`; no `contentHash`, `policy`, or `sourceReview` remains. A
 served index that fails these was misbuilt and is refused with the rebuild
 instruction.
 
-Each entry's vector and `contentHash` are taken over the fragment's embed
-string, which the adapters define so that today's bytes are reproduced:
-`fromArchiveRecord` embeds title, summary, `Themes: ...`, and body (today's
-`embedText`) and copies `summary` to `fragment.summary`; `fromPrivateNote` sets
-`fragment.text` to the note's private title and body joined as today's
-`noteEmbedText` does, so the private title stays in the embedding and never
-leaves `text`. A pure, keyless `migrateIndexV3toV4` re-keys committed entries
-without re-embedding; the demo's committed `demo/corpus/*.json` are migrated
-with it, as the 2→3 migration did, and `demo/artifacts.test.ts` extends its
-source-id allowlist and provenance table for the new entity while keeping the
-hash derivation it pins.
+Each entry's vector and `contentHash` are taken over the fragment's **embed
+string**, one rule in `src/embed-string.ts` chosen so that today's bytes are
+reproduced: a public `text` fragment embeds its entity's title, its summary, a
+`Themes: ...` line, and its text (today's `embedText` for a record); every other
+fragment embeds its text alone (today's `noteEmbedText`, where the private title
+is already inside `text`). Changing the rule is a re-embed of the corpus.
+`fromArchiveRecord` sets `fragment.text` to the body and copies `summary`;
+`fromPrivateNote` sets `fragment.text` to the note's private title and body
+joined by a blank line, so the private title stays in the embedding and never
+leaves `text`. A pure, keyless migration (`npm run migrate:index`,
+`migrateV3ToV4` in `src/store.ts`) re-keys a schema-3 file without re-embedding;
+the demo's committed `demo/corpus/*.json` were migrated with it, as the 2→3
+migration did, and `demo/artifacts.test.ts` keeps the hash derivation it pins.
+Until the retrieval core reads fragments, `readIndexFile` and `writeIndexFile`
+keep their 2.x record/note signatures and translate through the adapters (a
+transitional view, lossless for anything the adapters wrote), so the file format
+moved first and every caller stayed green.
 
 The teaching corpus keeps working through the adapters. `fromArchiveRecord`
 yields an entity with one `text` fragment whose locator is `[{ scheme: 'whole',

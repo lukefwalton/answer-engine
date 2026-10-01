@@ -10,6 +10,7 @@
   },
   "scripts": {
     "index": "node --env-file-if-exists=.env --import tsx src/cli/build-index.ts",
+    "migrate:index": "node --import tsx scripts/migrate-index-v3-v4.ts",
     "ask": "node --env-file-if-exists=.env --import tsx src/cli/ask.ts",
     "eval": "node --env-file-if-exists=.env --import tsx src/cli/eval.ts",
     "demo:build": "node --env-file-if-exists=.env --import tsx demo/build.ts",

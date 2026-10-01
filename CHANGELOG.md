@@ -29,6 +29,16 @@ workflow and archived on Zenodo under the concept DOI
   (`isServableGist`, `resolveDisclosure`); `src/ingest/fragment.ts`
   (`fragmentByHeadings`, `fragmentByPageMarkers`, `splitLong`); `src/locator.ts`
   (`renderLocatorLabel`, `locatorKey`, `formatTimecode`).
+- Step 2 of 3.0.0: index schema 4 in `src/store.ts` (entities stored once; every
+  entry carries a `Fragment` with its resolved disclosure; `validateIndex`,
+  `toServedIndex`, `validateServedIndex`); the teaching adapters
+  (`src/adapters/teaching.ts`) and the embed-string rule (`src/embed-string.ts`)
+  that reproduce the 2.x embed bytes; a keyless `npm run migrate:index`
+  (schema 3 → 4, vectors and hashes untouched), applied to the demo's committed
+  `demo/corpus/index.json` and `index.synthetic.json`. `readIndexFile` and
+  `writeIndexFile` keep their record/note signatures through a transitional view,
+  so `npm run index`, the demo, and retrieval are unchanged. A schema-3 index now
+  fails fast with the migration remedy instead of a rebuild.
 
 ### Planned for 3.0.0 (breaking)
 
