@@ -23,7 +23,7 @@ import type { EvidenceHit, EvidenceHitBase, ScoredHit, ServedExposure } from './
 import { effectiveDate } from './dates.js';
 import { isServableGist } from './ingest/disclosure.js';
 import { renderLocatorLabel } from './locator.js';
-import { retrieve, type RetrievalIndex, type RetrieveOptions } from './retrieve.js';
+import { retrieveWithCounts, type RetrievalIndex, type RetrieveOptions } from './retrieve.js';
 
 export const PRIVATE_SCORE_STEP = 0.05;
 
@@ -92,17 +92,41 @@ export function project(hit: ScoredHit): EvidenceHit {
 
 const SERVED_EXPOSURES: readonly ServedExposure[] = ['text', 'semantic', 'locator'];
 
-/** retrieve().map(project): the path a retrieval-only consumer takes, so it
- *  never holds a ScoredHit. A `none` fragment is never served (CONTRACT.md §3
- *  rule 3), and a private index still holds them, so this path excludes them
- *  before scoring unless the caller named the exposures it wants. */
+/** What searchWithCounts returns: the projected hits with the counts a
+ *  retrieval-only consumer reports (CONTRACT.md §8). Built here and nowhere
+ *  else, so a response is assembled from hits that have already crossed. */
+export interface SearchOutcome {
+  hits: EvidenceHit[];
+  /** Hits above the floor after filters, before the cap. */
+  matched: number;
+  /** Fragments a date bound dropped because they carry no date. */
+  excludedUndated: number;
+}
+
+/** retrieveWithCounts().map(project): the path a retrieval-only consumer takes,
+ *  so it never holds a ScoredHit. A `none` fragment is never served
+ *  (CONTRACT.md §3 rule 3), and a private index still holds them, so this path
+ *  excludes them before scoring unless the caller named the exposures it
+ *  wants. toSearchResponse (src/wire.ts) takes this outcome, not a
+ *  RetrievalOutcome, so the wire cannot project around the filter. */
+export function searchWithCounts(
+  queryVector: readonly number[],
+  query: string,
+  index: RetrievalIndex,
+  options: RetrieveOptions = {},
+): SearchOutcome {
+  const exposure = options.filters?.exposure ?? SERVED_EXPOSURES;
+  const filters = { ...options.filters, exposure: [...exposure] };
+  const outcome = retrieveWithCounts(queryVector, query, index, { ...options, filters });
+  return { hits: outcome.hits.map(project), matched: outcome.matched, excludedUndated: outcome.excludedUndated };
+}
+
+/** The hits alone. */
 export function search(
   queryVector: readonly number[],
   query: string,
   index: RetrievalIndex,
   options: RetrieveOptions = {},
 ): EvidenceHit[] {
-  const exposure = options.filters?.exposure ?? SERVED_EXPOSURES;
-  const filters = { ...options.filters, exposure: [...exposure] };
-  return retrieve(queryVector, query, index, { ...options, filters }).map(project);
+  return searchWithCounts(queryVector, query, index, options).hits;
 }

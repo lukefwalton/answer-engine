@@ -1,13 +1,15 @@
 // The wire contract for a retrieval-only consumer (docs/CONTRACT.md §8). The
 // consumer owns the transport (HTTP, MCP); this module owns what travels: the
 // contract version, the fixed policy copy a response carries verbatim, and the
-// one function that turns a retrieval outcome into a SearchResponse through
-// project(). A consumer that uses toSearchResponse never holds a ScoredHit on
-// its wire path and never retypes the normative copy.
+// one function that turns a search outcome into a SearchResponse. It takes
+// the outcome of searchWithCounts (src/no-leak.ts), whose hits have already
+// crossed through project() behind the served-exposure filter, and nothing
+// else: a RetrievalOutcome does not fit its parameter, so a consumer cannot
+// project around the filter here. A consumer that uses toSearchResponse never
+// holds a ScoredHit on its wire path and never retypes the normative copy.
 
-import type { EvidenceHit, SearchResponse, ServedExposure } from './contract.js';
-import { project } from './no-leak.js';
-import type { RetrievalOutcome } from './retrieve.js';
+import type { SearchResponse, ServedExposure } from './contract.js';
+import type { SearchOutcome } from './no-leak.js';
 
 export const ARCHIVE_SEARCH_CONTRACT = 'archive-search/1' as const;
 
@@ -32,17 +34,16 @@ export interface ServedIndexSummary {
   fragmentCount: number;
 }
 
-/** retrieveWithCounts(...) → the wire shape, crossing every hit through project(). */
+/** searchWithCounts(...) → the wire shape. The hits arrive projected. */
 export function toSearchResponse(
   query: string,
-  outcome: RetrievalOutcome,
+  outcome: SearchOutcome,
   index: ServedIndexSummary,
 ): SearchResponse {
-  const hits: EvidenceHit[] = outcome.hits.map(project);
   return {
     contract: ARCHIVE_SEARCH_CONTRACT,
     query,
-    hits,
+    hits: outcome.hits,
     matched: outcome.matched,
     excludedUndated: outcome.excludedUndated,
     index: { builtAt: index.builtAt, entityCount: index.entityCount, fragmentCount: index.fragmentCount },

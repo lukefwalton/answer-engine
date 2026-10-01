@@ -157,7 +157,12 @@ workflow and archived on Zenodo under the concept DOI
   malformed `filters.dateFrom` / `filters.dateTo`. `npm run eval` retrieves
   through `search()`, the one served path, so a `none` fragment is judged as
   not retrieved and never reaches `project()`; `judgeRetrieval` accepts hits
-  from either side of the crossing. `projectionContentHash` moves to
+  from either side of the crossing. `searchWithCounts()` in `src/no-leak.ts`
+  is `retrieveWithCounts().map(project)` behind the same filter, and
+  `toSearchResponse` now takes its `SearchOutcome` instead of a
+  `RetrievalOutcome`, so the wire assembles a response from hits that have
+  already crossed and cannot project around the filter (a type error, not a
+  runtime guard). `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed
