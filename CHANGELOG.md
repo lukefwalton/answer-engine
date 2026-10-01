@@ -162,7 +162,10 @@ workflow and archived on Zenodo under the concept DOI
   `toSearchResponse` now takes its `SearchOutcome` instead of a
   `RetrievalOutcome`, so the wire assembles a response from hits that have
   already crossed and cannot project around the filter (a type error, not a
-  runtime guard). `projectionContentHash` moves to
+  runtime guard). `npm run index` refuses a previous index that fails the
+  load-time lint instead of warning and re-embedding around it: the message
+  carries the remedy (fix the source, delete the file, rerun), and nothing in
+  a refused artifact is reused. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed

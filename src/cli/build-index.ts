@@ -11,6 +11,11 @@
 // from live sources. A run with nothing to draft and nothing to embed needs no
 // key.
 //
+// The previous index is read through the same validator every load uses. One
+// that fails it is refused here too, with the remedy, and nothing in it is
+// reused: a build never proceeds from an artifact the next command would
+// reject (.github/STANDARDS.md §4).
+//
 // What this command prints: counts, ids, field names, and the positions of
 // lint failures. The store's and the lints' messages carry no private text by
 // construction (src/public-safe.ts, src/store.ts), so printing one is safe
@@ -56,19 +61,22 @@ function lazyDrafter(model: string): GistDrafter {
   };
 }
 
-/** The previous index's entries by fragment id, for vector reuse. A previous
- *  index that fails a lint at load (the window tightened, or the author just
- *  fixed the string or the gist this run will rewrite) is simply not reused;
- *  any other failure (an old schema, junk) keeps its own remedy. The lint's
- *  message names the field and the position of the run, not the run, so it is
- *  printed. */
+/** The previous index's entries by fragment id, for vector reuse. The read is
+ *  the load-time validation every command runs; a previous index that fails
+ *  it is refused, not worked around. A lint failure (the author tightened the
+ *  window, or fixed a string or a gist the artifact still carries) gets the
+ *  remedy the store's other refusals carry: fix the source, delete the file,
+ *  rerun. The lint's message names the field and the position of the run, not
+ *  the run, so the whole message is safe to print. */
 function previousEntries(): Map<string, FragmentEntry> {
   try {
     return new Map(readIndex().entries.map((e) => [e.fragment.id, e]));
   } catch (err) {
     if (err instanceof PublicSafeLintError) {
-      console.warn(`Previous index not reused (${err.message}); re-embedding every fragment.`);
-      return new Map();
+      throw new Error(
+        `${err.message} The previous index is refused and nothing in it is reused: fix the source ` +
+          `(the note's frontmatter, or the gist in ${PROJECTIONS_PATH}), then delete ${INDEX_PATH} and rerun \`npm run index\` to re-embed.`,
+      );
     }
     throw err;
   }
