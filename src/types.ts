@@ -154,9 +154,10 @@ export interface ArchiveConfig {
   gist?: {
     /** Model that drafts gists. Default: answerModel. */
     model?: string;
-    /** Default GIST_MAX_CHARS (400). */
+    /** Default GIST_MAX_CHARS (400). Stored on each entity as `policy.lint.gistMaxChars`. */
     maxChars?: number;
-    /** Default GIST_NGRAM_WORDS (5). Dry-run at 4 and count the trips before choosing. */
+    /** Default GIST_NGRAM_WORDS (5), for both lints. Dry-run at 4 and count the
+     *  trips before choosing. Stored on each entity as `policy.lint.ngramWords`. */
     ngramWords?: number;
     /** Proper names a gist may use, keyed by entity id. Default: none at all. */
     allowedNames?: Record<string, string[]>;

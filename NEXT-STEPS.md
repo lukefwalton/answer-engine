@@ -57,7 +57,8 @@ private entities cannot carry it anyway.
   (characters, for a script without word spacing) — over every authored string
   on a private entity at index build and at every load of a private index
   (`validateIndex` in `src/store.ts`), so a hand edit to the artifact fails at
-  load with the field and the run. A gist passes `assertSemanticProjection`
+  load with the field and the position of the run (never the run: the message
+  is printed). A gist passes `assertSemanticProjection`
   (400 characters, the same run rule against the fragment and the whole
   entity) and is served only when `isServableGist` says so. What travels is an
   authored decision per note: the `label:` field, and now the `exposure:` it

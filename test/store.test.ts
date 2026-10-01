@@ -19,6 +19,7 @@ import {
 import type { Entity, Fragment } from '../src/contract.js';
 import { buildCorpus, buildPrivateNotes, embedText, noteEmbedText } from '../src/corpus.js';
 import { embedStringFor } from '../src/embed-string.js';
+import { projectionContentHash } from '../src/ingest/projections.js';
 import { locatorKey } from '../src/locator.js';
 import { assertPublicSafeField, assertSemanticProjection } from '../src/public-safe.js';
 import {
@@ -156,7 +157,7 @@ function privateBook(): IndexFile {
       gist: gist('An unopened letter sits at the centre of the opening.', p1Text),
       source: 'generated',
       review: 'unreviewed',
-      contentHash: 'h1',
+      contentHash: projectionContentHash(p1Text),
       model: 'm',
       promptVersion: 'gist/1',
     },
@@ -228,6 +229,90 @@ test('store: validateIndex enforces the §12 invariants on a private index', () 
   assert.throws(() => validateIndex(twice), /lists entity 'book:example' twice/);
 });
 
+/** Parse-and-poke: the file as JSON would hand it back, with one field broken. */
+function broken(mutate: (file: IndexFile) => void): IndexFile {
+  const file = JSON.parse(JSON.stringify(privateBook())) as IndexFile;
+  mutate(file);
+  return file;
+}
+
+test('store: validateIndex checks nested items and vector elements, and names the field, never the value', () => {
+  const cases: Array<[string, (file: IndexFile) => void, RegExp]> = [
+    ['attribution item', (f) => ((f.entities[0]!.attribution[0] as { name: unknown }).name = 7), /malformed entity 'book:example': 'attribution'\[0\]\.name must be a string/],
+    ['attribution placeholder', (f) => ((f.entities[0]!.attribution[0] as { placeholder: unknown }).placeholder = 'other'), /'attribution'\[0\]\.placeholder must be 'unnamed' or 'unverified'/],
+    ['identifier item', (f) => f.entities[0]!.identifiers.push({ scheme: 'isbn' } as never), /'identifiers'\[0\]\.value must be a string/],
+    ['theme item', (f) => ((f.entities[0] as { themes: unknown }).themes = ['a', 2]), /'themes'\[1\] must be a string/],
+    ['policy', (f) => ((f.entities[0]!.policy as { requireReview: unknown }).requireReview = 'yes'), /'policy'\.requireReview must be a boolean/],
+    ['policy window', (f) => (f.entities[0]!.policy = { lint: { ngramWords: 0 } }), /'policy'\.lint\.ngramWords must be a positive integer/],
+    ['locator item', (f) => ((f.entries[1]!.fragment.locator[0] as { value: unknown }).value = 2), /malformed entry 'book:example#p2': 'locator'\[0\]\.value must be a string/],
+    ['locator end', (f) => ((f.entries[1]!.fragment.locator[0] as { end: unknown }).end = 3), /'locator'\[0\]\.end must be a string/],
+    ['speaker item', (f) => ((f.entries[1]!.fragment as { attribution: unknown }).attribution = [{ role: 'host' }]), /'attribution'\[0\]\.name must be a string/],
+    ['projection shape', (f) => ((f.entries[0]!.fragment.projection as { review: unknown }).review = 'maybe'), /'projection'\.review must be 'unreviewed' or 'reviewed'/],
+    ['projection arm', (f) => delete (f.entries[0]!.fragment.projection as { gist?: unknown }).gist, /'projection'\.gist must be a string when lint is 'passed'/],
+    ['sourceReview', (f) => ((f.entries[0]!.fragment as { sourceReview: unknown }).sourceReview = 'done'), /'sourceReview' must be unreviewed, in-review, or reviewed/],
+    ['vector length', (f) => f.entries[0]!.vector.push(0), /'vector' has 3 elements, not 'dimensions' \(2\)/],
+    ['vector element', (f) => ((f.entries[0]!.vector as unknown[])[1] = 'NaN'), /'vector'\[1\] must be a finite number/],
+    ['dimensions', (f) => ((f.entries[0] as { dimensions: unknown }).dimensions = 2.5), /'dimensions' must be a positive integer/],
+    ['contentHash', (f) => delete (f.entries[0] as { contentHash?: unknown }).contentHash, /'contentHash' must be a string/],
+  ];
+  for (const [name, mutate, expected] of cases) {
+    assert.throws(() => validateIndex(broken(mutate), 'idx'), expected, name);
+    // Every message ends with the remedy and carries no fragment text.
+    assert.throws(
+      () => validateIndex(broken(mutate), 'idx'),
+      (err: unknown) => err instanceof Error && /npm run index/.test(err.message) && !/letter|Page two|Page three/.test(err.message),
+      `${name}: remedy present, text absent`,
+    );
+  }
+  // JSON cannot carry NaN or Infinity, but an in-memory index can: writeIndex refuses it before anything is written.
+  const nan = privateBook();
+  nan.entries[0]!.vector[0] = Number.NaN;
+  assert.throws(() => writeIndex(nan, join(mkdtempSync(join(tmpdir(), 'ae-nan-')), 'index.json')), /'vector'\[0\] must be a finite number/);
+});
+
+test('store: a semantic fragment\'s gist is re-linted against the text at load; lint: passed is not taken on trust', () => {
+  const p1Text = privateBook().entries[0]!.fragment.text;
+  // The brand erased at JSON; a hand edit that quotes the page is caught at load.
+  const quoting = broken((f) => {
+    (f.entries[0]!.fragment.projection as { gist: string }).gist = 'In which the letter arrives and nobody opens it, at length.';
+  });
+  assert.throws(
+    () => validateIndex(quoting, 'idx'),
+    (err: unknown) =>
+      err instanceof Error &&
+      /index at idx: fragment 'book:example#p1': gist quotes the fragment's text at words 1–5/.test(err.message) &&
+      !/letter arrives/.test(err.message),
+  );
+  // A gist that quotes another page of the same entity is caught through the entity text.
+  const otherPage = broken((f) => {
+    (f.entries[0]!.fragment.projection as { gist: string }).gist = 'Elsewhere, private, released as a location only, it says.';
+  });
+  assert.throws(() => validateIndex(otherPage, 'idx'), /gist quotes the entity's text at words 2–6/);
+  // A gist drafted against other text (the text was edited; the hash no longer matches) is refused.
+  const moved = broken((f) => {
+    f.entries[0]!.fragment.text = `${p1Text} And then some.`;
+  });
+  assert.throws(() => validateIndex(moved, 'idx'), /fragment 'book:example#p1' is exposed as 'semantic' with a gist drafted against other text/);
+  // The same gist on a fragment that is not served as semantic is private material that never travels: not re-checked.
+  const carried = broken((f) => {
+    (f.entries[0]!.fragment.projection as { gist: string }).gist = 'In which the letter arrives and nobody opens it, at length.';
+    f.entries[0]!.fragment.disclosure = { raw: 'private', exposure: 'locator' };
+  });
+  assert.equal(validateIndex(carried, 'idx').entries.length, 4);
+  // The window is the entity's policy: a four-word run passes at the default and fails at an authored four.
+  const fourWords = broken((f) => {
+    (f.entries[0]!.fragment.projection as { gist: string }).gist = 'A letter arrives and nobody reads it, at length.';
+  });
+  assert.equal(validateIndex(fourWords, 'idx').entries.length, 4);
+  const tightened = broken((f) => {
+    (f.entries[0]!.fragment.projection as { gist: string }).gist = 'A letter arrives and nobody reads it, at length.';
+    f.entities[0]!.policy = { lint: { ngramWords: 4 } };
+  });
+  assert.throws(() => validateIndex(tightened, 'idx'), /gist quotes the fragment's text at words 2–5: a projection must not contain 4 consecutive words/);
+  // The write path refuses the same file, so a build cannot leave it behind.
+  assert.throws(() => writeIndex(quoting, join(mkdtempSync(join(tmpdir(), 'ae-relint-')), 'index.json')), /gist quotes the fragment's text/);
+});
+
 test('store: toServedIndex strips what the policy does not release, and the validator checks it', () => {
   const served = toServedIndex(privateBook());
   // The all-none entity and the none fragment are gone.
@@ -264,12 +349,25 @@ test('store: toServedIndex strips what the policy does not release, and the vali
   assert.throws(() => validateServedIndex(withHash), /still carries contentHash/);
   const withModel = JSON.parse(json) as ServedIndexLike;
   (withModel.entries[0]!.fragment.projection as Record<string, unknown>).model = 'm';
-  assert.throws(() => validateServedIndex(withModel), /projection still carries 'model'/);
+  assert.throws(() => validateServedIndex(withModel), /'projection' still carries 'model'/);
   const unmarked = JSON.parse(json) as ServedIndexLike;
   delete (unmarked as Partial<ServedIndexLike>).served;
   assert.throws(() => validateServedIndex(unmarked), /not marked as a served index/);
   // A private index passed as served is refused at the first thing it still carries.
   assert.throws(() => validateServedIndex({ ...privateBook(), served: true }), /still carries policy/);
+  // Nested items and vector elements are checked here too.
+  const badSpeaker = JSON.parse(json) as ServedIndexLike;
+  (badSpeaker.entries[1]!.fragment as Record<string, unknown>).attribution = [{ name: 1 }];
+  assert.throws(() => validateServedIndex(badSpeaker), /malformed entry 'book:example#p2': 'attribution'\[0\]\.name must be a string/);
+  const shortVector = JSON.parse(json) as ServedIndexLike;
+  (shortVector.entries[0]!.vector as number[]).pop();
+  assert.throws(() => validateServedIndex(shortVector), /'vector' has 1 elements, not 'dimensions' \(2\)/);
+  const badElement = JSON.parse(json) as ServedIndexLike;
+  (badElement.entries[0]!.vector as unknown[])[0] = null;
+  assert.throws(() => validateServedIndex(badElement), /'vector'\[0\] must be a finite number/);
+  const badGist = JSON.parse(json) as ServedIndexLike;
+  (badGist.entries[0]!.fragment.projection as Record<string, unknown>).gist = 3;
+  assert.throws(() => validateServedIndex(badGist), /'projection'\.gist must be a string/);
 });
 
 interface ServedIndexLike {
@@ -353,7 +451,7 @@ test('store: a private index is linted at load for authored strings that quote i
   // A title that quotes five words of the body is caught, naming the field and the run.
   assert.throws(
     () => validateIndex(privateNoteIndex({ title: 'Originally modulated up a whole step' }), 'artifacts/index.json'),
-    /index at artifacts\/index\.json: entity 'note:harbor-lights-session': 'title' quotes private text \("originally modulated up a whole"\)/,
+    /index at artifacts\/index\.json: entity 'note:harbor-lights-session': 'title' quotes private text at words 1–5/,
   );
   // So is a locator value; the note scheme is echoed verbatim into locatorLabel.
   assert.throws(

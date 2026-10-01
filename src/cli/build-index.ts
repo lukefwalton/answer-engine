@@ -10,13 +10,18 @@
 // that disappeared are pruned automatically because both files are rewritten
 // from live sources. A run with nothing to draft and nothing to embed needs no
 // key.
+//
+// What this command prints: counts, ids, field names, and the positions of
+// lint failures. The store's and the lints' messages carry no private text by
+// construction (src/public-safe.ts, src/store.ts), so printing one is safe
+// (.github/STANDARDS.md §4).
 
 import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 
 import { config } from '../../archive.config.js';
 import { fromArchiveRecord, fromPrivateNote } from '../adapters/teaching.js';
-import type { Entity, Fragment, SemanticProjection } from '../contract.js';
+import type { Entity, EntityPolicy, Fragment, SemanticProjection } from '../contract.js';
 import { buildCorpus, buildPrivateNotes } from '../corpus.js';
 import { embedStringFor } from '../embed-string.js';
 import { batchInputs, embedBatch, truncateForEmbedding } from '../embedding.js';
@@ -52,9 +57,11 @@ function lazyDrafter(model: string): GistDrafter {
 }
 
 /** The previous index's entries by fragment id, for vector reuse. A previous
- *  index that fails the metadata lint (the rule tightened, or the author just
- *  fixed the string this run will rewrite) is simply not reused; any other
- *  failure (an old schema, junk) keeps its own remedy. */
+ *  index that fails a lint at load (the window tightened, or the author just
+ *  fixed the string or the gist this run will rewrite) is simply not reused;
+ *  any other failure (an old schema, junk) keeps its own remedy. The lint's
+ *  message names the field and the position of the run, not the run, so it is
+ *  printed. */
 function previousEntries(): Map<string, FragmentEntry> {
   try {
     return new Map(readIndex().entries.map((e) => [e.fragment.id, e]));
@@ -65,6 +72,17 @@ function previousEntries(): Map<string, FragmentEntry> {
     }
     throw err;
   }
+}
+
+/** A window tuned in archive.config.ts becomes each entity's `policy.lint`
+ *  (docs/CONTRACT.md §6): the index then carries the terms its strings and
+ *  gists were checked under, and the validator reads them back at load. */
+function lintPolicy(gist: typeof config.gist): EntityPolicy['lint'] | undefined {
+  const lint: NonNullable<EntityPolicy['lint']> = {
+    ...(gist?.ngramWords !== undefined ? { ngramWords: gist.ngramWords } : {}),
+    ...(gist?.maxChars !== undefined ? { gistMaxChars: gist.maxChars } : {}),
+  };
+  return Object.keys(lint).length > 0 ? lint : undefined;
 }
 
 interface Source {
@@ -83,6 +101,7 @@ async function main(): Promise<void> {
   console.log(`Corpus: ${records.length} records, ${notes.length} private notes`);
 
   const sources: Source[] = [...records.map(fromArchiveRecord), ...notes.map(fromPrivateNote)];
+  const lint = lintPolicy(config.gist);
   const entities = new Map<string, Entity>();
   const byEntity = new Map<string, Source[]>();
   for (const source of sources) {
@@ -90,6 +109,7 @@ async function main(): Promise<void> {
     if (entities.has(entity.id)) {
       throw new Error(`two sources share the id '${entity.id}'; ids must be unique across collections and notes.`);
     }
+    if (lint) entity.policy = { ...entity.policy, lint };
     entities.set(entity.id, entity);
     byEntity.set(entity.id, [source]);
   }
@@ -111,8 +131,6 @@ async function main(): Promise<void> {
     const result = await draftProjections(entity, inputs, drafter, {
       existing: stored,
       allowedNames: config.gist?.allowedNames?.[entity.id],
-      maxChars: config.gist?.maxChars,
-      ngramWords: config.gist?.ngramWords,
     });
     for (const [id, projection] of result.projections) projections.set(id, projection);
     unservable.push(...result.unservable);

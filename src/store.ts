@@ -7,10 +7,13 @@
 //
 // Private fragments' text is in the private index, so it is private even when
 // your corpus is public — it stays gitignored. Because the text is there, a
-// private index is checked against it at every load (validateIndex): shape,
-// legal cells, servable gists, and the lint over every authored string a hit on
-// a private entity would carry (docs/CONTRACT.md §6), so a hand edit fails
-// here and not in an answer. A SERVED index is a projection of it
+// private index is checked against it at every load (validateIndex): shape down
+// to the nested items and the vector elements, legal cells, servable gists, the
+// lint over every authored string a hit on a private entity would carry, and
+// the gist lint over every gist a `semantic` fragment would serve
+// (docs/CONTRACT.md §6), so a hand edit fails here and not in an answer. Every
+// message names ids, fields, and positions, never a value: a private index's
+// values are private text. A SERVED index is a projection of it
 // (toServedIndex) with everything the policy does not release stripped, and a
 // load-time validator (validateServedIndex) that checks the strip happened; it
 // carries no text to lint against and is trusted to descend from a validated
@@ -32,7 +35,8 @@ import {
 } from './adapters/teaching.js';
 import type { Entity, Fragment, LintedGist } from './contract.js';
 import { isServableGist } from './ingest/disclosure.js';
-import { assertPublicSafeMetadata } from './public-safe.js';
+import { projectionContentHash, projectionProblem } from './ingest/projections.js';
+import { assertPublicSafeMetadata, assertSemanticProjection, entityLintText } from './public-safe.js';
 import type { IndexEntry } from './types.js';
 
 export const INDEX_PATH = resolve('artifacts/index.json');
@@ -92,45 +96,172 @@ export interface ServedIndexFile {
 }
 
 // ─── Shape checks ────────────────────────────────────────────────────────────
+//
+// Each check returns the first thing wrong as a short phrase naming the field
+// and the type it needed, or null. Field names only, never values: a private
+// index's values are private text, and these phrases become the error messages
+// that build tools, CI, and a consumer's loader print (.github/STANDARDS.md §4).
+
+type Problem = string | null;
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
 
-function isLegalCell(d: unknown): d is Fragment['disclosure'] {
-  if (!isRecord(d)) return false;
-  if (d.raw === 'public') return ['text', 'semantic', 'locator', 'none'].includes(d.exposure as string);
-  if (d.raw === 'private') return ['semantic', 'locator', 'none'].includes(d.exposure as string);
-  return false;
+const isString = (x: unknown): x is string => typeof x === 'string';
+const isOptionalString = (x: unknown): boolean => x === undefined || typeof x === 'string';
+const isOptionalBoolean = (x: unknown): boolean => x === undefined || typeof x === 'boolean';
+const isPositiveInteger = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x > 0;
+
+function listProblem(x: unknown, at: string, item: (v: unknown, at: string) => Problem): Problem {
+  if (!Array.isArray(x)) return `${at} must be an array`;
+  for (let i = 0; i < x.length; i++) {
+    const problem = item(x[i], `${at}[${i}]`);
+    if (problem !== null) return problem;
+  }
+  return null;
 }
 
-function entityIsValid(e: unknown): e is Entity {
+const stringItem = (v: unknown, at: string): Problem => (isString(v) ? null : `${at} must be a string`);
+
+function identifierProblem(x: unknown, at: string): Problem {
+  if (!isRecord(x)) return `${at} must be an object`;
+  if (!isString(x.scheme)) return `${at}.scheme must be a string`;
+  if (!isString(x.value)) return `${at}.value must be a string`;
+  return null;
+}
+
+function attributionProblem(x: unknown, at: string): Problem {
+  if (!isRecord(x)) return `${at} must be an object`;
+  if (!isString(x.name)) return `${at}.name must be a string`;
+  if (!isOptionalString(x.role)) return `${at}.role must be a string`;
+  if (x.placeholder !== undefined && x.placeholder !== 'unnamed' && x.placeholder !== 'unverified') {
+    return `${at}.placeholder must be 'unnamed' or 'unverified'`;
+  }
+  return x.identifiers === undefined ? null : listProblem(x.identifiers, `${at}.identifiers`, identifierProblem);
+}
+
+function locatorProblem(x: unknown, at: string): Problem {
+  if (!isRecord(x)) return `${at} must be an object`;
+  if (!isString(x.scheme)) return `${at}.scheme must be a string`;
+  if (!isString(x.value)) return `${at}.value must be a string`;
+  if (!isOptionalString(x.end)) return `${at}.end must be a string`;
+  return null;
+}
+
+/** The legal cells of CONTRACT.md §3; private + text is not one. */
+function disclosureProblem(d: unknown, at: string): Problem {
+  if (!isRecord(d)) return `${at} must be an object`;
+  if (d.raw === 'public') {
+    return ['text', 'semantic', 'locator', 'none'].includes(d.exposure as string)
+      ? null
+      : `${at}.exposure must be text, semantic, locator, or none`;
+  }
+  if (d.raw === 'private') {
+    return ['semantic', 'locator', 'none'].includes(d.exposure as string)
+      ? null
+      : `${at}.exposure must be semantic, locator, or none (private + text is not a cell)`;
+  }
+  return `${at}.raw must be 'public' or 'private'`;
+}
+
+function policyProblem(p: unknown, at: string): Problem {
+  if (p === undefined) return null;
+  if (!isRecord(p)) return `${at} must be an object`;
+  if (!isOptionalBoolean(p.requireReview)) return `${at}.requireReview must be a boolean`;
+  if (!isOptionalBoolean(p.publicTitle)) return `${at}.publicTitle must be a boolean`;
+  if (p.lint !== undefined) {
+    if (!isRecord(p.lint)) return `${at}.lint must be an object`;
+    for (const key of ['ngramWords', 'ngramChars', 'gistMaxChars'] as const) {
+      if (p.lint[key] !== undefined && !isPositiveInteger(p.lint[key])) return `${at}.lint.${key} must be a positive integer`;
+    }
+  }
+  return null;
+}
+
+function entityProblem(e: unknown): Problem {
+  if (!isRecord(e)) return 'it is not an object';
+  for (const key of ['id', 'type', 'title', 'url'] as const) {
+    if (!isString(e[key])) return `'${key}' must be a string`;
+  }
+  for (const key of ['date', 'version', 'parent'] as const) {
+    if (!isOptionalString(e[key])) return `'${key}' must be a string`;
+  }
   return (
-    isRecord(e) &&
-    typeof e.id === 'string' &&
-    typeof e.type === 'string' &&
-    typeof e.title === 'string' &&
-    typeof e.url === 'string' &&
-    Array.isArray(e.attribution) &&
-    Array.isArray(e.identifiers) &&
-    isLegalCell(e.disclosure)
+    listProblem(e.attribution, "'attribution'", attributionProblem) ??
+    listProblem(e.identifiers, "'identifiers'", identifierProblem) ??
+    (e.themes === undefined ? null : listProblem(e.themes, "'themes'", stringItem)) ??
+    disclosureProblem(e.disclosure, "'disclosure'") ??
+    policyProblem(e.policy, "'policy'")
   );
 }
 
-function vectorFieldsValid(e: Record<string, unknown>): boolean {
-  return typeof e.model === 'string' && typeof e.dimensions === 'number' && Array.isArray(e.vector);
+/** What survives of a projection in a served index: exactly these four fields. */
+function servedProjectionProblem(p: unknown, at: string): Problem {
+  if (!isRecord(p)) return `${at} must be an object`;
+  if (p.lint !== 'passed') return `${at}.lint must be 'passed'`;
+  if (!isString(p.gist)) return `${at}.gist must be a string`;
+  if (p.source !== 'generated' && p.source !== 'edited') return `${at}.source must be 'generated' or 'edited'`;
+  if (p.review !== 'unreviewed' && p.review !== 'reviewed') return `${at}.review must be 'unreviewed' or 'reviewed'`;
+  for (const key of Object.keys(p)) {
+    if (!['lint', 'gist', 'source', 'review'].includes(key)) return `${at} still carries '${key}'`;
+  }
+  return null;
 }
 
-function fragmentIsValid(f: unknown): f is Fragment {
+function fragmentProblem(f: unknown, served: boolean): Problem {
+  if (!isRecord(f)) return "'fragment' must be an object";
+  for (const key of ['id', 'entityId', 'text'] as const) {
+    if (!isString(f[key])) return `'${key}' must be a string`;
+  }
+  for (const key of ['date', 'summary'] as const) {
+    if (!isOptionalString(f[key])) return `'${key}' must be a string`;
+  }
+  if (f.sourceReview !== undefined && !['unreviewed', 'in-review', 'reviewed'].includes(f.sourceReview as string)) {
+    return "'sourceReview' must be unreviewed, in-review, or reviewed";
+  }
+  if (!Array.isArray(f.locator) || f.locator.length === 0) return "'locator' must be a non-empty array";
   return (
-    isRecord(f) &&
-    typeof f.id === 'string' &&
-    typeof f.entityId === 'string' &&
-    Array.isArray(f.locator) &&
-    f.locator.length > 0 &&
-    typeof f.text === 'string' &&
-    isLegalCell(f.disclosure)
+    listProblem(f.locator, "'locator'", locatorProblem) ??
+    disclosureProblem(f.disclosure, "'disclosure'") ??
+    (f.attribution === undefined ? null : listProblem(f.attribution, "'attribution'", attributionProblem)) ??
+    (f.themes === undefined ? null : listProblem(f.themes, "'themes'", stringItem)) ??
+    (f.projection === undefined
+      ? null
+      : served
+        ? servedProjectionProblem(f.projection, "'projection'")
+        : projectionProblem(f.projection, "'projection'"))
   );
+}
+
+/** `vector` has exactly `dimensions` finite numbers: a NaN or a short vector
+ *  would not fail; it would score. */
+function vectorProblem(e: Record<string, unknown>): Problem {
+  if (!isString(e.model)) return "'model' must be a string";
+  if (!isPositiveInteger(e.dimensions)) return "'dimensions' must be a positive integer";
+  const v = e.vector;
+  if (!Array.isArray(v)) return "'vector' must be an array of numbers";
+  if (v.length !== e.dimensions) return `'vector' has ${v.length} elements, not 'dimensions' (${e.dimensions})`;
+  for (let i = 0; i < v.length; i++) {
+    const x: unknown = v[i];
+    if (typeof x !== 'number' || !Number.isFinite(x)) return `'vector'[${i}] must be a finite number`;
+  }
+  return null;
+}
+
+function entryProblem(raw: unknown, served: boolean): Problem {
+  if (!isRecord(raw)) return 'it is not an object';
+  if (!served && !isString(raw.contentHash)) return "'contentHash' must be a string";
+  return vectorProblem(raw) ?? fragmentProblem(raw.fragment, served);
+}
+
+/** `'x'` when the malformed object still names itself, so the message points. */
+function idOf(x: unknown): string {
+  return isRecord(x) && isString(x.id) ? ` '${x.id}'` : '';
+}
+
+function fragmentIdOf(raw: unknown): string {
+  return isRecord(raw) ? idOf(raw.fragment) : '';
 }
 
 function parseJson(path: string): unknown {
@@ -156,38 +287,60 @@ function checkVersion(parsed: unknown, path: string): Record<string, unknown> {
   return file;
 }
 
+/** The entities of a parsed file, each well formed and unique. */
+function checkEntities(file: Record<string, unknown>, path: string): Map<string, Entity> {
+  const entities = new Map<string, Entity>();
+  for (const e of file.entities as unknown[]) {
+    const problem = entityProblem(e);
+    if (problem !== null) throw new Error(`index at ${path} has a malformed entity${idOf(e)}: ${problem}. ${REBUILD}`);
+    const entity = e as Entity;
+    if (entities.has(entity.id)) throw new Error(`index at ${path} lists entity '${entity.id}' twice. ${REBUILD}`);
+    entities.set(entity.id, entity);
+  }
+  return entities;
+}
+
+/** One entry's fragment, well formed, under an entity the file lists and in that entity's layer. */
+function checkEntry(raw: unknown, served: boolean, entities: ReadonlyMap<string, Entity>, path: string): Fragment {
+  const problem = entryProblem(raw, served);
+  if (problem !== null) {
+    throw new Error(`index at ${path} has a malformed entry${fragmentIdOf(raw)}: ${problem}. ${REBUILD}`);
+  }
+  const fragment = (raw as { fragment: Fragment }).fragment;
+  const entity = entities.get(fragment.entityId);
+  if (!entity) {
+    throw new Error(`index at ${path}: fragment '${fragment.id}' names unknown entity '${fragment.entityId}'. ${REBUILD}`);
+  }
+  if (fragment.disclosure.raw !== entity.disclosure.raw) {
+    throw new Error(
+      `index at ${path}: fragment '${fragment.id}' is raw '${fragment.disclosure.raw}' under entity ` +
+        `'${entity.id}' which is raw '${entity.disclosure.raw}'. A fragment never changes the layer. ${REBUILD}`,
+    );
+  }
+  return fragment;
+}
+
 /**
- * Validate a parsed private index (CONTRACT.md §12): every entity well formed
- * and unique; every entry carries a vector and a fragment; every fragment's
- * entity resolves; the fragment's `raw` equals its entity's; the cell is legal;
- * a `semantic` fragment satisfies isServableGist; and every authored string a
- * hit on a private entity carries passes the §6 lint against that entity's
- * text (assertPublicSafeMetadata). Throws with the remedy.
+ * Validate a parsed private index (CONTRACT.md §12): every entity and every
+ * entry well formed down to its nested items and vector elements; every
+ * entity unique; every fragment's entity resolves and shares its `raw`; the
+ * cell is legal; a `semantic` fragment satisfies isServableGist. Then, because
+ * the private index is the one artifact that still holds the text, the two
+ * verdicts a served hit relies on are re-earned against it rather than read
+ * from the file: every authored string a hit on a private entity carries
+ * passes the §6 metadata lint, and every `semantic` fragment's gist is the
+ * gist of this text (contentHash) and passes the §6 gist lint against it, and
+ * against the whole entity where there is more than one fragment, exactly as
+ * the drafter checked it (src/ingest/gist.ts). `lint: 'passed'` in a JSON file
+ * is a word; the text is here, so it is checked. Throws with the remedy.
  */
 export function validateIndex(parsed: unknown, path = 'index'): IndexFile {
   const file = checkVersion(parsed, path);
-  const entities = new Map<string, Entity>();
-  for (const e of file.entities as unknown[]) {
-    if (!entityIsValid(e)) throw new Error(`index at ${path} has a malformed entity. ${REBUILD}`);
-    if (entities.has(e.id)) throw new Error(`index at ${path} lists entity '${e.id}' twice. ${REBUILD}`);
-    entities.set(e.id, e);
-  }
+  const entities = checkEntities(file, path);
   const fragmentsByEntity = new Map<string, Fragment[]>();
   for (const raw of file.entries as unknown[]) {
-    if (!isRecord(raw) || !vectorFieldsValid(raw) || typeof raw.contentHash !== 'string' || !fragmentIsValid(raw.fragment)) {
-      throw new Error(`index at ${path} has a malformed entry. ${REBUILD}`);
-    }
-    const fragment = raw.fragment;
-    const entity = entities.get(fragment.entityId);
-    if (!entity) {
-      throw new Error(`index at ${path}: fragment '${fragment.id}' names unknown entity '${fragment.entityId}'. ${REBUILD}`);
-    }
-    if (fragment.disclosure.raw !== entity.disclosure.raw) {
-      throw new Error(
-        `index at ${path}: fragment '${fragment.id}' is raw '${fragment.disclosure.raw}' under entity ` +
-          `'${entity.id}' which is raw '${entity.disclosure.raw}'. A fragment never changes the layer. ${REBUILD}`,
-      );
-    }
+    const fragment = checkEntry(raw, false, entities, path);
+    const entity = entities.get(fragment.entityId)!;
     if (fragment.disclosure.exposure === 'semantic' && !isServableGist(fragment, entity)) {
       throw new Error(
         `index at ${path}: fragment '${fragment.id}' is exposed as 'semantic' without a servable gist. ${REBUILD}`,
@@ -197,42 +350,51 @@ export function validateIndex(parsed: unknown, path = 'index'): IndexFile {
     if (!list) fragmentsByEntity.set(entity.id, (list = []));
     list.push(fragment);
   }
-  // The strings a hit on a private entity carries are not typed; they are
-  // linted, and the private index is the one artifact that still holds the
-  // text to lint them against. So the lint runs here, on every load, and a
-  // hand-edited title or locator that quotes the text fails with the field and
-  // the run, not in an answer.
   for (const entity of entities.values()) {
-    if (entity.disclosure.raw !== 'private') continue;
-    assertPublicSafeMetadata(entity, fragmentsByEntity.get(entity.id) ?? [], { path: `index at ${path}` });
+    const fragments = fragmentsByEntity.get(entity.id) ?? [];
+    if (entity.disclosure.raw === 'private') {
+      assertPublicSafeMetadata(entity, fragments, { path: `index at ${path}` });
+    }
+    const entityText = fragments.length > 1 ? entityLintText(fragments) : undefined;
+    const lint = entity.policy?.lint;
+    for (const fragment of fragments) {
+      const projection = fragment.projection;
+      if (fragment.disclosure.exposure !== 'semantic' || projection?.lint !== 'passed') continue;
+      if (projection.contentHash !== projectionContentHash(fragment.text)) {
+        throw new Error(
+          `index at ${path}: fragment '${fragment.id}' is exposed as 'semantic' with a gist drafted against ` +
+            `other text (contentHash does not match the fragment). ${REBUILD}`,
+        );
+      }
+      assertSemanticProjection(projection.gist, {
+        path: `index at ${path}: fragment '${fragment.id}'`,
+        fragmentText: fragment.text,
+        ...(entityText !== undefined ? { entityText } : {}),
+        maxChars: lint?.gistMaxChars,
+        ngramWords: lint?.ngramWords,
+        ngramChars: lint?.ngramChars,
+      });
+    }
   }
   return file as unknown as IndexFile;
 }
 
-/** Validate a served index: everything validateIndex checks, plus the strip of
- *  CONTRACT.md §3 rule 4 actually happened. A served index that fails this was
+/** Validate a served index: the same shape checks as validateIndex, plus the
+ *  strip of CONTRACT.md §3 rule 4 actually happened. The lints cannot run here
+ *  (the text is blank) and are not pretended to; a served index is trusted to
+ *  descend from a validated private one. A served index that fails this was
  *  misbuilt and is refused. */
 export function validateServedIndex(parsed: unknown, path = 'served index'): ServedIndexFile {
   const file = checkVersion(parsed, path);
   if (file.served !== true) throw new Error(`index at ${path} is not marked as a served index. ${REBUILD}`);
-  const entities = new Map<string, Entity>();
-  for (const e of file.entities as unknown[]) {
-    if (!entityIsValid(e)) throw new Error(`index at ${path} has a malformed entity. ${REBUILD}`);
+  const entities = checkEntities(file, path);
+  for (const e of entities.values()) {
     if ('policy' in e) throw new Error(`index at ${path}: entity '${e.id}' still carries policy. ${REBUILD}`);
-    entities.set(e.id, e);
   }
   const servedEntities = new Set<string>();
   for (const raw of file.entries as unknown[]) {
-    if (!isRecord(raw) || !vectorFieldsValid(raw) || !fragmentIsValid(raw.fragment)) {
-      throw new Error(`index at ${path} has a malformed entry. ${REBUILD}`);
-    }
-    if ('contentHash' in raw) throw new Error(`index at ${path} still carries contentHash. ${REBUILD}`);
-    const f = raw.fragment as Fragment & Record<string, unknown>;
-    const entity = entities.get(f.entityId);
-    if (!entity) throw new Error(`index at ${path}: fragment '${f.id}' names unknown entity '${f.entityId}'. ${REBUILD}`);
-    if (f.disclosure.raw !== entity.disclosure.raw) {
-      throw new Error(`index at ${path}: fragment '${f.id}' changes the layer of '${entity.id}'. ${REBUILD}`);
-    }
+    if (isRecord(raw) && 'contentHash' in raw) throw new Error(`index at ${path} still carries contentHash. ${REBUILD}`);
+    const f = checkEntry(raw, true, entities, path);
     const exposure = f.disclosure.exposure;
     if (exposure === 'none') throw new Error(`index at ${path}: fragment '${f.id}' has exposure 'none'. ${REBUILD}`);
     if (exposure !== 'text' && (f.text !== '' || (f.summary !== undefined && f.summary !== ''))) {
@@ -241,16 +403,8 @@ export function validateServedIndex(parsed: unknown, path = 'served index'): Ser
     if (exposure !== 'semantic' && f.projection !== undefined) {
       throw new Error(`index at ${path}: fragment '${f.id}' is '${exposure}' but still carries a projection. ${REBUILD}`);
     }
-    if (exposure === 'semantic') {
-      const p = f.projection as Record<string, unknown> | undefined;
-      if (!p || p.lint !== 'passed' || typeof p.gist !== 'string') {
-        throw new Error(`index at ${path}: fragment '${f.id}' is 'semantic' without a passed gist. ${REBUILD}`);
-      }
-      for (const key of Object.keys(p)) {
-        if (!['lint', 'gist', 'source', 'review'].includes(key)) {
-          throw new Error(`index at ${path}: fragment '${f.id}' projection still carries '${key}'. ${REBUILD}`);
-        }
-      }
+    if (exposure === 'semantic' && f.projection === undefined) {
+      throw new Error(`index at ${path}: fragment '${f.id}' is 'semantic' without a passed gist. ${REBUILD}`);
     }
     if ('sourceReview' in f) throw new Error(`index at ${path}: fragment '${f.id}' still carries sourceReview. ${REBUILD}`);
     servedEntities.add(f.entityId);
@@ -416,7 +570,7 @@ export function assertHomogeneousEntries(entries: readonly { model: string; dime
 // ─── Migration ───────────────────────────────────────────────────────────────
 
 function legacyEntryIsValid(e: unknown): e is IndexEntry {
-  if (!isRecord(e) || !vectorFieldsValid(e) || typeof e.contentHash !== 'string') return false;
+  if (!isRecord(e) || vectorProblem(e) !== null || typeof e.contentHash !== 'string') return false;
   if (e.sourceType === 'record') {
     const r = e.record;
     return isRecord(r) && typeof r.id === 'string' && typeof r.url === 'string' && typeof r.title === 'string';

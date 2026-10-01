@@ -12,11 +12,12 @@ import {
   assertPublicSafeField,
   assertPublicSafeMetadata,
   assertSemanticProjection,
-  findSharedCharRun,
-  findSharedWordRun,
+  entityLintText,
   GIST_MAX_CHARS,
   hasUnspacedScript,
   normalizeWords,
+  privateTextMatcher,
+  PublicSafeLintError,
 } from '../src/public-safe.js';
 
 const PAGE_184 =
@@ -42,7 +43,7 @@ test('gist lint: five shared words is quotation, four is description', () => {
         path: 'book#p184',
         fragmentText: PAGE_184,
       }),
-    /book#p184: gist quotes the fragment's text \("who would answer for it"\)/,
+    /book#p184: gist quotes the fragment's text at words 3–7: a projection must not contain 5 consecutive words/,
   );
   // Four words shared ("would answer for it") passes; the window is five.
   assert.equal(
@@ -65,8 +66,42 @@ test('gist lint: the entity text catches a gist that quotes the page before', ()
         fragmentText: PAGE_184,
         entityText: `${PAGE_183}\n\n${PAGE_184}`,
       }),
-    /quotes the entity's text \("the negotiation had run past"\)/,
+    /quotes the entity's text at words 4–8/,
   );
+});
+
+test('gist lint: a failure names the position of the run, never the run, and is a PublicSafeLintError', () => {
+  // The message is what `npm run index`, CI, and a consumer's loader print;
+  // the run is private text, so it stays out (STANDARDS §4).
+  const gist = 'She wonders who would answer for it if the account is false.';
+  assert.throws(
+    () => assertSemanticProjection(gist, { path: 'book#p184', fragmentText: PAGE_184 }),
+    (err: unknown) =>
+      err instanceof PublicSafeLintError &&
+      !/who would answer/.test(err.message) &&
+      !/account/.test(err.message) &&
+      /words 3–7/.test(err.message),
+  );
+  // The same for the traveling-string lint.
+  assert.throws(
+    () => assertPublicSafeField('Notes: who would answer for it', { field: 'label', path: 'n', privateText: PAGE_184 }),
+    (err: unknown) => err instanceof PublicSafeLintError && !/answer/.test(err.message) && /words 2–6/.test(err.message),
+  );
+  // Shape failures are lint failures too.
+  assert.throws(() => assertSemanticProjection('', { path: 'x', fragmentText: PAGE_184 }), PublicSafeLintError);
+});
+
+test('entityLintText: fragment-id order, whatever order the fragments arrive in', () => {
+  const inOrder = entityLintText([
+    { id: 'book:x#p1', text: 'one' },
+    { id: 'book:x#p2', text: 'two' },
+  ]);
+  const reversed = entityLintText([
+    { id: 'book:x#p2', text: 'two' },
+    { id: 'book:x#p1', text: 'one' },
+  ]);
+  assert.equal(inOrder, 'one\n\ntwo');
+  assert.equal(reversed, inOrder);
 });
 
 test('gist lint: shape checks fail loudly with the path', () => {
@@ -106,9 +141,9 @@ test('gist lint: normalization is Unicode-aware and counts characters for unspac
   const japanese =
     '彼女は書類を二度読み、自分の署名が何を約束するのかをようやく理解した。部屋にいた誰も見ていない夜の出来事を、彼らは記録として残そうとしていた。';
   // A word-run check is vacuous here (the passage is one "word"); the
-  // character run catches a lifted clause.
-  assert.equal(findSharedWordRun('自分の署名が何を約束するのかをようやく理解した', japanese, 5), null);
-  assert.equal(findSharedCharRun('自分の署名が何を約束するのかを', japanese, 12), '自分の署名が何を約束する');
+  // character run catches a lifted clause, reported by position.
+  assert.deepEqual(privateTextMatcher(japanese)('自分の署名が何を約束するのかを'), { unit: 'characters', n: 12, start: 1 });
+  assert.equal(privateTextMatcher(japanese)('署名の重みに気づく女性'), null);
   assert.throws(
     () =>
       assertSemanticProjection('彼女は、自分の署名が何を約束するのかをようやく理解した場面。', {
@@ -133,14 +168,18 @@ test('public-safe lint: the Unicode normalizer preserves the 2.x verdicts on ASC
         path: 'n.md',
         privateText: body,
       }),
-    /"originally modulated up a whole"/,
+    /quotes private text at words 2–6/,
   );
   assert.equal(
     assertPublicSafeField('modulated up a whole octave instead', { field: 'label', path: 'n.md', privateText: body }),
     'modulated up a whole octave instead',
   );
   // Accented letters are letters, not separators: "déjà" is one word.
-  assert.equal(findSharedWordRun('déjà vu all over again now', 'and déjà vu all over again now', 5), 'déjà vu all over again');
+  assert.deepEqual(privateTextMatcher('and déjà vu all over again now')('déjà vu all over again now'), {
+    unit: 'words',
+    n: 5,
+    start: 1,
+  });
 });
 
 function entity(overrides: Partial<Entity> = {}): Entity {
@@ -330,7 +369,7 @@ test('public-safe metadata lint: every authored string a private hit carries, ag
   // A speaker name or a theme that quotes the text is caught like a title.
   assert.throws(
     () => assertPublicSafeMetadata(base, [frag({ attribution: [{ name: 'asked who would answer for it' }] })], ctx),
-    /index at t: fragment 'book:x#p1': 'speaker name' quotes private text \("asked who would answer for"\)/,
+    /index at t: fragment 'book:x#p1': 'speaker name' quotes private text at words 1–5/,
   );
   assert.throws(
     () => assertPublicSafeMetadata({ ...base, themes: ['who would answer for it'] }, [frag()], ctx),
@@ -357,7 +396,22 @@ test('public-safe metadata lint: every authored string a private hit carries, ag
   assertPublicSafeMetadata({ ...base, title: '署名者たち' }, [frag({ text: japanese })], ctx);
   assert.throws(
     () => assertPublicSafeMetadata({ ...base, title: '交渉は真夜中を過ぎても続き、誰が' }, [frag({ text: japanese })], ctx),
-    /'title' quotes private text \(".*"\)\. A traveling field must not contain 12 consecutive characters/,
+    /'title' quotes private text at characters \d+–\d+: a traveling field must not contain 12 consecutive characters/,
+  );
+});
+
+test('public-safe metadata lint: policy.lint sets the window for the entity', () => {
+  const body = 'The negotiation had run past midnight before anyone asked who would answer for it.';
+  const base = { id: 'book:x', title: 'A Short Title', attribution: [] };
+  const frag = { id: 'book:x#p1', text: body, locator: [{ scheme: 'page', value: '1' }] };
+  // Four shared words pass at the shipped window and fail at an authored four.
+  assertPublicSafeMetadata({ ...base, title: 'Who would answer for them' }, [frag], { path: 't' });
+  assert.throws(
+    () =>
+      assertPublicSafeMetadata({ ...base, title: 'Who would answer for them', policy: { lint: { ngramWords: 4 } } }, [frag], {
+        path: 't',
+      }),
+    /'title' quotes private text at words 1–4: a traveling field must not contain 4 consecutive words/,
   );
 });
 

@@ -158,7 +158,11 @@ export interface Entity {
   parent?: string;            // entity id this one belongs to (a transcript's episode)
   themes?: string[];          // consumer boost input
   disclosure: Disclosure;     // entity default; a fragment may override `exposure`, never `raw`
-  policy?: { requireReview?: boolean };
+  policy?: {                  // authored declarations; stripped from a served index
+    requireReview?: boolean;  // a gist is servable only once `review` is 'reviewed'
+    publicTitle?: boolean;    // the title is public by construction; bounded, not checked against the text (section 6)
+    lint?: { ngramWords?: number; ngramChars?: number; gistMaxChars?: number }; // the lints' window for this entity (section 6)
+  };
 }
 
 /** A gist the lint has passed. Constructible only through assertSemanticProjection (section 6). */
@@ -368,8 +372,9 @@ lists both as separate channels.
 Trust posture. The `LintedGist` brand erases at JSON boundaries, exactly as the
 2.x `PublicSafe` brand does, so a brand proves nothing about a file. A
 **private** index read from disk is not trusted: it still holds the text, so the
-load-time validator (section 12) re-runs the metadata lint against it, and a
-hand-edited title or locator fails at load with the field and the run. A
+load-time validator (section 12) re-runs the metadata lint and the gist lint
+against it, and a hand-edited title, locator, or gist fails at load with the
+field and the position of the run. A
 **served** index, or a bundle read from a blob store, has no private text to
 check against (that is what the strip is for) and is trusted to descend from a
 validated private index; its validator checks the shape and the strip
@@ -458,8 +463,17 @@ breaks); at most `maxChars` characters; no run of `ngramWords` consecutive
 normalized words shared with the fragment text; and no such run shared with the
 whole entity's text, so the gist of one page cannot quote the page before it.
 `entityText` is optional inside the drafter loop and **required at index build
-for any entity with more than one fragment**. The function is the only
-constructor of `LintedGist`.
+and at load for any entity with more than one fragment**; it has one definition,
+`entityLintText`: every fragment of the entity in fragment-id order, joined by
+blank lines, so the drafter and the loader agree on it whatever order their
+fragments arrive in. The function is the only constructor of `LintedGist`.
+
+A failure names the path, the field, and the **position** of the shared run in
+the string under test (`quotes the fragment's text at words 3–7`), never the
+run itself: the message is what `npm run index`, a CI job, or a consumer's
+loader prints, and the run is private text by definition. Both lints throw
+`PublicSafeLintError`, so a caller can tell a lint failure (fix the string, or
+let the drafter retry) from a malformed file.
 
 Normalization is Unicode-aware (`\p{L}` and `\p{N}`, not `[a-z0-9]`), and for a
 script without word spacing the run is counted in characters (a fixed
@@ -471,9 +485,12 @@ is a caption; a gist of a page needs two or three sentences, and past about 400
 characters a gist has room to retell. Five raw tokens is where legitimate
 description ends and quotation begins for prose; four trips on function-word
 runs any honest gist shares with its source, and three is unusable. Both
-constants are exported so a consumer can tune them per entity, and the
-recommended practice is to run the lint at four in a dry run and count the trips
-before choosing.
+constants are exported, and a different window is **authored on the entity** as
+`policy.lint` (`ngramWords`, `ngramChars`, `gistMaxChars`) and stored with it,
+so the drafter at build and the validator at load read the same terms;
+`ngramWords` and `ngramChars` set the window for the metadata lint on that
+entity as well. The recommended practice is to run the lint at four in a dry
+run and count the trips before choosing.
 
 **What travels besides the gist, and how it is checked.** On a private entity,
 the strings a hit carries that are authored rather than structural are the
@@ -507,9 +524,11 @@ Identifiers, dates, ids, types, and URLs are structural and are not linted.
 
 Where the lint runs: at ingest, inside the drafter loop; at index build, over
 every gist and every authored string that will be served; at every load of a
-private index, so a hand edit to the artifact is checked too; and at evaluation,
-as the canary sweep. Never at query time, and never on a served index, which has
-no text left to check against.
+private index (section 12: the metadata lint over every private entity, and the
+gist lint over every `semantic` fragment's gist, whose `contentHash` must also
+be the hash of the text it stands in for), so a hand edit to the artifact is
+checked too; and at evaluation, as the canary sweep. Never at query time, and
+never on a served index, which has no text left to check against.
 
 ## 7. Retrieval
 
@@ -776,19 +795,31 @@ Entities are stored once; fragments reference them by id. A schema-3 index fails
 fast with the rebuild instruction, as a schema-2 one does today. The served
 index is the same shape after `toServedIndex`.
 
-Validation at load checks, on every index: every fragment's entity resolves;
+Validation at load checks, on every index: every entity and every entry is
+well formed down to its nested items (attribution, identifiers, locators,
+projection, policy) and its vector (exactly `dimensions` finite numbers), and a
+failure names the field, never a value; every fragment's entity resolves;
 `fragment.disclosure.raw` equals its entity's `raw`; the disclosure is a legal
 cell; a `semantic` fragment satisfies `isServableGist`. On a private index it
-also runs the section 6 metadata lint over every private entity against that
-entity's text, heading exemption included, so an authored string that quotes the
-text fails at load with the field and the run. On a served index it instead
-checks rule 4: no fragment has exposure `none`; `text` and `summary` are `''`
-wherever exposure is not `text`; `projection` is absent wherever exposure is not
-`semantic`; no `contentHash`, `policy`, or `sourceReview` remains. The metadata
-lint cannot run on a served index (the text is blank) and is not pretended to.
-A served index that fails these was misbuilt and is refused with the rebuild
-instruction. `writeIndex` and `writeServedIndex` run the same validation before
-writing, so what the next load would refuse is refused at build.
+also re-earns, against the text it still holds, the two verdicts a served hit
+relies on rather than reading them from the file: the section 6 metadata lint
+runs over every private entity against that entity's text, heading exemption
+included, so an authored string that quotes the text fails at load with the
+field and the position of the run; and every `semantic` fragment's gist must
+carry the `contentHash` of the fragment's text and pass the section 6 gist lint
+against that text, and against the whole entity's text where there is more than
+one fragment, under the entity's `policy.lint` window, exactly as the drafter
+checked it. `lint: 'passed'` in the file is a word, not a verdict. A projection
+carried on a fragment not exposed as `semantic` is private material that never
+travels and is not re-checked until a build makes it servable. On a served
+index it instead checks rule 4: no fragment has exposure `none`; `text` and
+`summary` are `''` wherever exposure is not `text`; `projection` is absent
+wherever exposure is not `semantic`; no `contentHash`, `policy`, or
+`sourceReview` remains. Neither lint can run on a served index (the text is
+blank) and neither is pretended to. A served index that fails these was misbuilt
+and is refused with the rebuild instruction. `writeIndex` and
+`writeServedIndex` run the same validation before writing, so what the next
+load would refuse is refused at build.
 
 Each entry's vector and `contentHash` are taken over the fragment's **embed
 string**, one rule in `src/embed-string.ts` chosen so that today's bytes are
@@ -831,7 +862,8 @@ not by the type.
   what bounds how many signals a caller gets.
 - Layer assignment, the choice of `raw`, is authored upstream of the type.
 - The brand erases at JSON boundaries. A private index is re-linted at every
-  load because it still holds the text; a served index is trusted to have been
+  load, authored strings and served gists both, because it still holds the
+  text; a served index is trusted to have been
   built through the gate from a validated private one, and its load-time
   validator checks the shape and the strip, not the provenance, of what it loads.
 - Recall. A fragment below the floor is absent, and absence is what a gate cannot

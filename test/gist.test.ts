@@ -17,10 +17,14 @@ import {
   draftProjections,
   GIST_PROMPT_VERSION,
   GIST_TEXT_FORMAT,
-  projectionContentHash,
 } from '../src/ingest/gist.js';
 import type { GistClient, GistDrafter, GistDraftRequest, ProjectionDraftInput } from '../src/ingest/gist.js';
-import { readProjections, validateProjections, writeProjections } from '../src/ingest/projections.js';
+import {
+  projectionContentHash,
+  readProjections,
+  validateProjections,
+  writeProjections,
+} from '../src/ingest/projections.js';
 
 const P1 = 'The negotiation had run past midnight before anyone asked who would answer for it.';
 const P2 = 'By morning the signatures were dry and the question had not been asked again.';
@@ -92,7 +96,10 @@ test('draftProjections: a quoting draft is retried once with the reason; a secon
   assert.equal(retried.requests.length, 2);
   const retry = retried.requests[1]!;
   assert.equal(retry.rejected?.draft, quoting);
-  assert.match(retry.rejected!.reason, /quotes the fragment's text \("the negotiation had run past"\)/);
+  // The reason names the position of the run in the draft, never the run: it
+  // is printed by `npm run index` and travels in the retry prompt.
+  assert.match(retry.rejected!.reason, /quotes the fragment's text at words 3–7: a projection must not contain 5 consecutive words/);
+  assert.ok(!retry.rejected!.reason.includes('negotiation'));
 
   const stubborn = scripted([quoting, 'Still the negotiation had run past midnight, it says.']);
   const failed = await draftProjections(ENTITY, [frag(1, P1)], stubborn, { now: NOW });
@@ -109,9 +116,26 @@ test('draftProjections: the whole entity is the lint text, so a gist cannot quot
   const drafter = scripted(['Elsewhere the signatures were dry and the matter rests.', CLEAN_1, CLEAN_2]);
   const { projections, stats } = await draftProjections(ENTITY, [frag(1, P1), frag(2, P2)], drafter, { now: NOW });
   assert.equal(stats.drafted, 2);
-  assert.match(drafter.requests[1]!.rejected!.reason, /quotes the entity's text \("the signatures were dry and"\)/);
+  assert.match(drafter.requests[1]!.rejected!.reason, /quotes the entity's text at words 2–6/);
+  assert.ok(!drafter.requests[1]!.rejected!.reason.includes('signatures'));
   assert.equal(projections.get('book:x#p1')!.lint, 'passed');
   assert.equal(projections.get('book:x#p2')!.lint, 'passed');
+});
+
+test('draftProjections: the window is the entity policy, read the same way the loader reads it', async () => {
+  // Four shared words ("who would answer for") pass at the default window...
+  const fourWords = 'Someone wonders who would answer for the night.';
+  const loose = await draftProjections(ENTITY, [frag(1, P1)], scripted([fourWords]), { now: NOW });
+  assert.equal(loose.projections.get('book:x#p1')!.lint, 'passed');
+  // ...and fail when the entity tightens it; the drafter is told the window it works under.
+  const tight = { ...ENTITY, policy: { lint: { ngramWords: 4, gistMaxChars: 200 } } };
+  const drafter = scripted([fourWords, CLEAN_1]);
+  const strict = await draftProjections(tight, [frag(1, P1)], drafter, { now: NOW });
+  assert.equal(strict.projections.get('book:x#p1')!.lint, 'passed');
+  assert.equal(drafter.requests.length, 2);
+  assert.equal(drafter.requests[0]!.ngramWords, 4);
+  assert.equal(drafter.requests[0]!.maxChars, 200);
+  assert.match(drafter.requests[1]!.rejected!.reason, /4 consecutive words/);
 });
 
 test('draftProjections: a current generated gist is skipped; text, model, prompt, or regenerate redrafts it', async () => {

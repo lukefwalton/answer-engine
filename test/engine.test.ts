@@ -253,7 +253,7 @@ test('corpus: the public-safe lint rejects traveling fields that quote private t
         path: 'n.md',
         privateText: body,
       }),
-    /n\.md: 'label' quotes private text \("originally modulated up a whole"\)/,
+    /n\.md: 'label' quotes private text at words 2–6: a traveling field must not contain 5 consecutive words/,
   );
   // Four shared words is citation-grade overlap and passes — the demo
   // corpus's own locators depend on exactly this margin (PUBLIC_SAFE_NGRAM_WORDS).

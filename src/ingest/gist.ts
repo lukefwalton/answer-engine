@@ -12,27 +12,25 @@
 // JSON-schema output; what the provider keeps from that call is governed by
 // its data-use terms (CONTRACT.md §10, provider custody).
 
-import { createHash } from 'node:crypto';
 import type OpenAI from 'openai';
 
 import { isReasoningModel } from '../answer.js';
 import type { Entity, Exposure, Locator, SemanticProjection } from '../contract.js';
 import { renderLocatorLabel } from '../locator.js';
-import { assertSemanticProjection, GIST_MAX_CHARS, GIST_NGRAM_CHARS, GIST_NGRAM_WORDS } from '../public-safe.js';
+import {
+  assertSemanticProjection,
+  entityLintText,
+  GIST_MAX_CHARS,
+  GIST_NGRAM_CHARS,
+  GIST_NGRAM_WORDS,
+} from '../public-safe.js';
+import { projectionContentHash } from './projections.js';
 
 /** Bump when the instructions below change in a way that should redraft every
  *  generated gist. Edited gists are never redrafted. */
 export const GIST_PROMPT_VERSION = 'gist/1';
 
 export const GIST_TIMEOUT_MS = 120_000;
-
-/** sha1 of the fragment text a gist was drafted or edited against, 16 hex
- *  chars. Model and prompt version are stored beside it on the projection: a
- *  generated gist is current when all three match; an edited gist is stale
- *  when the text alone moved, whatever model drafted the original. */
-export function projectionContentHash(fragmentText: string): string {
-  return createHash('sha1').update(fragmentText).digest('hex').slice(0, 16);
-}
 
 export interface GistDraftRequest {
   fragmentId: string;
@@ -146,9 +144,6 @@ export interface DraftProjectionsOptions {
   /** The stored projections, keyed by fragment id (the author's file). */
   existing?: ReadonlyMap<string, SemanticProjection>;
   allowedNames?: readonly string[];
-  maxChars?: number;
-  ngramWords?: number;
-  ngramChars?: number;
   /** Redraft generated gists even when current; `true` for all, or a set of fragment ids. */
   regenerate?: boolean | ReadonlySet<string>;
   /** Injected for tests. */
@@ -186,20 +181,24 @@ function lintMessage(err: unknown): string {
  * - A veto carries over a redraft; review does not (new text, unreviewed).
  * - A projection stored for a fragment no longer requested as `semantic` is
  *   carried through untouched, so flipping a policy back costs no call.
+ *
+ * The lint's window is the entity's `policy.lint` where set, the shipped
+ * constants otherwise: the same reading the index validator makes at load
+ * (src/store.ts), so what passes here passes there.
  */
 export async function draftProjections(
-  entity: Pick<Entity, 'id' | 'type' | 'title'>,
+  entity: Pick<Entity, 'id' | 'type' | 'title' | 'policy'>,
   fragments: readonly ProjectionDraftInput[],
   drafter: GistDrafter,
   options: DraftProjectionsOptions = {},
 ): Promise<DraftProjectionsResult> {
   const existing = options.existing ?? new Map<string, SemanticProjection>();
-  const maxChars = options.maxChars ?? GIST_MAX_CHARS;
-  const ngramWords = options.ngramWords ?? GIST_NGRAM_WORDS;
-  const ngramChars = options.ngramChars ?? GIST_NGRAM_CHARS;
+  const maxChars = entity.policy?.lint?.gistMaxChars ?? GIST_MAX_CHARS;
+  const ngramWords = entity.policy?.lint?.ngramWords ?? GIST_NGRAM_WORDS;
+  const ngramChars = entity.policy?.lint?.ngramChars ?? GIST_NGRAM_CHARS;
   const now = options.now ?? (() => new Date().toISOString());
   const where = options.path ?? entity.id;
-  const entityText = fragments.map((f) => f.text).join('\n\n');
+  const entityText = entityLintText(fragments);
   const lintContext = (fragmentId: string, fragmentText: string) => ({
     path: `${where} ${fragmentId}`,
     fragmentText,

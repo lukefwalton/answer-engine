@@ -11,6 +11,8 @@
 // Failures are operator-facing and say what to do, in the store's own voice:
 // a missing or unparseable file names the file and the remedy, and a migrated
 // index that would not load (writeIndex validates) fails with that message.
+// The store's messages name ids, fields, and positions, never a value, so
+// printing one here is safe (.github/STANDARDS.md §4).
 
 import { readFileSync } from 'node:fs';
 

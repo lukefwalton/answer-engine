@@ -16,6 +16,13 @@
 // load rather than in an answer. A served index carries no private text to
 // check against and is trusted to descend from a validated private one
 // (docs/CONTRACT.md §4).
+//
+// Nothing in this module returns or prints private text. A shared run is
+// reported by its position in the string under test, never by its words: a
+// lint failure is what a build tool, a CI job, or a consumer's loader logs,
+// and the run is private text by definition (.github/STANDARDS.md §4). The
+// position is enough for the author, who has the string, and for the drafter,
+// which has its draft.
 
 import type { Entity, Fragment } from './contract.js';
 import { renderLocatorLabel } from './locator.js';
@@ -86,18 +93,6 @@ function charGramSet(chars: string, n: number): Set<string> {
   return grams;
 }
 
-/** The first run of `n` consecutive words that `field` shares with `body`, or null. */
-export function findSharedWordRun(field: string, body: string, n: number): string | null {
-  const fieldWords = normalizeWords(field);
-  if (fieldWords.length < n) return null;
-  const grams = wordGramSet(normalizeWords(body), n);
-  for (let i = 0; i + n <= fieldWords.length; i++) {
-    const gram = fieldWords.slice(i, i + n).join(' ');
-    if (grams.has(gram)) return gram;
-  }
-  return null;
-}
-
 const UNSPACED_SCRIPT =
   /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
 
@@ -110,25 +105,18 @@ function normalizeChars(s: string): string {
   return s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
-/** The first run of `n` consecutive characters (letters and digits only, no
- *  whitespace) that `field` shares with `body`, or null. */
-export function findSharedCharRun(field: string, body: string, n: number): string | null {
-  const f = normalizeChars(field);
-  if (f.length < n) return null;
-  const grams = charGramSet(normalizeChars(body), n);
-  for (let i = 0; i + n <= f.length; i++) {
-    const gram = f.slice(i, i + n);
-    if (grams.has(gram)) return gram;
-  }
-  return null;
-}
-
 /** A run a field shares with private text: in words, or in characters for a
- *  script without word spacing. */
+ *  script without word spacing. Position, not content (see the header). */
 export interface SharedRun {
   unit: 'words' | 'characters';
+  /** The window: how many consecutive units matched. */
   n: number;
-  gram: string;
+  /** 1-based index of the run's first unit in the normalized field. */
+  start: number;
+}
+
+function describeRun(run: SharedRun): string {
+  return `${run.unit} ${run.start}–${run.start + run.n - 1}`;
 }
 
 /**
@@ -150,14 +138,14 @@ export function privateTextMatcher(
     const words = normalizeWords(field);
     for (let i = 0; i + nWords <= words.length; i++) {
       const gram = words.slice(i, i + nWords).join(' ');
-      if (wordGrams.has(gram)) return { unit: 'words', n: nWords, gram };
+      if (wordGrams.has(gram)) return { unit: 'words', n: nWords, start: i + 1 };
     }
     if (bodyUnspaced || hasUnspacedScript(field)) {
       charGrams ??= charGramSet(normalizeChars(body), nChars);
       const chars = normalizeChars(field);
       for (let i = 0; i + nChars <= chars.length; i++) {
         const gram = chars.slice(i, i + nChars);
-        if (charGrams.has(gram)) return { unit: 'characters', n: nChars, gram };
+        if (charGrams.has(gram)) return { unit: 'characters', n: nChars, start: i + 1 };
       }
     }
     return null;
@@ -186,8 +174,8 @@ function assertPublicSafeString(
   const run = sharedRun(value);
   if (run !== null) {
     throw new PublicSafeLintError(
-      `${where} quotes private text ("${run.gram}"). ` +
-        `A traveling field must not contain ${run.n} consecutive ${run.unit} of private text — reword it to point, not quote.`,
+      `${where} quotes private text at ${describeRun(run)}: a traveling field must not contain ` +
+        `${run.n} consecutive ${run.unit} of private text. Reword it to point, not quote.`,
     );
   }
   return value as PublicSafe;
@@ -212,6 +200,21 @@ export function assertPublicSafeField(
   context: { field: string; path: string; privateText: string },
 ): PublicSafe {
   return assertPublicSafeString(value, `${context.path}: '${context.field}'`, privateTextMatcher(context.privateText));
+}
+
+function byId<T extends { id: string }>(fragments: readonly T[]): T[] {
+  return [...fragments].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** The text a gist is checked against beyond its own fragment: every fragment
+ *  of the entity in fragment-id order, joined by blank lines. One definition,
+ *  so the drafter at build (src/ingest/gist.ts) and the validator at load
+ *  (src/store.ts) agree on what "the entity's text" is whatever order their
+ *  fragments arrive in. */
+export function entityLintText(fragments: readonly { id: string; text: string }[]): string {
+  return byId(fragments)
+    .map((f) => f.text)
+    .join('\n\n');
 }
 
 /** A fragment whose text opens with the entity's title as its own paragraph
@@ -243,16 +246,23 @@ function bodyWithoutHeading(text: string, title: string): string {
  * whose host reads the episode title aloud is not a leak. The title is still
  * bounded to one line of PUBLIC_SAFE_MAX_CHARS.
  *
- * Runs at index build and at every load of a private index (src/store.ts).
- * Throws with the path, the field, and the offending run.
+ * The window is the entity's `policy.lint` where set, the shipped constants
+ * otherwise, so the index carries the terms it is checked under. Runs at index
+ * build and at every load of a private index (src/store.ts). Throws with the
+ * path, the field, and the position of the offending run, never its words.
  */
 export function assertPublicSafeMetadata(
   entity: Pick<Entity, 'id' | 'title' | 'version' | 'attribution' | 'themes' | 'policy'>,
   fragments: readonly Pick<Fragment, 'id' | 'text' | 'locator' | 'attribution' | 'themes'>[],
-  context: { path: string; ngramWords?: number; ngramChars?: number },
+  context: { path: string },
 ): void {
-  const body = fragments.map((f) => bodyWithoutHeading(f.text, entity.title)).join('\n\n');
-  const sharedRun = privateTextMatcher(body, context);
+  const body = byId(fragments)
+    .map((f) => bodyWithoutHeading(f.text, entity.title))
+    .join('\n\n');
+  const sharedRun = privateTextMatcher(body, {
+    ngramWords: entity.policy?.lint?.ngramWords,
+    ngramChars: entity.policy?.lint?.ngramChars,
+  });
   const check = (value: string | undefined, where: string): void => {
     if (value === undefined || value === '') return;
     assertPublicSafeString(value, where, sharedRun);
@@ -300,6 +310,10 @@ export function assertPublicSafeMetadata(
  * paraphrase, plot, a name, a number, and a run shorter than the window all
  * pass it. Those are owned by the exposure policy, the veto, review, and the
  * evaluation's canaries (CONTRACT.md §11, §13), not by this function.
+ *
+ * Throws PublicSafeLintError, so a caller can tell a lint failure (fix the
+ * gist, or let the drafter retry) from a malformed file. The message names the
+ * source and the position of the run in the gist, never the run.
  */
 export function assertSemanticProjection(
   gist: string,
@@ -317,34 +331,25 @@ export function assertSemanticProjection(
   const ngramWords = context.ngramWords ?? GIST_NGRAM_WORDS;
   const ngramChars = context.ngramChars ?? GIST_NGRAM_CHARS;
   if (!gist.trim()) {
-    throw new Error(`${where} must not be empty; a fragment with no gist resolves to 'locator' instead.`);
+    throw new PublicSafeLintError(`${where} must not be empty; a fragment with no gist resolves to 'locator' instead.`);
   }
   if (/[\r\n]/.test(gist)) {
-    throw new Error(`${where} must be one paragraph (no line breaks).`);
+    throw new PublicSafeLintError(`${where} must be one paragraph (no line breaks).`);
   }
   if (gist.length > maxChars) {
-    throw new Error(
+    throw new PublicSafeLintError(
       `${where} is ${gist.length} chars (max ${maxChars}); a gist describes a passage, it does not retell it.`,
     );
   }
   const sources: Array<[string, string]> = [['fragment', context.fragmentText]];
   if (context.entityText !== undefined) sources.push(['entity', context.entityText]);
   for (const [name, text] of sources) {
-    const wordGram = findSharedWordRun(gist, text, ngramWords);
-    if (wordGram !== null) {
-      throw new Error(
-        `${where} quotes the ${name}'s text ("${wordGram}"). ` +
-          `A projection must not contain ${ngramWords} consecutive words of the source — describe, do not quote.`,
+    const run = privateTextMatcher(text, { ngramWords, ngramChars })(gist);
+    if (run !== null) {
+      throw new PublicSafeLintError(
+        `${where} quotes the ${name}'s text at ${describeRun(run)}: a projection must not contain ` +
+          `${run.n} consecutive ${run.unit} of the source. Describe, do not quote.`,
       );
-    }
-    if (hasUnspacedScript(gist) || hasUnspacedScript(text)) {
-      const charGram = findSharedCharRun(gist, text, ngramChars);
-      if (charGram !== null) {
-        throw new Error(
-          `${where} quotes the ${name}'s text ("${charGram}"). ` +
-            `A projection must not contain ${ngramChars} consecutive characters of the source — describe, do not quote.`,
-        );
-      }
     }
   }
   return gist as LintedGist;

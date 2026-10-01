@@ -10,7 +10,7 @@ This is the whole point. Private text must never reach a model or a caller excep
 
 - **`project()` is the one crossing** (`src/no-leak.ts`). Retrieval returns `ScoredHit`, which holds the fragment and never leaves the process; `project()` turns it into an `EvidenceHit`, and `search()` is `retrieve().map(project)`. No other function hands retrieval output onward.
 - **`EvidenceHit` has no field for private text.** The `locator` variant carries provenance only; the `semantic` variant carries a lint-passed gist and nothing else; `text` is unreachable for a private fragment because `Disclosure` has no `private + text` member. Scores on private hits are coarse and carry no `breakdown`.
-- **Exposure is resolved at build, never at query time.** `resolveDisclosure` only downgrades; `isServableGist` is the one predicate every later check cites; a served index is `toServedIndex(privateIndex)`, and `validateServedIndex` checks the strip at load. Nothing is generated or decided per query.
+- **Exposure is resolved at build, never at query time.** `resolveDisclosure` only downgrades; `isServableGist` is the one predicate every later check cites; a served index is `toServedIndex(privateIndex)`, and `validateServedIndex` checks the strip at load. `validateIndex` re-earns every served gist against the text at every load of a private index; `lint: 'passed'` in a file is not a verdict. Nothing is generated or decided per query.
 - **Authored strings on a private entity are linted, not typed.** Title, version, names, roles, themes, locator values and the rendered label pass `assertPublicSafeMetadata` against the entity's text at build and at every load of a private index. Say "linted" where it is linted; do not describe a bounded string as a structural guarantee.
 - **The gist never enters the prompt.** `RoutingHint` has no prose field; `toAnswerEvidence` carries gists beside the hints, and only the related-material template renders one, after the mode is final.
 - **Citations are grounded in retrieved evidence.** No invented `(id, url)` pairs. The model cannot claim a citation; the evidence validates it.
@@ -47,6 +47,7 @@ Fail fast and name the problem and the remedy. Silent fallbacks hide bugs.
 - **Empty evidence → not-found without calling the model.**
 - **Validator/repair/grounding rejections stay explicit errors, not "best effort" answers.**
 - **Logging: minimal is fine. No PII, no API keys, no private text or gists in logs.**
+- **A lint or validator message names ids, fields, and positions, never a value.** A run a string shares with private text is reported as `words 3–7`, not quoted; a malformed field is named, not echoed. What `npm run index`, CI, or a consumer's loader prints is therefore safe to print by construction.
 
 ## 5. Security & Performance (Light Touch, Specific)
 

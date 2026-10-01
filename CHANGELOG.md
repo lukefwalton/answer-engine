@@ -126,6 +126,28 @@ workflow and archived on Zenodo under the concept DOI
   points at the contract; `CITATION.cff` and `.zenodo.json` describe the
   substrate (the title is unchanged).
 
+- Review fixes on the 3.0.0 line. A lint failure names the position of the
+  shared run in the string under test (`quotes private text at words 3–7`),
+  never the run: the message is what `npm run index`, CI, and a consumer's
+  loader print, and the run is private text (STANDARDS §4). Both lints throw
+  `PublicSafeLintError`; `findSharedWordRun` and `findSharedCharRun` are
+  replaced by `privateTextMatcher`, which reports positions. `validateIndex`
+  re-earns a `semantic` fragment's gist at every load of a private index instead
+  of reading `lint: 'passed'` from the file: the projection's `contentHash` must
+  be the hash of the fragment's text, and the gist must pass
+  `assertSemanticProjection` against that text and, for an entity with more than
+  one fragment, the whole entity's text (`entityLintText`: fragment-id order,
+  the one definition the drafter and the loader share). The lints' window is
+  authored per entity as `policy.lint` (`ngramWords`, `ngramChars`,
+  `gistMaxChars`), stored in the index, and read the same way at build and at
+  load; `npm run index` stamps `archive.config.ts`'s `gist.maxChars` and
+  `gist.ngramWords` onto every entity's policy, and `draftProjections` no longer
+  takes them as options. `validateIndex` and `validateServedIndex` check nested
+  items (attribution, identifiers, locators, projection, policy) and every
+  vector element (exactly `dimensions` finite numbers), and name the field in
+  the message, never a value. `projectionContentHash` moves to
+  `src/ingest/projections.ts`, beside `projectionProblem`.
+
 ### Removed
 
 - `scripts/build-blind-artifact.mjs`. Review is open, not blind; the script's

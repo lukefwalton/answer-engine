@@ -64,6 +64,13 @@ export interface EntityPolicy {
    *  a leak. An authored declaration (CONTRACT.md §6), stripped with the rest
    *  of `policy` from a served index. */
   publicTitle?: boolean;
+  /** The lints' window for this entity where the shipped defaults do not fit
+   *  (CONTRACT.md §6): how many consecutive words (or characters, for a script
+   *  without word spacing) shared with the private text count as quotation, and
+   *  the gist's length cap. Read by both lints wherever they run, at build and
+   *  at every load of a private index, so the artifact carries the terms its
+   *  strings and gists were checked under. Stripped with the rest of `policy`. */
+  lint?: { ngramWords?: number; ngramChars?: number; gistMaxChars?: number };
 }
 
 export interface Entity {
