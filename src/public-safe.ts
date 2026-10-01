@@ -234,16 +234,20 @@ function bodyWithoutHeading(text: string, title: string): string {
  * entity is not checked: its text is public, so its metadata is public by
  * construction.
  *
- * One exemption: a fragment whose text opens with the entity's title as its
- * first paragraph has that heading removed before the comparison. The title
- * is the string under test, and publishing it is the author's act; what the
- * lint protects is the body.
+ * Two exemptions, both the author's act. A fragment whose text opens with the
+ * entity's title as its first paragraph has that heading removed before the
+ * comparison: the title is the string under test, and publishing it is the
+ * author's act; what the lint protects is the body. And an entity whose
+ * `policy.publicTitle` is set has its title skipped altogether: the title is
+ * public by construction (a published page's, a feed item's), so a transcript
+ * whose host reads the episode title aloud is not a leak. The title is still
+ * bounded to one line of PUBLIC_SAFE_MAX_CHARS.
  *
  * Runs at index build and at every load of a private index (src/store.ts).
  * Throws with the path, the field, and the offending run.
  */
 export function assertPublicSafeMetadata(
-  entity: Pick<Entity, 'id' | 'title' | 'version' | 'attribution' | 'themes'>,
+  entity: Pick<Entity, 'id' | 'title' | 'version' | 'attribution' | 'themes' | 'policy'>,
   fragments: readonly Pick<Fragment, 'id' | 'text' | 'locator' | 'attribution' | 'themes'>[],
   context: { path: string; ngramWords?: number; ngramChars?: number },
 ): void {
@@ -255,7 +259,12 @@ export function assertPublicSafeMetadata(
   };
 
   const at = `${context.path}: entity '${entity.id}'`;
-  check(entity.title, `${at}: 'title'`);
+  if (entity.policy?.publicTitle) {
+    // Declared public: shape only, no run check against the text.
+    assertPublicSafeString(entity.title, `${at}: 'title'`, () => null);
+  } else {
+    check(entity.title, `${at}: 'title'`);
+  }
   check(entity.version, `${at}: 'version'`);
   for (const a of entity.attribution) {
     check(a.name, `${at}: 'creator name'`);

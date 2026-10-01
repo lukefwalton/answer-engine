@@ -490,6 +490,12 @@ paragraph (the note shape, where the private title is embedded with the body)
 has that heading removed from the comparison, because the title is the string
 under test and publishing it is the author's act; a title that lifts a run from
 the body, or from a private title it does not equal, is a quotation and fails.
+A second, declared exemption: an entity whose title is public by construction
+(a transcript's title is its published episode's) sets `policy.publicTitle:
+true`, and the lint then bounds the title (one line, 120 characters) without
+checking it against the text, because a host who reads the episode title aloud
+has leaked nothing. The declaration is authored, stored on the entity, and
+stripped from a served index with the rest of `policy`.
 Public entities are not checked: their text is public, so their metadata is
 public by construction. The `PublicSafe` return brand is **retired as a type**
 in 3.0.0: `title`, `locator`, and `locatorLabel` are shared by public and

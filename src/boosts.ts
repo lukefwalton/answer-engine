@@ -35,6 +35,10 @@ export const DISCLOSURE_BOOST = 0.15;
 /** A theme carried by more than this fraction of entities names the archive,
  *  not an entity, and boosts nothing. */
 export const THEME_DF_CAP_FRACTION = 0.05;
+/** Themes shorter than this many normalized characters never boost; a
+ *  consumer with two-letter tags ("ai", "us") raises it. Default 0: every
+ *  curated theme counts, which is the 2.x teaching behaviour. */
+export const THEME_MIN_CHARS = 0;
 /** ...but only once the corpus is large enough for the fraction to mean
  *  something: a theme is excluded when its document frequency exceeds
  *  max(THEME_DF_MIN_EXCLUDE, ceil(fraction × entities)). On eight records the
@@ -71,13 +75,14 @@ export function discriminatingThemes(
   entities: Iterable<Entity>,
   fraction: number = THEME_DF_CAP_FRACTION,
   minExclude: number = THEME_DF_MIN_EXCLUDE,
+  minChars: number = THEME_MIN_CHARS,
 ): Set<string> {
   const df = new Map<string, number>();
   let n = 0;
   for (const entity of entities) {
     n += 1;
     for (const theme of new Set((entity.themes ?? []).map(normalizeTheme))) {
-      if (!theme) continue;
+      if (!theme || theme.length < minChars) continue;
       df.set(theme, (df.get(theme) ?? 0) + 1);
     }
   }
@@ -86,20 +91,28 @@ export function discriminatingThemes(
 }
 
 export function themeMatch(
-  options: LayerOptions & { boost?: number; dfCap?: false | { fraction?: number; minExclude?: number } } = {},
+  options: LayerOptions & {
+    boost?: number;
+    dfCap?: false | { fraction?: number; minExclude?: number };
+    /** Themes shorter than this (normalized) never boost. Default THEME_MIN_CHARS. */
+    minChars?: number;
+  } = {},
 ): BoostPlugin<ReadonlySet<string> | null> {
   const boost = options.boost ?? THEME_BOOST;
+  const minChars = options.minChars ?? THEME_MIN_CHARS;
   return {
     name: 'theme',
     prepare(index: RetrievalIndex) {
       if (options.dfCap === false) return null;
-      return discriminatingThemes(index.entities.values(), options.dfCap?.fraction, options.dfCap?.minExclude);
+      return discriminatingThemes(index.entities.values(), options.dfCap?.fraction, options.dfCap?.minExclude, minChars);
     },
     score(fragment, entity, ctx, eligible) {
       if (!fires(options.layers, fragment)) return 0;
       const themes = fragment.themes ?? entity.themes ?? [];
       const hit = themes.some((theme) => {
-        if (eligible && !eligible.has(normalizeTheme(theme))) return false;
+        const normalized = normalizeTheme(theme);
+        if (normalized.length < minChars) return false;
+        if (eligible && !eligible.has(normalized)) return false;
         return containsPhrase(ctx.query, theme);
       });
       return hit ? boost : 0;

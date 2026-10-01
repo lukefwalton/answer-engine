@@ -58,6 +58,12 @@ export type Disclosure =
 export interface EntityPolicy {
   /** When true, a gist is servable only once `projection.review === 'reviewed'`. */
   requireReview?: boolean;
+  /** The title is public by construction (the title of a published page or a
+   *  feed item, as a transcript's is), so the metadata lint does not check it
+   *  against the private text: a host who reads the episode title aloud is not
+   *  a leak. An authored declaration (CONTRACT.md §6), stripped with the rest
+   *  of `policy` from a served index. */
+  publicTitle?: boolean;
 }
 
 export interface Entity {

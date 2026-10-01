@@ -360,3 +360,31 @@ test('public-safe metadata lint: every authored string a private hit carries, ag
     /'title' quotes private text \(".*"\)\. A traveling field must not contain 12 consecutive characters/,
   );
 });
+
+test('public-safe metadata lint: policy.publicTitle skips the run check on the title, nothing else', () => {
+  const transcript = 'Welcome back to perfect pitch nature or nurture, the episode where we settle it.';
+  const base = {
+    id: 'transcript:perfect-pitch',
+    title: 'Perfect Pitch Nature or Nurture',
+    attribution: [{ name: 'Luke F. Walton', role: 'host' }],
+  };
+  const frag = { id: 'transcript:perfect-pitch#t0-10', text: transcript, locator: [{ scheme: 'timecode', value: '0', end: '10' }] };
+  // The host read the title aloud: without the declaration that is a quotation...
+  assert.throws(() => assertPublicSafeMetadata(base, [frag], { path: 't' }), /'title' quotes private text/);
+  // ...with it, the title is public by construction and passes.
+  assertPublicSafeMetadata({ ...base, policy: { publicTitle: true } }, [frag], { path: 't' });
+  // Shape still holds, and every other string is still checked.
+  assert.throws(
+    () => assertPublicSafeMetadata({ ...base, title: 'two\nlines', policy: { publicTitle: true } }, [frag], { path: 't' }),
+    /'title' must be a single line/,
+  );
+  assert.throws(
+    () =>
+      assertPublicSafeMetadata(
+        { ...base, policy: { publicTitle: true }, attribution: [{ name: 'the episode where we settle it' }] },
+        [frag],
+        { path: 't' },
+      ),
+    /'creator name' quotes private text/,
+  );
+});

@@ -10,6 +10,7 @@ import {
   DEFAULT_PLUGINS,
   disclosure,
   discriminatingThemes,
+  THEME_BOOST,
   exactTitleMatch,
   queryIsAboutNow,
   recency,
@@ -274,4 +275,40 @@ test('no-leak: search() returns hits whose type cannot carry private text; priva
   (bookEntry.fragment as Fragment).projection = { ...bookEntry.fragment.projection!, vetoed: true };
   const scored = retrieve([0.7, 0.3, 0], 'q', broken).find((h) => h.entity.id === 'book:novel')!;
   assert.throws(() => project(scored), /without a servable gist/);
+});
+
+test('boosts: themeMatch minChars drops short tags from the boost and from the frequency count', () => {
+  const entities = [
+    { id: 'essay:a', themes: ['ai', 'authorship'] },
+    { id: 'essay:b', themes: ['ai', 'listening'] },
+    { id: 'essay:c', themes: ['ai'] },
+  ].map((e) => ({
+    id: e.id,
+    type: 'essay',
+    title: e.id,
+    attribution: [],
+    url: `https://example.com/${e.id}/`,
+    identifiers: [],
+    themes: e.themes,
+    disclosure: { raw: 'public' as const, exposure: 'text' as const },
+  }));
+  const entries = entities.map((entity) => ({
+    fragment: {
+      id: `${entity.id}#whole`,
+      entityId: entity.id,
+      locator: [{ scheme: 'whole', value: '' }],
+      text: 'body',
+      disclosure: entity.disclosure,
+    },
+    vector: [1, 0],
+  }));
+  const index = { entities: new Map(entities.map((e) => [e.id, e])), entries, model: 'm', dimensions: 2 };
+  const withMin = retrieve([1, 0], 'what about ai and authorship', index, { plugins: [themeMatch({ minChars: 3 })] });
+  const a = withMin.find((h) => h.entity.id === 'essay:a')!;
+  const c = withMin.find((h) => h.entity.id === 'essay:c')!;
+  assert.equal(a.breakdown.theme, THEME_BOOST); // "authorship" fires
+  assert.equal(c.breakdown.theme, undefined); // "ai" is below the minimum
+  const noMin = retrieve([1, 0], 'what about ai', index, { plugins: [themeMatch()] });
+  assert.ok(noMin.every((h) => h.breakdown.theme === THEME_BOOST)); // default: every tag counts
+  assert.deepEqual([...discriminatingThemes(entities, 0.05, 4, 3)].sort(), ['authorship', 'listening']);
 });
