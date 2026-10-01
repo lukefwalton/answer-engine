@@ -1,14 +1,24 @@
 // The counterpart to no-leak.ts: that file owns what must NOT travel toward
 // the model; this one owns the shape of what MAY. Three things live here:
-// the build-time lint that every traveling private-note field must pass
-// (the only constructor of the PublicSafe brand — NEXT-STEPS.md A1), the
-// build-time lint a semantic projection must pass before it may be served
-// (the only constructor of the LintedGist brand — docs/CONTRACT.md §6), and
-// the related-material answer template, rendered here instead of written by
-// the model so the mode can only point at private material and never assert
-// its contents (NEXT-STEPS.md A2). The template's safety is exactly the
-// lint's: it renders nothing but PublicSafe fields.
+// the lint every authored string on a private entity passes before it may
+// travel (assertPublicSafeField for one string, assertPublicSafeMetadata for
+// an entity's whole metadata surface; together the only constructor of the
+// PublicSafe brand — NEXT-STEPS.md A1), the lint a semantic projection passes
+// before it may be served (the only constructor of the LintedGist brand —
+// docs/CONTRACT.md §6), and the related-material answer template, rendered
+// here instead of written by the model so the mode can only point at private
+// material and never assert its contents (NEXT-STEPS.md A2). The template's
+// safety is exactly the lint's: it renders nothing but linted fields.
+//
+// Both lints run wherever the text they check against is present: at corpus
+// read, at index build, and again at every load of a private index
+// (validateIndex in src/store.ts), so a hand edit to the index is caught at
+// load rather than in an answer. A served index carries no private text to
+// check against and is trusted to descend from a validated private one
+// (docs/CONTRACT.md §4).
 
+import type { Entity, Fragment } from './contract.js';
+import { renderLocatorLabel } from './locator.js';
 import type { Citation, PublicSafe, RoutingHint } from './types.js';
 
 /** Traveling fields are short display strings, not prose. Anything longer
@@ -55,16 +65,23 @@ export function normalizeWords(s: string): string[] {
     .filter(Boolean);
 }
 
+function wordGramSet(words: readonly string[], n: number): Set<string> {
+  const grams = new Set<string>();
+  for (let i = 0; i + n <= words.length; i++) grams.add(words.slice(i, i + n).join(' '));
+  return grams;
+}
+
+function charGramSet(chars: string, n: number): Set<string> {
+  const grams = new Set<string>();
+  for (let i = 0; i + n <= chars.length; i++) grams.add(chars.slice(i, i + n));
+  return grams;
+}
+
 /** The first run of `n` consecutive words that `field` shares with `body`, or null. */
 export function findSharedWordRun(field: string, body: string, n: number): string | null {
   const fieldWords = normalizeWords(field);
   if (fieldWords.length < n) return null;
-  const bodyWords = normalizeWords(body);
-  if (bodyWords.length < n) return null;
-  const grams = new Set<string>();
-  for (let i = 0; i + n <= bodyWords.length; i++) {
-    grams.add(bodyWords.slice(i, i + n).join(' '));
-  }
+  const grams = wordGramSet(normalizeWords(body), n);
   for (let i = 0; i + n <= fieldWords.length; i++) {
     const gram = fieldWords.slice(i, i + n).join(' ');
     if (grams.has(gram)) return gram;
@@ -88,10 +105,8 @@ function normalizeChars(s: string): string {
  *  whitespace) that `field` shares with `body`, or null. */
 export function findSharedCharRun(field: string, body: string, n: number): string | null {
   const f = normalizeChars(field);
-  const b = normalizeChars(body);
-  if (f.length < n || b.length < n) return null;
-  const grams = new Set<string>();
-  for (let i = 0; i + n <= b.length; i++) grams.add(b.slice(i, i + n));
+  if (f.length < n) return null;
+  const grams = charGramSet(normalizeChars(body), n);
   for (let i = 0; i + n <= f.length; i++) {
     const gram = f.slice(i, i + n);
     if (grams.has(gram)) return gram;
@@ -99,25 +114,57 @@ export function findSharedCharRun(field: string, body: string, n: number): strin
   return null;
 }
 
+/** A run a field shares with private text: in words, or in characters for a
+ *  script without word spacing. */
+export interface SharedRun {
+  unit: 'words' | 'characters';
+  n: number;
+  gram: string;
+}
+
 /**
- * The sole constructor of PublicSafe: a build-time lint on a private note's
- * traveling fields (label, locator). Checks, each failing loudly with the
- * file and field: non-empty, single-line, capped length, and no run of
- * PUBLIC_SAFE_NGRAM_WORDS consecutive words shared with the note's private
- * body — a traveling field that quotes the private text is the leak, caught
- * where the author can fix it instead of in an answer.
- *
- * This is a tripwire, not a classifier. A short private phrase, or private
- * meaning in public words, passes it — what remains owned by discipline is
- * named at the population site (src/corpus.ts) and in NEXT-STEPS.md A1.
+ * The n-gram sets of one body of private text, built once, so that many
+ * fields (every locator of a long book, say) can be checked against it
+ * without re-normalizing the body each time. Word runs always; character runs
+ * when either side is in a script without word spacing.
  */
-export function assertPublicSafeField(
+export function privateTextMatcher(
+  body: string,
+  options: { ngramWords?: number; ngramChars?: number } = {},
+): (field: string) => SharedRun | null {
+  const nWords = options.ngramWords ?? PUBLIC_SAFE_NGRAM_WORDS;
+  const nChars = options.ngramChars ?? GIST_NGRAM_CHARS;
+  const wordGrams = wordGramSet(normalizeWords(body), nWords);
+  const bodyUnspaced = hasUnspacedScript(body);
+  let charGrams: Set<string> | null = null;
+  return (field) => {
+    const words = normalizeWords(field);
+    for (let i = 0; i + nWords <= words.length; i++) {
+      const gram = words.slice(i, i + nWords).join(' ');
+      if (wordGrams.has(gram)) return { unit: 'words', n: nWords, gram };
+    }
+    if (bodyUnspaced || hasUnspacedScript(field)) {
+      charGrams ??= charGramSet(normalizeChars(body), nChars);
+      const chars = normalizeChars(field);
+      for (let i = 0; i + nChars <= chars.length; i++) {
+        const gram = chars.slice(i, i + nChars);
+        if (charGrams.has(gram)) return { unit: 'characters', n: nChars, gram };
+      }
+    }
+    return null;
+  };
+}
+
+/** The checks every traveling string passes, with the same wording wherever
+ *  it is called from: non-empty, one line, at most PUBLIC_SAFE_MAX_CHARS, and
+ *  no run shared with the private text it points into. */
+function assertPublicSafeString(
   value: string,
-  context: { field: 'label' | 'locator'; path: string; privateText: string },
+  where: string,
+  sharedRun: (field: string) => SharedRun | null,
 ): PublicSafe {
-  const where = `${context.path}: '${context.field}'`;
   if (!value.trim()) {
-    throw new Error(`${where} must not be empty — it travels to the model as the note's display ${context.field}.`);
+    throw new Error(`${where} must not be empty — it travels as a display string.`);
   }
   if (/[\r\n]/.test(value)) {
     throw new Error(`${where} must be a single line; a traveling field is a display string, not prose.`);
@@ -127,14 +174,99 @@ export function assertPublicSafeField(
       `${where} is ${value.length} chars (max ${PUBLIC_SAFE_MAX_CHARS}); a traveling field is a display string, not prose.`,
     );
   }
-  const gram = findSharedWordRun(value, context.privateText, PUBLIC_SAFE_NGRAM_WORDS);
-  if (gram !== null) {
+  const run = sharedRun(value);
+  if (run !== null) {
     throw new Error(
-      `${where} quotes the note's private body ("${gram}"). ` +
-        `A traveling field must not contain ${PUBLIC_SAFE_NGRAM_WORDS} consecutive words of private text — reword it to point, not quote.`,
+      `${where} quotes private text ("${run.gram}"). ` +
+        `A traveling field must not contain ${run.n} consecutive ${run.unit} of private text — reword it to point, not quote.`,
     );
   }
   return value as PublicSafe;
+}
+
+/**
+ * The lint one traveling string passes (the 2.x constructor of PublicSafe): a
+ * private note's label or locator at corpus read, and any other authored
+ * string checked on its own. Each check fails loudly with the path and the
+ * field: non-empty, single-line, capped length, and no run of
+ * PUBLIC_SAFE_NGRAM_WORDS consecutive words shared with the private text (or
+ * GIST_NGRAM_CHARS characters, for a script without word spacing) — a
+ * traveling field that quotes the private text is the leak, caught where the
+ * author can fix it instead of in an answer.
+ *
+ * This is a tripwire, not a classifier. A short private phrase, or private
+ * meaning in public words, passes it — what remains owned by discipline is
+ * named at the population site (src/corpus.ts) and in NEXT-STEPS.md A1.
+ */
+export function assertPublicSafeField(
+  value: string,
+  context: { field: string; path: string; privateText: string },
+): PublicSafe {
+  return assertPublicSafeString(value, `${context.path}: '${context.field}'`, privateTextMatcher(context.privateText));
+}
+
+/** A fragment whose text opens with the entity's title as its own paragraph
+ *  carries the title as a heading (the note shape: title, blank line, body).
+ *  The body is what follows. */
+function bodyWithoutHeading(text: string, title: string): string {
+  if (text === title) return '';
+  const heading = `${title}\n\n`;
+  return text.startsWith(heading) ? text.slice(heading.length) : text;
+}
+
+/**
+ * The authored strings a hit on a PRIVATE entity carries, each passed through
+ * assertPublicSafeField's rule against the entity's whole private text
+ * (docs/CONTRACT.md §6): the entity's title and version, its creators' names
+ * and roles, its themes; and on every fragment the locator values and the
+ * rendered locator label, the speakers' names and roles, and the fragment's
+ * themes. Structural fields (ids, type, url, identifiers, dates, the empty
+ * value of a `whole` locator) are not prose and are not checked. A public
+ * entity is not checked: its text is public, so its metadata is public by
+ * construction.
+ *
+ * One exemption: a fragment whose text opens with the entity's title as its
+ * first paragraph has that heading removed before the comparison. The title
+ * is the string under test, and publishing it is the author's act; what the
+ * lint protects is the body.
+ *
+ * Runs at index build and at every load of a private index (src/store.ts).
+ * Throws with the path, the field, and the offending run.
+ */
+export function assertPublicSafeMetadata(
+  entity: Pick<Entity, 'id' | 'title' | 'version' | 'attribution' | 'themes'>,
+  fragments: readonly Pick<Fragment, 'id' | 'text' | 'locator' | 'attribution' | 'themes'>[],
+  context: { path: string; ngramWords?: number; ngramChars?: number },
+): void {
+  const body = fragments.map((f) => bodyWithoutHeading(f.text, entity.title)).join('\n\n');
+  const sharedRun = privateTextMatcher(body, context);
+  const check = (value: string | undefined, where: string): void => {
+    if (value === undefined || value === '') return;
+    assertPublicSafeString(value, where, sharedRun);
+  };
+
+  const at = `${context.path}: entity '${entity.id}'`;
+  check(entity.title, `${at}: 'title'`);
+  check(entity.version, `${at}: 'version'`);
+  for (const a of entity.attribution) {
+    check(a.name, `${at}: 'creator name'`);
+    check(a.role, `${at}: 'creator role'`);
+  }
+  for (const theme of entity.themes ?? []) check(theme, `${at}: 'theme'`);
+
+  for (const f of fragments) {
+    const here = `${context.path}: fragment '${f.id}'`;
+    for (const l of f.locator) {
+      check(l.value, `${here}: 'locator value (${l.scheme})'`);
+      check(l.end, `${here}: 'locator end (${l.scheme})'`);
+    }
+    check(renderLocatorLabel(f.locator), `${here}: 'locator label'`);
+    for (const a of f.attribution ?? []) {
+      check(a.name, `${here}: 'speaker name'`);
+      check(a.role, `${here}: 'speaker role'`);
+    }
+    for (const theme of f.themes ?? []) check(theme, `${here}: 'theme'`);
+  }
 }
 
 /**

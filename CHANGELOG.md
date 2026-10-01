@@ -52,6 +52,25 @@ workflow and archived on Zenodo under the concept DOI
   `cosine` names the similarity everywhere; `ScoredRecord.semantic` is gone.
   The related-material template still renders label and locator; rendering a
   gist for `semantic` hits arrives with the demo entity in Step 4.
+- The load-time lint over authored private metadata. The strings a hit on a
+  private entity carries besides its text (title, version, creator and speaker
+  names and roles, themes, every locator value and the rendered locator label)
+  are not typed; they are linted. `assertPublicSafeMetadata` in
+  `src/public-safe.ts` runs the 2.x label/locator rule (one line, 120 characters,
+  no five-word run; characters for a script without word spacing) over all of
+  them against the entity's whole private text, and `validateIndex` runs it on
+  every load of a private index, so a hand-edited artifact fails at load with the
+  field and the run instead of in an answer. One exemption keeps the shipped
+  corpora honest: a fragment whose text opens with the entity's title as its own
+  paragraph (the note shape) has that heading removed from the comparison. The
+  one tightening against 2.x: a label that lifts a five-word run from a note's
+  private title without being that title now fails, where 2.x compared the label
+  with the body alone. `writeIndex` and `writeServedIndex` validate before
+  writing. `toPrivateNote` re-lints the label and locator instead of casting
+  them to `PublicSafe`, so the brand has one constructor again.
+  `assertPublicSafeField` accepts any field name and reports "quotes private
+  text" for every caller. `npm run migrate:index` fails with the file and the
+  remedy on a missing or unparseable path instead of a stack trace.
 
 ### Planned for 3.0.0 (breaking)
 

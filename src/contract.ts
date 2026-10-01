@@ -4,8 +4,12 @@
 // private + text, so that cell cannot be written down. EvidenceHit is a union
 // on `exposure`: the `locator` variant has no field that could hold source
 // text and the `semantic` variant carries only a lint-passed gist, so a
-// consumer that serializes or prompts from a hit cannot forward private prose
-// along the typed path. The bound on that claim is stated in CONTRACT.md §4.
+// consumer that serializes or prompts from a hit cannot forward a private
+// fragment's text along the typed path. The short authored strings every
+// variant does carry (title, version, locator values and label, names,
+// themes) are not typed: they are bounded and linted against the private text
+// at build and at every load of a private index (src/public-safe.ts,
+// assertPublicSafeMetadata). The bound on the whole claim is CONTRACT.md §4.
 //
 // These types are additive in 2.x: nothing in the engine reads them yet. The
 // adapters (CONTRACT.md §12) and the retrieval core (§7) arrive in later steps.

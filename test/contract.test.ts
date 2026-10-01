@@ -10,6 +10,7 @@ import { fragmentByHeadings, fragmentByPageMarkers, splitLong } from '../src/ing
 import { formatTimecode, locatorKey, renderLocatorLabel } from '../src/locator.js';
 import {
   assertPublicSafeField,
+  assertPublicSafeMetadata,
   assertSemanticProjection,
   findSharedCharRun,
   findSharedWordRun,
@@ -303,5 +304,59 @@ test('locator: labels and keys per scheme, coarse to fine', () => {
       { scheme: 'section', value: '3' },
     ]),
     'ch12.s3',
+  );
+});
+
+test('public-safe metadata lint: every authored string a private hit carries, against the entity text', () => {
+  const body = 'The negotiation had run past midnight before anyone asked who would answer for it.';
+  const base: Parameters<typeof assertPublicSafeMetadata>[0] = {
+    id: 'book:x',
+    title: 'A Short Title',
+    attribution: [{ name: 'A. Author', role: 'author' }],
+  };
+  const frag = (over: Partial<Parameters<typeof assertPublicSafeMetadata>[1][number]> = {}) => ({
+    id: 'book:x#p1',
+    text: body,
+    locator: [{ scheme: 'page', value: '1' }],
+    ...over,
+  });
+  const ctx = { path: 'index at t' };
+
+  // Structural values (page numbers, the empty value of `whole`, timecodes) pass.
+  assertPublicSafeMetadata(base, [frag()], ctx);
+  assertPublicSafeMetadata(base, [frag({ locator: [{ scheme: 'whole', value: '' }] })], ctx);
+  assertPublicSafeMetadata(base, [frag({ locator: [{ scheme: 'timecode', value: '750', end: '845' }] })], ctx);
+
+  // A speaker name or a theme that quotes the text is caught like a title.
+  assert.throws(
+    () => assertPublicSafeMetadata(base, [frag({ attribution: [{ name: 'asked who would answer for it' }] })], ctx),
+    /index at t: fragment 'book:x#p1': 'speaker name' quotes private text \("asked who would answer for"\)/,
+  );
+  assert.throws(
+    () => assertPublicSafeMetadata({ ...base, themes: ['who would answer for it'] }, [frag()], ctx),
+    /entity 'book:x': 'theme' quotes private text/,
+  );
+  // A `section` value is authored text and is checked as such.
+  assert.throws(
+    () =>
+      assertPublicSafeMetadata(base, [frag({ locator: [{ scheme: 'section', value: 'run past midnight before anyone asked' }] })], ctx),
+    /'locator value \(section\)' quotes private text/,
+  );
+  // The whole entity is the comparison text: a title may not quote page two either.
+  assert.throws(
+    () =>
+      assertPublicSafeMetadata({ ...base, title: 'Before anyone asked who would' }, [
+        frag({ text: 'Page one says little.' }),
+        frag({ id: 'book:x#p2', text: body, locator: [{ scheme: 'page', value: '2' }] }),
+      ], ctx),
+    /'title' quotes private text/,
+  );
+
+  // Scripts without word spacing are checked in characters.
+  const japanese = '交渉は真夜中を過ぎても続き、誰がその責任を負うのかを尋ねる者はいなかった。';
+  assertPublicSafeMetadata({ ...base, title: '署名者たち' }, [frag({ text: japanese })], ctx);
+  assert.throws(
+    () => assertPublicSafeMetadata({ ...base, title: '交渉は真夜中を過ぎても続き、誰が' }, [frag({ text: japanese })], ctx),
+    /'title' quotes private text \(".*"\)\. A traveling field must not contain 12 consecutive characters/,
   );
 });

@@ -6,9 +6,15 @@
 // simple answer.
 //
 // Private fragments' text is in the private index, so it is private even when
-// your corpus is public — it stays gitignored. A SERVED index is a projection of
-// it (toServedIndex) with everything the policy does not release stripped, and
-// a load-time validator (validateServedIndex) that checks the strip happened.
+// your corpus is public — it stays gitignored. Because the text is there, a
+// private index is checked against it at every load (validateIndex): shape,
+// legal cells, servable gists, and the lint over every authored string a hit on
+// a private entity would carry (docs/CONTRACT.md §6), so a hand edit fails
+// here and not in an answer. A SERVED index is a projection of it
+// (toServedIndex) with everything the policy does not release stripped, and a
+// load-time validator (validateServedIndex) that checks the strip happened; it
+// carries no text to lint against and is trusted to descend from a validated
+// private index. An index that would be refused at load is refused at write.
 //
 // Schema 4. Until the retrieval core reads fragments (Step 3), readIndexFile and
 // writeIndexFile keep their 2.x signatures over ArchiveRecord / PrivateNote
@@ -26,6 +32,7 @@ import {
 } from './adapters/teaching.js';
 import type { Entity, Fragment, LintedGist } from './contract.js';
 import { isServableGist } from './ingest/disclosure.js';
+import { assertPublicSafeMetadata } from './public-safe.js';
 import type { IndexEntry } from './types.js';
 
 export const INDEX_PATH = resolve('artifacts/index.json');
@@ -153,7 +160,9 @@ function checkVersion(parsed: unknown, path: string): Record<string, unknown> {
  * Validate a parsed private index (CONTRACT.md §12): every entity well formed
  * and unique; every entry carries a vector and a fragment; every fragment's
  * entity resolves; the fragment's `raw` equals its entity's; the cell is legal;
- * a `semantic` fragment satisfies isServableGist. Throws with the remedy.
+ * a `semantic` fragment satisfies isServableGist; and every authored string a
+ * hit on a private entity carries passes the §6 lint against that entity's
+ * text (assertPublicSafeMetadata). Throws with the remedy.
  */
 export function validateIndex(parsed: unknown, path = 'index'): IndexFile {
   const file = checkVersion(parsed, path);
@@ -163,6 +172,7 @@ export function validateIndex(parsed: unknown, path = 'index'): IndexFile {
     if (entities.has(e.id)) throw new Error(`index at ${path} lists entity '${e.id}' twice. ${REBUILD}`);
     entities.set(e.id, e);
   }
+  const fragmentsByEntity = new Map<string, Fragment[]>();
   for (const raw of file.entries as unknown[]) {
     if (!isRecord(raw) || !vectorFieldsValid(raw) || typeof raw.contentHash !== 'string' || !fragmentIsValid(raw.fragment)) {
       throw new Error(`index at ${path} has a malformed entry. ${REBUILD}`);
@@ -183,6 +193,18 @@ export function validateIndex(parsed: unknown, path = 'index'): IndexFile {
         `index at ${path}: fragment '${fragment.id}' is exposed as 'semantic' without a servable gist. ${REBUILD}`,
       );
     }
+    let list = fragmentsByEntity.get(entity.id);
+    if (!list) fragmentsByEntity.set(entity.id, (list = []));
+    list.push(fragment);
+  }
+  // The strings a hit on a private entity carries are not typed; they are
+  // linted, and the private index is the one artifact that still holds the
+  // text to lint them against. So the lint runs here, on every load, and a
+  // hand-edited title or locator that quotes the text fails with the field and
+  // the run, not in an answer.
+  for (const entity of entities.values()) {
+    if (entity.disclosure.raw !== 'private') continue;
+    assertPublicSafeMetadata(entity, fragmentsByEntity.get(entity.id) ?? [], { path: `index at ${path}` });
   }
   return file as unknown as IndexFile;
 }
@@ -294,16 +316,23 @@ export function readIndex(path: string = INDEX_PATH): IndexFile {
   return validateIndex(parseJson(path), path);
 }
 
+/** Write a private index. What would be refused at load is refused here, with
+ *  the same message, so a build cannot leave an artifact behind that the next
+ *  command rejects. */
 export function writeIndex(file: IndexFile, path: string = INDEX_PATH): void {
+  const out = { version: INDEX_SCHEMA_VERSION, entities: file.entities, entries: file.entries };
+  validateIndex(out, path);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify({ version: INDEX_SCHEMA_VERSION, entities: file.entities, entries: file.entries }) + '\n', 'utf8');
+  writeFileSync(path, JSON.stringify(out) + '\n', 'utf8');
 }
 
 export function readServedIndex(path: string): ServedIndexFile {
   return validateServedIndex(parseJson(path), path);
 }
 
+/** Write a served index, after the same validation a load would run. */
 export function writeServedIndex(file: ServedIndexFile, path: string): void {
+  validateServedIndex(file, path);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(file) + '\n', 'utf8');
 }

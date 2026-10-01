@@ -2,7 +2,8 @@
 // rule, the served projection, and the v3 → v4 migration. No key, no network.
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -18,6 +19,7 @@ import {
 import type { Entity, Fragment } from '../src/contract.js';
 import { buildCorpus, buildPrivateNotes, embedText, noteEmbedText } from '../src/corpus.js';
 import { embedStringFor } from '../src/embed-string.js';
+import { locatorKey } from '../src/locator.js';
 import { assertPublicSafeField, assertSemanticProjection } from '../src/public-safe.js';
 import {
   indexFileFromLegacyEntries,
@@ -26,11 +28,13 @@ import {
   migrateV3ToV4,
   readIndex,
   readIndexFile,
+  readServedIndex,
   toServedIndex,
   validateIndex,
   validateServedIndex,
   writeIndex,
   writeIndexFile,
+  writeServedIndex,
   type IndexFile,
 } from '../src/store.js';
 import type { ArchiveRecord, IndexEntry, PrivateNote } from '../src/types.js';
@@ -295,4 +299,158 @@ test('store: the v3 → v4 migration keeps vectors, hashes, and order; refuses o
   const path = join(dir, 'private.json');
   writeIndex(privateBook(), path);
   assert.deepEqual(readIndex(path), privateBook());
+});
+
+// ─── The load-time lint over authored private metadata ───────────────────────
+
+const NOTE_BODY = 'The bridge originally modulated up a whole step and we scrapped it in the second session.';
+
+/** A private note as the adapter writes it: the entity title is the label; the
+ *  fragment text is the private title, a blank line, the body. */
+function privateNoteIndex(
+  overrides: {
+    title?: string;
+    privateTitle?: string;
+    locatorValue?: string;
+    version?: string;
+    creator?: string;
+  } = {},
+): IndexFile {
+  const title = overrides.title ?? 'Harbor Lights session';
+  const privateTitle = overrides.privateTitle ?? 'Harbor Lights — writing session';
+  const entity: Entity = {
+    id: 'note:harbor-lights-session',
+    type: 'note',
+    title,
+    attribution: overrides.creator !== undefined ? [{ name: overrides.creator }] : [],
+    ...(overrides.version !== undefined ? { version: overrides.version } : {}),
+    url: 'https://example.com/lyrics/harbor-lights/',
+    identifiers: [],
+    disclosure: { raw: 'private', exposure: 'locator' },
+  };
+  const locator = [{ scheme: 'note', value: overrides.locatorValue ?? 'notebook, p. 12' }];
+  const fragment: Fragment = {
+    id: `${entity.id}#${locatorKey(locator)}`,
+    entityId: entity.id,
+    locator,
+    text: `${privateTitle}\n\n${NOTE_BODY}`,
+    disclosure: { raw: 'private', exposure: 'locator' },
+  };
+  return { version: INDEX_SCHEMA_VERSION, entities: [entity], entries: [{ ...vec([1, 0]), fragment }] };
+}
+
+test('store: a private index is linted at load for authored strings that quote its text', () => {
+  // The honest shape passes.
+  assert.equal(validateIndex(privateNoteIndex()).entities.length, 1);
+
+  // A title that repeats the fragment's heading paragraph is the author
+  // publishing the title, not a quotation of the body: the shipped demo note
+  // "Private Amos marginalia on divine justice" is six words and sits as the
+  // first paragraph of its own text.
+  const heading = 'Private Amos marginalia on divine justice';
+  assert.equal(validateIndex(privateNoteIndex({ title: heading, privateTitle: heading })).entities.length, 1);
+
+  // A title that quotes five words of the body is caught, naming the field and the run.
+  assert.throws(
+    () => validateIndex(privateNoteIndex({ title: 'Originally modulated up a whole step' }), 'artifacts/index.json'),
+    /index at artifacts\/index\.json: entity 'note:harbor-lights-session': 'title' quotes private text \("originally modulated up a whole"\)/,
+  );
+  // So is a locator value; the note scheme is echoed verbatim into locatorLabel.
+  assert.throws(
+    () => validateIndex(privateNoteIndex({ locatorValue: 'see: we scrapped it in the second session' })),
+    /fragment 'note:harbor-lights-session#[^']*': 'locator value \(note\)' quotes private text/,
+  );
+  // And a version, a creator name: every authored string a hit carries.
+  assert.throws(() => validateIndex(privateNoteIndex({ version: 'draft\ntwo' })), /'version' must be a single line/);
+  assert.throws(
+    () => validateIndex(privateNoteIndex({ creator: 'scrapped it in the second session' })),
+    /'creator name' quotes private text/,
+  );
+  // The private title is private text too: a label that lifts a run from it
+  // without being it is a quotation, not a pointer.
+  assert.throws(
+    () =>
+      validateIndex(
+        privateNoteIndex({
+          title: 'Harbor Lights — the night we almost quit (session)',
+          privateTitle: 'Harbor Lights — the night we almost quit',
+        }),
+      ),
+    /'title' quotes private text/,
+  );
+
+  // A public entity's metadata is public by construction and is not checked.
+  const r = record({ title: 'Listening means suspending the verdict', body: 'Listening means suspending the verdict.' });
+  const pub = fromArchiveRecord(r);
+  const publicFile: IndexFile = {
+    version: INDEX_SCHEMA_VERSION,
+    entities: [pub.entity],
+    entries: [{ ...vec([1, 0]), fragment: pub.fragment }],
+  };
+  assert.equal(validateIndex(publicFile).entities.length, 1);
+});
+
+test('store: an index that would be refused at load is refused at write, and the legacy view never casts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ae-store-lint-'));
+  const path = join(dir, 'index.json');
+  const bad = privateNoteIndex({ title: 'Originally modulated up a whole step' });
+
+  // writeIndex validates first and leaves nothing behind.
+  assert.throws(() => writeIndex(bad, path), /'title' quotes private text/);
+  assert.equal(existsSync(path), false);
+
+  // A hand edit on disk fails at the next load, before any consumer sees it.
+  writeFileSync(path, JSON.stringify(bad), 'utf8');
+  assert.throws(() => readIndex(path), /'title' quotes private text/);
+  assert.throws(() => readIndexFile(path), /'title' quotes private text/);
+
+  // The transitional view re-lints instead of rebranding a stored string.
+  const [entity] = bad.entities;
+  const [entry] = bad.entries;
+  assert.throws(() => toPrivateNote(entity!, entry!.fragment), /'label' quotes private text/);
+  assert.throws(() => legacyEntriesFromIndexFile(bad), /'label' quotes private text/);
+  const good = privateNoteIndex();
+  assert.equal(toPrivateNote(good.entities[0]!, good.entries[0]!.fragment).label, 'Harbor Lights session');
+
+  // writeServedIndex runs the served validator the same way.
+  const served = toServedIndex(privateBook());
+  const servedPath = join(dir, 'served.json');
+  writeServedIndex(served, servedPath);
+  assert.equal(readServedIndex(servedPath).entries.length, 2);
+  const unstripped = { ...served, entries: [{ ...served.entries[0]!, fragment: { ...served.entries[0]!.fragment, text: 'leak' } }] };
+  assert.throws(() => writeServedIndex(unstripped as typeof served, servedPath), /still carries text/);
+});
+
+test('migrate:index fails with the remedy, not a stack trace, and migrates a v3 file once', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ae-migrate-'));
+  const run = (...args: string[]) =>
+    spawnSync(process.execPath, ['--import', 'tsx', 'scripts/migrate-index-v3-v4.ts', ...args], {
+      encoding: 'utf8',
+      cwd: process.cwd(),
+    });
+
+  const missing = run(join(dir, 'nope.json'));
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /migrate:index failed: index at .*nope\.json does not exist\. Pass the path/);
+  assert.ok(!/at .*\.ts:\d+/.test(missing.stderr), 'no stack trace');
+
+  const junk = join(dir, 'junk.json');
+  writeFileSync(junk, 'not json', 'utf8');
+  const bad = run(junk);
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /is not valid JSON\. Restore it from version control, or rebuild it/);
+
+  const v3 = join(dir, 'v3.json');
+  const entries: IndexEntry[] = [
+    { ...vec([1, 0]), sourceType: 'record', record: record() },
+    { ...vec([0, 1]), sourceType: 'note', note: note() },
+  ];
+  writeFileSync(v3, JSON.stringify({ version: 3, entries }), 'utf8');
+  const migrated = run(v3);
+  assert.equal(migrated.status, 0, migrated.stderr);
+  assert.match(migrated.stdout, /migrated to schema version 4 \(2 entities, 2 fragments; vectors and hashes untouched\)/);
+  assert.deepEqual(readIndexFile(v3), entries);
+  const again = run(v3);
+  assert.equal(again.status, 0, again.stderr);
+  assert.match(again.stdout, /already schema version 4; nothing to do/);
 });

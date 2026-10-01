@@ -25,9 +25,10 @@ export interface ArchiveRecord {
  * `assertPublicSafeField` (src/public-safe.ts), so corpus code cannot put a
  * raw frontmatter string on the path toward the model — the same trick as
  * RoutingHint's missing text field, applied to the fields that DO travel.
- * Honest scope: the brand erases at JSON boundaries, so an index read from
- * disk is trusted to have been built through the lint; the guarantee is
- * "linted when the corpus was built", not "re-checked on every read".
+ * Honest scope: the brand erases at JSON boundaries. A private index read from
+ * disk re-runs the lint at load (validateIndex in src/store.ts), because the
+ * text to check against is there; a served index has no text and is trusted
+ * to descend from a validated private one (docs/CONTRACT.md §4).
  */
 export type PublicSafe = string & { readonly __publicSafe: 'lint-passed' };
 
@@ -61,8 +62,8 @@ export interface PrivateNote {
  * the in-package synthesis consumer (src/evidence.ts). Deliberately has NO
  * field for the source's text or gist — code that tried to hand private prose
  * to the model would not compile. The label and locator were linted when the
- * index was built (docs/CONTRACT.md §6); the brand erases at JSON, so they are
- * plain strings here. hintId is the fragment id.
+ * index was built and again when it was loaded (docs/CONTRACT.md §6); the
+ * brand erases at JSON, so they are plain strings here. hintId is the fragment id.
  */
 export interface RoutingHint {
   hintId: string;

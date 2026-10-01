@@ -348,12 +348,30 @@ or a consumer that serializes `ScoredHit` are outside what the type can police.
 The contribution is to make the leak inexpressible on the supported path, not to
 prove that no unsupported path exists.
 
+That is the claim about the **source text**. Every variant also carries short
+authored strings: `entity.title` and `version`, the locator values and the
+rendered `locatorLabel`, creator and speaker names and roles, themes. Those are
+plain strings, and nothing in the type stops an author from putting a sentence
+of the manuscript in a title or a `note` locator. That channel is closed by a
+check, not a type: the lint of section 6 (`assertPublicSafeMetadata`) runs over
+every such string on a private entity, against the entity's private text, at
+index build and at every load of a private index, and bounds each to one line
+of at most 120 characters. So the structural claim is about the text, and the
+metadata claim is about a lint with a stated tripwire (section 13). Section 10
+lists both as separate channels.
+
 Trust posture. The `LintedGist` brand erases at JSON boundaries, exactly as the
-2.x `PublicSafe` brand does. An index read from disk, or a bundle read from a
-blob store, is trusted to have been built through the gate. A versioned index
-fails fast on a shape mismatch, and the load-time validator (section 12) checks
-the served-index invariants of rule 4; the evaluation's canary sweep (section 11)
-backstops at eval time. Nothing re-checks a gist at query time.
+2.x `PublicSafe` brand does, so a brand proves nothing about a file. A
+**private** index read from disk is not trusted: it still holds the text, so the
+load-time validator (section 12) re-runs the metadata lint against it, and a
+hand-edited title or locator fails at load with the field and the run. A
+**served** index, or a bundle read from a blob store, has no private text to
+check against (that is what the strip is for) and is trusted to descend from a
+validated private index; its validator checks the shape and the strip
+invariants of rule 4, which is all that can be checked without the text. The
+same validation runs at write, so a build cannot leave behind an artifact the
+next load refuses. The evaluation's canary sweep (section 11) backstops at eval
+time. Nothing re-checks a gist or a string at query time.
 
 ## 5. Projections: proposed by the system, authorized by the author
 
@@ -446,21 +464,33 @@ before choosing.
 
 **What travels besides the gist, and how it is checked.** On a private entity,
 the strings a hit carries that are authored rather than structural are the
-entity `title` and `version`, any free-text locator value (schemes `note`,
-`section`, `chapter`), and the rendered `locatorLabel`. At index build,
-`assertPublicSafeField` runs on each of them against the entity's full text (the
-2.x check: single line, 120 characters, no five-word run). Its `PublicSafe`
-return brand is **retired as a type** in 3.0.0: `title`, `locator`, and
-`locatorLabel` are shared by public and private entities, no section 2 type can
-carry the brand without splitting every type in two, and the brand erased at
-JSON anyway. The structural half of NEXT-STEPS A1 therefore becomes a build-time
-check named here, and the brand lives on the one traveling field that is prose,
-the gist. Creator and speaker names are configuration, public by construction.
-Identifiers and `date` are structural.
+entity `title` and `version`, its creators' names and roles, its themes, every
+locator value and `end` (a page number is structural and passes trivially; a
+`note` or `section` value is authored), the rendered `locatorLabel`, and on each
+fragment the speakers' names and roles and the fragment's themes.
+`assertPublicSafeMetadata` runs `assertPublicSafeField`'s rule on each of them
+against the entity's whole private text (the 2.x check: single line, 120
+characters, no five-word run; characters instead of words for a script without
+word spacing), at index build and again at every load of a private index. One
+exemption: a fragment whose text opens with the entity's title as its own first
+paragraph (the note shape, where the private title is embedded with the body)
+has that heading removed from the comparison, because the title is the string
+under test and publishing it is the author's act; a title that lifts a run from
+the body, or from a private title it does not equal, is a quotation and fails.
+Public entities are not checked: their text is public, so their metadata is
+public by construction. The `PublicSafe` return brand is **retired as a type**
+in 3.0.0: `title`, `locator`, and `locatorLabel` are shared by public and
+private entities, no section 2 type can carry the brand without splitting every
+type in two, and the brand erased at JSON anyway. The structural half of
+NEXT-STEPS A1 therefore becomes a check named here, run wherever the text is
+present, and the brand lives on the one traveling field that is prose, the gist.
+Identifiers, dates, ids, types, and URLs are structural and are not linted.
 
 Where the lint runs: at ingest, inside the drafter loop; at index build, over
-every gist and every authored string that will be served, so a hand edit is
-checked too; and at evaluation, as the canary sweep. Never at query time.
+every gist and every authored string that will be served; at every load of a
+private index, so a hand edit to the artifact is checked too; and at evaluation,
+as the canary sweep. Never at query time, and never on a served index, which has
+no text left to check against.
 
 ## 7. Retrieval
 
@@ -664,6 +694,7 @@ what the type closes, what the consumer must do, and what stays owned.
 | Channel | The type closes | The consumer must | Owned (section 13) |
 |---|---|---|---|
 | Source text of a private fragment | no field on `locator`/`semantic` hits | serialize and prompt from `EvidenceHit` only | stepping off the typed path |
+| Authored metadata on a private entity (title, version, locator values and label, names, roles, themes) | nothing; one line, 120 characters, and no five-word run with the entity's text, checked at build and at every load of a private index (section 6) | build and load the private index through this package; keep a served index downstream of a validated private one | a short private phrase; private meaning in public words (A1's residue) |
 | A gist for a fragment whose policy is `locator`/`none` | `isServableGist` and the served-index strip | validate the served index at load | mislabelled layers |
 | Private vectors | not committed; not on the wire | rate-limit; coarse scores on private hits; omit model and dimensions from responses | inversion of a vector an attacker already holds |
 | Score oracle (per-query cosine on a private vector) | scores rounded, `breakdown` omitted on private hits | rate-limit; cache | residual coarse signal per query |
@@ -728,12 +759,17 @@ index is the same shape after `toServedIndex`.
 
 Validation at load checks, on every index: every fragment's entity resolves;
 `fragment.disclosure.raw` equals its entity's `raw`; the disclosure is a legal
-cell; a `semantic` fragment satisfies `isServableGist`. On a served index it
-also checks rule 4: no fragment has exposure `none`; `text` and `summary` are
-`''` wherever exposure is not `text`; `projection` is absent wherever exposure
-is not `semantic`; no `contentHash`, `policy`, or `sourceReview` remains. A
-served index that fails these was misbuilt and is refused with the rebuild
-instruction.
+cell; a `semantic` fragment satisfies `isServableGist`. On a private index it
+also runs the section 6 metadata lint over every private entity against that
+entity's text, heading exemption included, so an authored string that quotes the
+text fails at load with the field and the run. On a served index it instead
+checks rule 4: no fragment has exposure `none`; `text` and `summary` are `''`
+wherever exposure is not `text`; `projection` is absent wherever exposure is not
+`semantic`; no `contentHash`, `policy`, or `sourceReview` remains. The metadata
+lint cannot run on a served index (the text is blank) and is not pretended to.
+A served index that fails these was misbuilt and is refused with the rebuild
+instruction. `writeIndex` and `writeServedIndex` run the same validation before
+writing, so what the next load would refuse is refused at build.
 
 Each entry's vector and `contentHash` are taken over the fragment's **embed
 string**, one rule in `src/embed-string.ts` chosen so that today's bytes are
@@ -773,9 +809,10 @@ not by the type.
 - A coarse score on a private hit is still a signal per query; rate limiting is
   what bounds how many signals a caller gets.
 - Layer assignment, the choice of `raw`, is authored upstream of the type.
-- The brand erases at JSON boundaries; a served index is trusted to have been
-  built through the gate, and the load-time validator checks the shape, not the
-  provenance, of what it loads.
+- The brand erases at JSON boundaries. A private index is re-linted at every
+  load because it still holds the text; a served index is trusted to have been
+  built through the gate from a validated private one, and its load-time
+  validator checks the shape and the strip, not the provenance, of what it loads.
 - Recall. A fragment below the floor is absent, and absence is what a gate cannot
   catch.
 - Provider custody at ingest.

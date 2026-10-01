@@ -13,7 +13,8 @@
 
 import type { Entity, Fragment } from '../contract.js';
 import { locatorKey, renderLocatorLabel } from '../locator.js';
-import type { ArchiveRecord, PrivateNote, PublicSafe } from '../types.js';
+import { assertPublicSafeField } from '../public-safe.js';
+import type { ArchiveRecord, PrivateNote } from '../types.js';
 
 export const WHOLE_LOCATOR = { scheme: 'whole', value: '' } as const;
 
@@ -95,8 +96,10 @@ export function fromPrivateNote(note: PrivateNote): { entity: Entity; fragment: 
  * Reverse of fromPrivateNote. The private title is the text before the first
  * blank line and the body is what follows: a note's title is one frontmatter
  * line and its body is whitespace-collapsed by stripMarkdown, so the split is
- * exact for anything the corpus reader produced. The label and locator were
- * linted when the index was built (the brand erases at JSON; CONTRACT.md §4).
+ * exact for anything the corpus reader produced. The label and locator go back
+ * through the lint against the body here rather than being cast: the brand
+ * erases at JSON (CONTRACT.md §4), and a stored string is a string until the
+ * lint says otherwise, so a hand-edited index fails here as it fails at load.
  */
 export function toPrivateNote(entity: Entity, fragment: Fragment): PrivateNote {
   const cut = fragment.text.indexOf('\n\n');
@@ -104,12 +107,13 @@ export function toPrivateNote(entity: Entity, fragment: Fragment): PrivateNote {
   const text = cut < 0 ? '' : fragment.text.slice(cut + 2);
   const noteLocator = fragment.locator.find((l) => l.scheme === 'note');
   const locator = noteLocator ? noteLocator.value : renderLocatorLabel(fragment.locator);
+  const path = fragment.id;
   return {
     id: entity.id,
     title,
-    label: entity.title as PublicSafe,
+    label: assertPublicSafeField(entity.title, { field: 'label', path, privateText: text }),
     url: entity.url,
-    locator: locator as PublicSafe,
+    locator: assertPublicSafeField(locator, { field: 'locator', path, privateText: text }),
     text,
   };
 }

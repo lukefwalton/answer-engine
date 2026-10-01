@@ -7,9 +7,12 @@
 // `locator` variant of EvidenceHit has no field for text, the `semantic`
 // variant carries only a lint-passed gist, and `text` is unreachable for a
 // private fragment because Disclosure has no such member. A consumer whose
-// prompt builder or serializer accepts EvidenceHit cannot forward private
-// prose along the typed path — a TypeScript error, not a runtime guard to
-// remember. The bound on that claim is stated in docs/CONTRACT.md §4.
+// prompt builder or serializer accepts EvidenceHit cannot forward a private
+// fragment's text along the typed path — a TypeScript error, not a runtime
+// guard to remember. The short authored strings a hit does carry (title,
+// locator label, names) are linted against the private text at build and at
+// load (src/public-safe.ts), not typed. The bound on the whole claim is stated
+// in docs/CONTRACT.md §4.
 //
 // Scores on private hits are coarse (rounded to 0.05, no breakdown): a
 // full-precision cosine against a private vector is a measurement of that
