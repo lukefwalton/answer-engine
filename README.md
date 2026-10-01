@@ -255,6 +255,12 @@ npm run typecheck   # tsc --noEmit
 
 ## Where to take it
 
+The next major version is specified before it is built:
+[`docs/CONTRACT.md`](./docs/CONTRACT.md) is the design of record for 3.0.0, in
+which every retrievable fragment carries a disclosure policy and the only object
+that leaves retrieval is a hit whose type cannot hold more than that policy
+allows. The list below is the 2.x view of the same road.
+
 In the order we'd add them:
 
 - **Chunking** — split long documents into overlapping windows so retrieval
