@@ -41,6 +41,7 @@ import { buildRetrievalIndex, containsPhrase, cosine, partitionByRaw, retrieve }
 import {
   assertHomogeneousIndex,
   indexFileFromLegacyEntries,
+  legacyEntriesFromIndexFile,
   readIndexFile,
   writeIndexFile,
 } from '../src/store.js';
@@ -226,11 +227,17 @@ test('corpus: a note may request its exposure; anything but semantic, locator, o
       ['note:semantic', 'semantic'],
     ],
   );
-  // Through the adapter: the request is the entity default; the fragment is resolved without a gist.
+  // Through the adapter: the request is the entity default, and the fragment carries
+  // the same request until a build resolves it against a projection (CONTRACT.md §3).
   const semantic = fromPrivateNote(notes.find((n) => n.id === 'note:semantic')!);
   assert.deepEqual(semantic.entity.disclosure, { raw: 'private', exposure: 'semantic' });
-  assert.deepEqual(semantic.fragment.disclosure, { raw: 'private', exposure: 'locator' });
+  assert.deepEqual(semantic.fragment.disclosure, { raw: 'private', exposure: 'semantic' });
   assert.equal(toPrivateNote(semantic.entity, semantic.fragment).exposure, 'semantic');
+  // The legacy view drafts no gist, so it resolves the request to locator and still round-trips it.
+  const legacy = indexFileFromLegacyEntries([noteEntry(notes.find((n) => n.id === 'note:semantic')!, [1, 0])]);
+  assert.deepEqual(legacy.entries[0]!.fragment.disclosure, { raw: 'private', exposure: 'locator' });
+  const back = legacyEntriesFromIndexFile(legacy)[0]!;
+  assert.ok(back.sourceType === 'note' && back.note.exposure === 'semantic');
   const plain = fromPrivateNote(notes.find((n) => n.id === 'note:plain')!);
   assert.equal('exposure' in toPrivateNote(plain.entity, plain.fragment), false);
 

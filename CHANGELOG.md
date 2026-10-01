@@ -169,7 +169,13 @@ workflow and archived on Zenodo under the concept DOI
   the new `collectEntities` (`src/ingest/collect.ts`): entities once, every
   fragment under its entity, so a fragmenter's many pairs for one entity build
   as the contract describes; an id described two ways or a fragment produced
-  twice is refused by id. `projectionContentHash` moves to
+  twice is refused by id. An adapter now emits each fragment's REQUESTED
+  exposure on the fragment (the entity default unless the adapter overrides
+  it), and `npm run index` drafts and resolves per fragment from that request,
+  so a fragment-level override survives into the stored disclosure as
+  CONTRACT §3 describes; `fromPrivateNote` no longer pre-resolves, and the
+  legacy view (which drafts nothing) resolves a requested `semantic` to
+  `locator` itself. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed

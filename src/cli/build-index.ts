@@ -126,11 +126,14 @@ async function main(): Promise<void> {
   const totals = { drafted: 0, skipped: 0, kept: 0, failed: 0 };
   for (const [entityId, group] of byEntity) {
     const entity = entities.get(entityId)!;
+    // An adapter emits each fragment's REQUESTED exposure on the fragment: the
+    // entity default unless the adapter overrode it (CONTRACT.md §3). It is
+    // read here for drafting and below for resolution, then overwritten.
     const inputs: ProjectionDraftInput[] = group.map((fragment) => ({
       id: fragment.id,
       text: fragment.text,
       locator: fragment.locator,
-      requested: entity.disclosure.exposure,
+      requested: fragment.disclosure.exposure,
     }));
     const result = await draftProjections(entity, inputs, drafter, {
       existing: stored,
@@ -151,13 +154,13 @@ async function main(): Promise<void> {
     );
   }
 
-  // Resolve every fragment's exposure from the entity default and its projection
+  // Resolve every fragment's exposure from its request and its projection
   // (docs/CONTRACT.md §3): the one place the policy is decided, stored on the fragment.
   for (const { fragment } of sources) {
     const entity = entities.get(fragment.entityId)!;
     const projection = projections.get(fragment.id);
     if (projection) fragment.projection = projection;
-    fragment.disclosure = resolveDisclosure(entity, { exposure: entity.disclosure.exposure, projection }, { path: fragment.id });
+    fragment.disclosure = resolveDisclosure(entity, { exposure: fragment.disclosure.exposure, projection }, { path: fragment.id });
   }
   for (const { fragmentId, reason } of unservable) {
     console.log(`  ${fragmentId}: asked for 'semantic', resolved to 'locator' — ${reason}`);

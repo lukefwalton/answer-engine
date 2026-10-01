@@ -12,7 +12,6 @@
 // eval and demo code keep running on a schema-4 index without changes.
 
 import type { Entity, Fragment } from '../contract.js';
-import { resolveDisclosure } from '../ingest/disclosure.js';
 import { locatorKey, renderLocatorLabel } from '../locator.js';
 import { assertPublicSafeField } from '../public-safe.js';
 import type { ArchiveRecord, PrivateNote } from '../types.js';
@@ -71,10 +70,11 @@ export function joinNoteText(title: string, body: string): string {
   return [title, body].filter((s) => s.length > 0).join('\n\n');
 }
 
-/** The note's requested exposure becomes the entity default; the fragment's
- *  disclosure is RESOLVED with no projection attached, so a requested
- *  `semantic` reads `locator` here until the build drafts a gist and resolves
- *  again (src/cli/build-index.ts). */
+/** The note's requested exposure becomes the entity default, and the fragment
+ *  carries the same request: an adapter emits what the author asked for, and
+ *  the build resolves it once the projection is known (src/cli/build-index.ts;
+ *  the legacy view, which drafts nothing, resolves it in src/store.ts). A
+ *  fragment's `disclosure` is a request until a build stores it. */
 export function fromPrivateNote(note: PrivateNote): { entity: Entity; fragment: Fragment } {
   const locator = [{ scheme: 'note', value: note.locator as string }];
   const entity: Entity = {
@@ -91,7 +91,7 @@ export function fromPrivateNote(note: PrivateNote): { entity: Entity; fragment: 
     entityId: note.id,
     locator,
     text: joinNoteText(note.title, note.text),
-    disclosure: resolveDisclosure(entity, {}),
+    disclosure: entity.disclosure,
   };
   return { entity, fragment };
 }

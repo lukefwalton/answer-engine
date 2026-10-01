@@ -34,7 +34,7 @@ import {
   toPrivateNote,
 } from './adapters/teaching.js';
 import type { Entity, Fragment, LintedGist } from './contract.js';
-import { isServableGist } from './ingest/disclosure.js';
+import { isServableGist, resolveDisclosure } from './ingest/disclosure.js';
 import { projectionContentHash, projectionProblem } from './ingest/projections.js';
 import { isTimecodeValue } from './locator.js';
 import { assertPublicSafeMetadata, assertSemanticProjection, entityLintText } from './public-safe.js';
@@ -529,6 +529,9 @@ export function indexFileFromLegacyEntries(entries: readonly IndexEntry[]): Inde
       throw new Error(`entity '${entity.id}' is described two ways by its entries; refusing to write an inconsistent index.`);
     }
     entities.set(entity.id, entity);
+    // The adapters emit the requested exposure; this view drafts no gist, so a
+    // requested `semantic` resolves to `locator` here (CONTRACT.md §3).
+    fragment.disclosure = resolveDisclosure(entity, { exposure: fragment.disclosure.exposure }, { path: fragment.id });
     out.push({ model: e.model, dimensions: e.dimensions, vector: e.vector, contentHash: e.contentHash, fragment });
   }
   return { version: INDEX_SCHEMA_VERSION, entities: [...entities.values()], entries: out };

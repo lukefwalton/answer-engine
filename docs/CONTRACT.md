@@ -6,10 +6,11 @@ the types (§2), disclosure and its resolution (§3), the crossing (§4),
 projections (§5), the lints (§6), retrieval with plugins and filters (§7), the
 in-package consumer (§9), the private and served index with load-time
 validation and the keyless migration (§12), and the evaluation's canary sweep
-and fragment ids (§11). Not in this package by design: the wire contract (§8)
-and the retrieval-only consumer, which a consumer implements over `search()`
-(§15). Still owed in this repository: the demo's `semantic` entity (§12, a
-keyed build). The charter files were revised with the code in the same release:
+and fragment ids (§11), and the wire contract's types, fixed policy copy, and
+`toSearchResponse` (§8, `src/wire.ts`). Not in this package by design: the
+transport and the retrieval-only consumer itself, which a consumer implements
+over `searchWithCounts()` and `toSearchResponse` (§15). Still owed in this
+repository: the demo's `semantic` entity (§12, a keyed build). The charter files were revised with the code in the same release:
 `.github/STANDARDS.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`,
 `NEXT-STEPS.md`, and `docs/production-scaling.md`. Where this document and the
 code disagree, the disagreement is a bug in one of them, and `CHANGELOG.md`
