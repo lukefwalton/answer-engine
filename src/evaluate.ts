@@ -8,7 +8,7 @@
 
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
-import type { RetrievalResult } from './retrieve.js';
+import type { ScoredHit } from './contract.js';
 import type { AnswerMode, AnswerOutput } from './types.js';
 
 export interface GoldQuery {
@@ -269,16 +269,14 @@ export interface JudgeResult {
 }
 
 /** Retrieval floor: expected sources in the hits, forbidden sources out.
- *  Both streams count — a gold id can name a record or a private note.
- *  This is where the gold set *checks recall* on enumerated cases: every
- *  expectSources id is a source someone decided must surface in regression.
- *  The relevant source no gold query names is residue the suite can never
- *  reach — it catches what it lists, not the omission it never thought of. */
-export function judgeRetrieval(gold: GoldQuery, hits: RetrievalResult): JudgeResult {
-  const hitIds = new Set([
-    ...hits.records.map((h) => h.record.id),
-    ...hits.notes.map((h) => h.note.id),
-  ]);
+ *  Both layers count, and a gold id may name an entity (`essay:x`) or a
+ *  fragment (`essay:x#s3`). This is where the gold set *checks recall* on
+ *  enumerated cases: every expectSources id is a source someone decided must
+ *  surface in regression. The relevant source no gold query names is residue
+ *  the suite can never reach — it catches what it lists, not the omission it
+ *  never thought of. */
+export function judgeRetrieval(gold: GoldQuery, hits: readonly ScoredHit[]): JudgeResult {
+  const hitIds = new Set(hits.flatMap((h) => [h.entity.id, h.fragment.id]));
   const issues: string[] = [];
   for (const id of gold.expectSources ?? []) {
     if (!hitIds.has(id)) issues.push(`expected source '${id}' not retrieved`);

@@ -57,16 +57,18 @@ export interface PrivateNote {
 }
 
 /**
- * A private note reduced to its public-safe routing surface. Deliberately has
- * NO field for the note's text or title — code that tried to hand private
- * prose to the model would not compile — and the fields it does carry are
- * PublicSafe: constructible only through the build-time lint.
+ * A hint: a private (or non-quotable) hit reduced to its routing surface for
+ * the in-package synthesis consumer (src/evidence.ts). Deliberately has NO
+ * field for the source's text or gist — code that tried to hand private prose
+ * to the model would not compile. The label and locator were linted when the
+ * index was built (docs/CONTRACT.md §6); the brand erases at JSON, so they are
+ * plain strings here. hintId is the fragment id.
  */
 export interface RoutingHint {
   hintId: string;
-  label: PublicSafe;
+  label: string;
   url: string;
-  locator: PublicSafe;
+  locator: string;
 }
 
 /** Everything the answer model is allowed to see. */

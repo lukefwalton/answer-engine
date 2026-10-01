@@ -25,15 +25,21 @@ import {
   parseEvalReportJson,
 } from '../src/evaluate.js';
 import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
-import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
+import { toAnswerEvidence } from '../src/evidence.js';
+import { project } from '../src/no-leak.js';
 import {
   assertPublicSafeField,
   PUBLIC_SAFE_MAX_CHARS,
   renderRelatedMaterialAnswer,
 } from '../src/public-safe.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
-import { containsPhrase, cosine, hasThemeMatch, retrieve } from '../src/retrieve.js';
-import { assertHomogeneousIndex, readIndexFile, writeIndexFile } from '../src/store.js';
+import { buildRetrievalIndex, containsPhrase, cosine, partitionByRaw, retrieve } from '../src/retrieve.js';
+import {
+  assertHomogeneousIndex,
+  indexFileFromLegacyEntries,
+  readIndexFile,
+  writeIndexFile,
+} from '../src/store.js';
 import type { AnswerEvidence, ArchiveRecord, IndexEntry, PrivateNote } from '../src/types.js';
 
 function makeRecord(overrides: Partial<ArchiveRecord> = {}): ArchiveRecord {
@@ -98,8 +104,23 @@ function noteEntry(note: PrivateNote, vector: number[]): IndexEntry {
   };
 }
 
+/** The in-package consumer's evidence shape, built directly: records as given,
+ *  notes reduced to hints (hintId, label, url, locator; no text). */
 function evidenceOf(records: ArchiveRecord[], notes: PrivateNote[] = []): AnswerEvidence {
-  return assembleEvidence(records, notes);
+  return {
+    records,
+    hints: notes.map((n) => ({ hintId: n.id, label: n.label, url: n.url, locator: n.locator })),
+  };
+}
+
+/** A note reduced to the hint the in-package consumer sees (no text). */
+function hintOf(note: PrivateNote) {
+  return { hintId: note.id, label: note.label as string, url: note.url, locator: note.locator as string };
+}
+
+/** A retrieval index from legacy record/note entries (through the adapters). */
+function indexOf(entries: IndexEntry[]) {
+  return buildRetrievalIndex(indexFileFromLegacyEntries(entries));
 }
 
 const RECORD_CITE = {
@@ -285,42 +306,60 @@ test('retrieve: cosine, boosts, score floor, and the two-stream split', () => {
   const far = recordEntry(makeRecord({ id: 'essay:far', slug: 'far', title: 'Far' }), [0, 1]);
   const note = noteEntry(makeNote(), [0.9, 0.45]);
 
-  const hits = retrieve([1, 0], 'what is paper crown about', [close, named, far, note]);
+  const hits = retrieve([1, 0], 'what is paper crown about', indexOf([close, named, far, note]));
+  const { public: pub, private: priv } = partitionByRaw(hits);
   // Exact title match outranks the pure semantic neighbor; weak hit floored out.
-  assert.deepEqual(hits.records.map((h) => h.record.id), ['song:paper-crown', 'essay:on-listening']);
-  // Notes ride a separate stream — present, but never mixed into records.
-  assert.deepEqual(hits.notes.map((h) => h.note.id), ['note:harbor-lights-session']);
+  assert.deepEqual(pub.map((h) => h.entity.id), ['song:paper-crown', 'essay:on-listening']);
+  assert.equal(pub[0]!.breakdown.exactMatch, 0.3);
+  assert.ok(pub[0]!.cosine < pub[0]!.score);
+  // Notes are capped as their own layer — present, never crowded out by records —
+  // and under the default plugins they ride on cosine alone (2.x behaviour).
+  assert.deepEqual(priv.map((h) => h.entity.id), ['note:harbor-lights-session']);
+  assert.deepEqual(Object.keys(priv[0]!.breakdown), ['cosine']);
 });
 
 test('retrieve: theme boost rewards curated frontmatter vocabulary', () => {
-  const record = makeRecord();
-  assert.ok(hasThemeMatch(record, 'where is attention discussed'));
-  assert.ok(!hasThemeMatch(record, 'where is focus discussed'));
-
-  const themed = recordEntry(record, [1, 0]);
+  const themed = recordEntry(makeRecord(), [1, 0]);
   const plain = recordEntry(
     makeRecord({ id: 'essay:other', slug: 'other', title: 'Other', themes: [] }),
     [1, 0],
   );
-  const hits = retrieve([1, 0], 'where is attention discussed', [plain, themed]);
-  assert.equal(hits.records[0]!.record.id, 'essay:on-listening');
-  assert.ok(hits.records[0]!.score > hits.records[1]!.score);
+  const hits = retrieve([1, 0], 'where is attention discussed', indexOf([plain, themed]));
+  assert.equal(hits[0]!.entity.id, 'essay:on-listening');
+  assert.ok(hits[0]!.score > hits[1]!.score);
+  assert.equal(hits[0]!.breakdown.theme, 0.15);
+  const unthemed = retrieve([1, 0], 'where is focus discussed', indexOf([plain, themed]));
+  assert.ok(unthemed.every((h) => h.breakdown.theme === undefined));
 });
 
-test('no-leak: a routing hint carries WHERE and structurally cannot carry the text', () => {
+test('no-leak: project() crosses a private hit as WHERE and structurally cannot carry the text', () => {
   const note = makeNote();
-  const hint = toRoutingHint(note);
-  assert.deepEqual(hint, {
-    hintId: note.id,
-    label: note.label,
-    url: note.url,
-    locator: note.locator,
-  });
-  // The boundary, asserted: nothing on the hint contains the private prose.
-  assert.ok(!JSON.stringify(hint).includes('modulated'));
+  const index = indexOf([recordEntry(makeRecord(), [1, 0]), noteEntry(note, [1, 0])]);
+  const hits = retrieve([1, 0], 'q', index).map(project);
 
-  const evidence = assembleEvidence([makeRecord()], [note]);
+  const privateHit = hits.find((h) => h.raw === 'private')!;
+  assert.equal(privateHit.exposure, 'locator');
+  assert.equal(privateHit.locatorLabel, 'notebook, p. 12');
+  assert.equal(privateHit.entity.title, note.label);
+  assert.ok(!('text' in privateHit));
+  // The boundary, asserted: the private prose never travels. (The label may
+  // repeat the title — that is the author's per-note choice, linted at build.)
+  assert.ok(!JSON.stringify(privateHit).includes('modulated'));
+  // Private hits carry a coarse score and no breakdown (CONTRACT.md §4).
+  assert.equal(privateHit.breakdown, undefined);
+  assert.equal(privateHit.score, 1);
+
+  const publicHit = hits.find((h) => h.raw === 'public')!;
+  assert.equal(publicHit.exposure, 'text');
+  assert.ok(publicHit.exposure === 'text' && publicHit.text.includes('suspending the verdict'));
+  assert.equal(publicHit.breakdown?.cosine, 1);
+
+  const evidence = toAnswerEvidence(hits);
   assert.ok(!JSON.stringify(evidence.hints).includes('modulated'));
+  assert.deepEqual(evidence.hints, [
+    { hintId: 'note:harbor-lights-session#notebook-p-12', label: note.label, url: note.url, locator: 'notebook, p. 12' },
+  ]);
+  assert.equal(evidence.records[0]!.id, 'essay:on-listening#whole');
 });
 
 test('prompt: renders records with bodies and hints without text', () => {
@@ -330,10 +369,11 @@ test('prompt: renders records with bodies and hints without text', () => {
   assert.ok(system.includes('Canon vs process'));
   assert.ok(system.includes('hints are NEVER evidence'));
 
-  const user = buildUserPrompt('why listen?', [makeRecord()], [toRoutingHint(makeNote())]);
+  const { hints } = toAnswerEvidence(retrieve([1, 0], 'q', indexOf([noteEntry(makeNote(), [1, 0])])).map(project));
+  const user = buildUserPrompt('why listen?', [makeRecord()], hints);
   assert.ok(user.includes('recordId: essay:on-listening'));
   assert.ok(user.includes('suspending the verdict')); // record body travels
-  assert.ok(user.includes('hintId: note:harbor-lights-session'));
+  assert.ok(user.includes('hintId: note:harbor-lights-session#notebook-p-12'));
   assert.ok(user.includes('notebook, p. 12'));
   assert.ok(!user.includes('modulated')); // private text cannot appear
 
@@ -480,8 +520,8 @@ test('answer: grounding rejects invented citations and mode/mix mismatches', () 
 
 test('public-safe: the related-material template points, never asserts', () => {
   const hints = [
-    toRoutingHint(makeNote()),
-    toRoutingHint(
+    hintOf(makeNote()),
+    hintOf(
       makeNote({ id: 'note:paper-crown-draft', label: 'Paper Crown — early draft', locator: 'notebook, p. 31' }),
     ),
   ];
@@ -666,10 +706,7 @@ test('eval: gold set loads, substitutes the author, and only references real sou
 });
 
 test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
-  const hits = {
-    records: [{ record: makeRecord(), score: 0.5, semantic: 0.5 }],
-    notes: [{ note: makeNote(), score: 0.4, semantic: 0.4 }],
-  };
+  const hits = retrieve([1, 0], 'q', indexOf([recordEntry(makeRecord(), [1, 0]), noteEntry(makeNote(), [1, 0])]));
   const gold = {
     id: 'test',
     query: 'q',

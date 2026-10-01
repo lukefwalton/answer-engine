@@ -7,19 +7,20 @@ import OpenAI from 'openai';
 import { config } from '../../archive.config.js';
 import { answerQuestion } from '../answer.js';
 import { embedBatch } from '../embedding.js';
-import { assembleEvidence } from '../no-leak.js';
-import { retrieve } from '../retrieve.js';
-import { assertHomogeneousIndex, readIndexFile } from '../store.js';
+import { toAnswerEvidence } from '../evidence.js';
+import { search } from '../no-leak.js';
+import { buildRetrievalIndex } from '../retrieve.js';
+import { readIndex } from '../store.js';
 
 async function main(): Promise<void> {
   const question = process.argv.slice(2).join(' ').trim();
   if (!question) throw new Error('Usage: npm run ask -- "your question"');
 
-  const index = readIndexFile();
-  if (index.length === 0) {
+  const file = readIndex();
+  if (file.entries.length === 0) {
     throw new Error('Index is empty. Run `npm run index` first.');
   }
-  assertHomogeneousIndex(index);
+  const index = buildRetrievalIndex(file);
 
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set. Put it in .env or the environment.');
@@ -28,20 +29,15 @@ async function main(): Promise<void> {
 
   // Embed the query with the same model the index used (the stored entries
   // are the source of truth; cosine across models is meaningless).
-  const spec = index[0]!;
   const [embedded] = await embedBatch(client, [{ id: 'query', text: question }], {
-    model: spec.model,
-    dimensions: spec.dimensions,
+    model: index.model,
+    dimensions: index.dimensions,
   });
 
-  const hits = retrieve(embedded!.vector, question, index);
-
-  // The boundary crossing: private notes become routing hints (no text) here,
-  // and only here. Everything past this line is public-safe.
-  const evidence = assembleEvidence(
-    hits.records.map((h) => h.record),
-    hits.notes.map((h) => h.note),
-  );
+  // search() is retrieve().map(project): the boundary crossing happens inside
+  // it (src/no-leak.ts), so nothing past this line holds a Fragment.
+  const hits = search(embedded!.vector, question, index);
+  const evidence = toAnswerEvidence(hits);
   console.log(`Evidence: ${evidence.records.length} records, ${evidence.hints.length} hints\n`);
 
   const answer = await answerQuestion(client, question, evidence, config);

@@ -15,8 +15,10 @@ import { resolve } from 'node:path';
 
 import { loadGold } from '../src/evaluate.js';
 import type { GoldQuery } from '../src/evaluate.js';
-import { assertHomogeneousIndex, readIndexFile } from '../src/store.js';
-import type { IndexEntry } from '../src/types.js';
+import { buildRetrievalIndex } from '../src/retrieve.js';
+import type { RetrievalIndex } from '../src/retrieve.js';
+import { readIndex } from '../src/store.js';
+import type { IndexFile } from '../src/store.js';
 import { requantizeIndex, runGate } from './harness.js';
 import { readQueryVectors } from './query-vectors.js';
 
@@ -71,29 +73,31 @@ function parseArgs(argv: string[]): RunArgs {
   return args;
 }
 
-function loadIndex(synthetic: boolean): IndexEntry[] {
-  const natural = readIndexFile(NATURAL_INDEX);
-  if (natural.length === 0) {
+function loadIndex(synthetic: boolean): RetrievalIndex {
+  const natural = readIndex(NATURAL_INDEX);
+  if (natural.entries.length === 0) {
     throw new Error(
       `no committed vectors at ${NATURAL_INDEX}. ` +
         'Run `npm run demo:build` with an OPENAI_API_KEY (see docs/scaling-demo/build-handoff.md).',
     );
   }
-  if (!synthetic) {
-    assertHomogeneousIndex(natural);
-    return natural;
-  }
-  const spire = readIndexFile(SYNTHETIC_INDEX);
-  if (spire.length === 0) {
+  if (!synthetic) return buildRetrievalIndex(natural);
+  const spire = readIndex(SYNTHETIC_INDEX);
+  if (spire.entries.length === 0) {
     throw new Error(
       `--natural+synthetic needs the spire at ${SYNTHETIC_INDEX}, which is not built yet ` +
         '(author the synthetic notes, then `npm run demo:build`).',
     );
   }
-  const union = [...natural, ...spire];
-  // The spire is strictly baseline-plus-delta: same model, same dimensionality.
-  assertHomogeneousIndex(union);
-  return union;
+  // The spire is strictly baseline-plus-delta: same model, same dimensionality
+  // (buildRetrievalIndex asserts it), and it names no entity the natural index
+  // already has.
+  const union: IndexFile = {
+    version: 4,
+    entities: [...natural.entities, ...spire.entities.filter((e) => !natural.entities.some((n) => n.id === e.id))],
+    entries: [...natural.entries, ...spire.entries],
+  };
+  return buildRetrievalIndex(union);
 }
 
 function loadGoldSet(synthetic: boolean, author: string): GoldQuery[] {
@@ -117,11 +121,10 @@ async function main(): Promise<void> {
         '(see docs/scaling-demo/build-handoff.md).',
     );
   }
-  const spec = index[0]!;
-  if (qv.model !== spec.model || qv.dimensions !== spec.dimensions) {
+  if (qv.model !== index.model || qv.dimensions !== index.dimensions) {
     throw new Error(
       `query vectors (${qv.model}/${qv.dimensions}) do not match the index ` +
-        `(${spec.model}/${spec.dimensions}); rebuild both with demo:build.`,
+        `(${index.model}/${index.dimensions}); rebuild both with demo:build.`,
     );
   }
 
@@ -141,7 +144,7 @@ async function main(): Promise<void> {
         ? '(real corpus + the fabricated spire; headline still comes from --natural)'
         : '(real corpus only; owns the headline numbers)'),
   );
-  console.log(`  ${gold.length} gold queries, ${index.length} index entries, keyless (committed vectors)\n`);
+  console.log(`  ${gold.length} gold queries, ${index.entries.length} index entries, keyless (committed vectors)\n`);
 
   const report = runGate(gold, index, qv.byId, args.bits);
 
@@ -193,18 +196,18 @@ async function main(): Promise<void> {
  *  encoding never moves. */
 async function runAnswerPass(
   gold: readonly GoldQuery[],
-  quantIndex: readonly IndexEntry[],
+  quantIndex: RetrievalIndex,
   queryVectorById: ReadonlyMap<string, number[]>,
   config: import('../src/types.js').ArchiveConfig,
 ): Promise<void> {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('--full runs the answer model, which needs OPENAI_API_KEY.');
   }
-  const [{ default: OpenAI }, { retrieve }, { assembleEvidence }, { answerQuestion }, { judgeAnswer }] =
+  const [{ default: OpenAI }, { search }, { toAnswerEvidence }, { answerQuestion }, { judgeAnswer }] =
     await Promise.all([
       import('openai'),
-      import('../src/retrieve.js'),
       import('../src/no-leak.js'),
+      import('../src/evidence.js'),
       import('../src/answer.js'),
       import('../src/evaluate.js'),
     ]);
@@ -214,11 +217,7 @@ async function runAnswerPass(
   for (const g of gold) {
     const qv = queryVectorById.get(g.id);
     if (!qv) continue;
-    const hits = retrieve(qv, g.query, quantIndex);
-    const evidence = assembleEvidence(
-      hits.records.map((h) => h.record),
-      hits.notes.map((h) => h.note),
-    );
+    const evidence = toAnswerEvidence(search(qv, g.query, quantIndex));
     try {
       const answer = await answerQuestion(client, g.query, evidence, config);
       const judged = judgeAnswer(g, answer);

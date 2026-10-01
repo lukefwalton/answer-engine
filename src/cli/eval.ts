@@ -21,9 +21,10 @@ import {
   summarizeEvalReport,
 } from '../evaluate.js';
 import type { EvalQueryResult } from '../evaluate.js';
-import { assembleEvidence } from '../no-leak.js';
-import { retrieve } from '../retrieve.js';
-import { assertHomogeneousIndex, readIndexFile } from '../store.js';
+import { toAnswerEvidence } from '../evidence.js';
+import { project } from '../no-leak.js';
+import { buildRetrievalIndex, retrieve } from '../retrieve.js';
+import { readIndex } from '../store.js';
 
 const GOLD_PATH = resolve('eval/gold.yaml');
 const EVAL_REPORT_DIR = resolve('artifacts/eval');
@@ -162,21 +163,20 @@ async function main(): Promise<void> {
     );
   }
 
-  const index = readIndexFile();
-  if (index.length === 0) throw new Error('Index is empty. Run `npm run index` first.');
-  assertHomogeneousIndex(index);
+  const file = readIndex();
+  if (file.entries.length === 0) throw new Error('Index is empty. Run `npm run index` first.');
+  const index = buildRetrievalIndex(file);
 
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set. Put it in .env or the environment.');
   }
   const client = new OpenAI();
 
-  const spec = index[0]!;
   const vectorById = new Map<string, number[]>();
   for (const batch of batchInputs(gold.map((g) => ({ id: g.id, text: g.query })))) {
     const results = await embedBatch(client, batch, {
-      model: spec.model,
-      dimensions: spec.dimensions,
+      model: index.model,
+      dimensions: index.dimensions,
     });
     for (const r of results) vectorById.set(r.id, r.vector);
   }
@@ -199,10 +199,7 @@ async function main(): Promise<void> {
     const issues = [...judgeRetrieval(g, hits).issues];
     if (args.full) {
       try {
-        const evidence = assembleEvidence(
-          hits.records.map((h) => h.record),
-          hits.notes.map((h) => h.note),
-        );
+        const evidence = toAnswerEvidence(hits.map(project));
         const answer = await answerQuestion(client, g.query, evidence, config);
         issues.push(...judgeAnswer(g, answer).issues);
       } catch (err) {

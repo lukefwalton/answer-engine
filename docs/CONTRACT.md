@@ -501,13 +501,21 @@ records, which is what the gold suite's route cases rely on today.
 Built-in plugins, each with its constant exported: exact title or slug match
 (0.30; the slug is the part of `entity.id` after the first `:`); curated theme
 named in the query, with a document-frequency cap so a theme carried by more
-than 5% of entities boosts nothing (0.15); recency, a linear decay from fresh at
-180 days to zero at 730 days on `fragment.date ?? entity.date` (0.10); and
+than 5% of entities boosts nothing (0.15), applied once the corpus is large
+enough for a fraction to mean something: a theme is excluded only when its
+document frequency exceeds max(4, ceil(5% × entities)), so on eight records a
+theme shared by three still boosts; recency, a linear decay from fresh at 180
+days to zero at 730 days on `fragment.date ?? entity.date` (0.10); and
 disclosure, which favours public fragments and private fragments whose
 `sourceReview` is `reviewed` (0.15; this reads the source review, never the
-gist's). A consumer adds its own plugins (author aliases, guest speech,
-distinctive query n-grams, a cap on hub pages) and removes any of the built-ins.
-`breakdown` always carries `cosine` and one entry per plugin that fired.
+gist's). Each built-in takes a `layers` option naming the raw layers it may
+fire on. **The core's default set, used when a consumer passes none, is 2.x's
+scoring exactly**: exact match and theme match on public fragments only, so
+private fragments ride on cosine alone, which is what keeps the demo's
+certified verdicts where they are; the richer set is opt-in. A consumer adds
+its own plugins (author aliases, guest speech, distinctive query n-grams, a cap
+on hub pages) and removes any of the built-ins. `breakdown` always carries
+`cosine` and one entry per plugin that fired.
 
 Recency has three modes because two consumers want two defaults. `auto` fires
 the decay only when the query asks about the present, which is the product's

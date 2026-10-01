@@ -2,43 +2,45 @@
 //
 // Reuses the core retrieval (src/retrieve.ts) and the gold judge
 // (src/evaluate.ts) untouched: the int8 path is an encode/decode wrapper plus a
-// re-rank, never a second pipeline. Given full-precision index entries and a
-// quantization bit width, it builds the lossy index, re-ranks each gold query
+// re-rank, never a second pipeline. Given a full-precision retrieval index and
+// a quantization bit width, it builds the lossy index, re-ranks each gold query
 // against it, and reports two things: rank correlation against the
 // full-precision ranking (a diagnostic for how much the ranking moved), and the
 // gold suite's verdicts including refuse and route (the adjudicator). Rank
 // correlation gates nothing here — it is a retrieval benchmark; the gold suite
 // decides.
 
-import { cosine, retrieve } from '../src/retrieve.js';
-import type { RetrievalResult } from '../src/retrieve.js';
+import type { ScoredHit } from '../src/contract.js';
 import { judgeRetrieval } from '../src/evaluate.js';
 import type { GoldQuery } from '../src/evaluate.js';
-import type { IndexEntry } from '../src/types.js';
+import { cosine, retrieve } from '../src/retrieve.js';
+import type { RetrievalIndex } from '../src/retrieve.js';
 import { requantizeVector } from './quantize.js';
 
 /** The lossy index the demo re-ranks against: every vector round-tripped
  *  through `bits`-bit quantization, every other field untouched. The
  *  full-precision index stays the source of truth. */
-export function requantizeIndex(index: readonly IndexEntry[], bits: number): IndexEntry[] {
-  return index.map((e) => ({ ...e, vector: requantizeVector(e.vector, bits) }));
+export function requantizeIndex(index: RetrievalIndex, bits: number): RetrievalIndex {
+  return {
+    ...index,
+    entries: index.entries.map((e) => ({ fragment: e.fragment, vector: requantizeVector([...e.vector], bits) })),
+  };
 }
 
-/** The single highest-scoring source across both streams, or null if nothing
+/** The single highest-scoring hit across both layers, or null if nothing
  *  cleared the floor. Route selection lives here: in related-material mode the
  *  winner must be the private note, or the answer would resolve to a record
  *  instead and the verdict has flipped. */
 export function topSource(
-  result: RetrievalResult,
-): { id: string; kind: 'record' | 'note'; score: number } | null {
-  let best: { id: string; kind: 'record' | 'note'; score: number } | null = null;
-  for (const r of result.records) {
-    if (!best || r.score > best.score) best = { id: r.record.id, kind: 'record', score: r.score };
+  hits: readonly ScoredHit[],
+): { id: string; fragmentId: string; raw: 'public' | 'private'; score: number } | null {
+  let best: ScoredHit | null = null;
+  for (const h of hits) {
+    if (!best || h.score > best.score) best = h;
   }
-  for (const n of result.notes) {
-    if (!best || n.score > best.score) best = { id: n.note.id, kind: 'note', score: n.score };
-  }
-  return best;
+  return best
+    ? { id: best.entity.id, fragmentId: best.fragment.id, raw: best.fragment.disclosure.raw, score: best.score }
+    : null;
 }
 
 function averageRanks(xs: readonly number[]): number[] {
@@ -87,16 +89,15 @@ export function spearmanRho(a: readonly number[], b: readonly number[]): number 
 }
 
 /** Rank correlation between the full-precision and quantized cosine orderings
- *  for one query, over the whole index. The boosts (src/retrieve.ts) are
- *  identical in both rankings, so the only thing that can reorder is the vector
- *  part: cosine. That is what this measures. */
+ *  for one query, over the whole index. The boosts are identical in both
+ *  rankings, so the only thing that can reorder is the vector part: cosine. */
 export function rankCorrelation(
-  index: readonly IndexEntry[],
-  quantIndex: readonly IndexEntry[],
+  index: RetrievalIndex,
+  quantIndex: RetrievalIndex,
   queryVector: readonly number[],
 ): number {
-  const fp = index.map((e) => cosine(queryVector, e.vector));
-  const q = quantIndex.map((e) => cosine(queryVector, e.vector));
+  const fp = index.entries.map((e) => cosine(queryVector, e.vector));
+  const q = quantIndex.entries.map((e) => cosine(queryVector, e.vector));
   return spearmanRho(fp, q);
 }
 
@@ -109,11 +110,12 @@ export interface QueryGateResult {
   retrievalIssues: string[];
   /** For any case that names an expected source and is not a refusal: did that
    *  source win the top slot on the quantized index? This is what protects the
-   *  *verdict*, not just presence. judgeRetrieval only checks top-K membership,
-   *  so a quantization flip that keeps both Smiths retrieved but swaps which one
+   *  *verdict*, not just presence. judgeRetrieval only checks membership, so a
+   *  quantization flip that keeps both Smiths retrieved but swaps which one
    *  ranks first would pass it silently. The top-slot check catches that: the
    *  expected record must OUTRANK the competing Smith (disambiguation), and the
-   *  private note must win over the public records (route). */
+   *  private note must win over the public records (route). An expected id may
+   *  name the entity or the fragment. */
   topSlot?: { expected: string; winner: string | null; won: boolean };
   /** retrievalPass AND (topSlot ? topSlot.won : true). */
   pass: boolean;
@@ -122,8 +124,8 @@ export interface QueryGateResult {
 /** Re-rank one gold query against the quantized index and judge it. */
 export function evaluateQuery(
   gold: GoldQuery,
-  index: readonly IndexEntry[],
-  quantIndex: readonly IndexEntry[],
+  index: RetrievalIndex,
+  quantIndex: RetrievalIndex,
   queryVector: readonly number[],
 ): QueryGateResult {
   const hits = retrieve(queryVector, gold.query, quantIndex);
@@ -135,11 +137,6 @@ export function evaluateQuery(
   // source; the floor and forbidSources adjudicate them via judgeRetrieval.
   let topSlot: QueryGateResult['topSlot'];
   if (gold.expectAnswerMode !== 'not-found') {
-    // The top-slot contract, made loud. The gate guards expectSources[0] only —
-    // that single source is the required top-slot winner — so a non-refusal case
-    // with two entries (which one must rank #1?) or none would let a flip past
-    // silently. Enforce exactly one rather than depend on the gold author
-    // happening to list one. Refusals name no source and never reach here.
     if (gold.expectSources?.length !== 1) {
       throw new Error(
         `demo gold '${gold.id}': a non-refusal case must list exactly one expectSources ` +
@@ -148,7 +145,8 @@ export function evaluateQuery(
     }
     const expected = gold.expectSources[0]!;
     const winner = topSource(hits);
-    topSlot = { expected, winner: winner?.id ?? null, won: winner?.id === expected };
+    const won = winner !== null && (winner.id === expected || winner.fragmentId === expected);
+    topSlot = { expected, winner: winner?.id ?? null, won };
   }
 
   const pass = judged.pass && (topSlot ? topSlot.won : true);
@@ -175,7 +173,7 @@ export interface GateReport {
 /** Run the whole gold suite against the index at `bits` precision. */
 export function runGate(
   gold: readonly GoldQuery[],
-  index: readonly IndexEntry[],
+  index: RetrievalIndex,
   queryVectorById: ReadonlyMap<string, number[]>,
   bits: number,
 ): GateReport {

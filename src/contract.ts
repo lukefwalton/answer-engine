@@ -137,7 +137,7 @@ export interface EvidenceHitBase {
   fragmentId: string;
   entity: Pick<
     Entity,
-    'id' | 'type' | 'title' | 'attribution' | 'date' | 'version' | 'url' | 'identifiers' | 'parent'
+    'id' | 'type' | 'title' | 'attribution' | 'date' | 'version' | 'url' | 'identifiers' | 'parent' | 'themes'
   >;
   /** The policy dimension, not a content field. */
   raw: 'public' | 'private';

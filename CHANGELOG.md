@@ -39,6 +39,19 @@ workflow and archived on Zenodo under the concept DOI
   `writeIndexFile` keep their record/note signatures through a transitional view,
   so `npm run index`, the demo, and retrieval are unchanged. A schema-3 index now
   fails fast with the migration remedy instead of a rebuild.
+- Step 3 of 3.0.0, the one behaviour switch: retrieval runs over fragments
+  (`src/retrieve.ts`: `RetrievalIndex`, `RetrieveOptions`, filters before
+  scoring, `limit` or per-layer `limitPerRaw`, recency modes, `partitionByRaw`,
+  `retrieveWithCounts`); boosts are plugins (`src/boosts.ts`; the default set
+  reproduces 2.x scoring exactly); `src/no-leak.ts` exports `project()` and
+  `search()` in place of `toRoutingHint` / `assembleEvidence`, with coarse scores
+  and no breakdown on private hits; `src/evidence.ts` turns hits into the
+  in-package consumer's `AnswerEvidence` (the gist never enters the prompt);
+  citations carry fragment ids; `judgeRetrieval` matches an expected id against
+  entity id or fragment id. `RoutingHint.label` / `locator` are plain strings.
+  `cosine` names the similarity everywhere; `ScoredRecord.semantic` is gone.
+  The related-material template still renders label and locator; rendering a
+  gist for `semantic` hits arrives with the demo entity in Step 4.
 
 ### Planned for 3.0.0 (breaking)
 
