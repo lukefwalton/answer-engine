@@ -2,20 +2,26 @@
 
 **Status.** Design of record for answer-engine 3.0.0. Nothing in this document is
 implemented yet; it is the contract the implementation will be read against. When
-the code lands, the governance files that still describe the 2.x charter
-(`.github/STANDARDS.md` §3 and §5, `CONTRIBUTING.md`, `SECURITY.md`,
-`NEXT-STEPS.md` A1 and D) are revised in the same release. Until then this file
-and those files disagree on purpose: this one says where the repo is going.
+the code lands, the files that still describe the 2.x charter are revised in the
+same release: `.github/STANDARDS.md` §1, §3, §5 and §6; `README.md` §§1–3, Quick
+start and Commands (keeping the release-baseline sentence and the `v1.4.0` /
+`v1.4.1` example that `test/release-metadata.test.ts` pins); `CONTRIBUTING.md`;
+`SECURITY.md`; `NEXT-STEPS.md` A1, A2 and D; and the cross-references in
+`docs/production-scaling.md`. Until then this file and those files disagree on
+purpose: this one says where the repo is going.
 
 **One sentence.** Every retrievable piece of an archive carries a disclosure
-policy, and the only object that leaves retrieval is a hit whose type cannot hold
-more than that policy allows.
+policy; the only object a consumer may hand to a model or a caller is a hit, and
+a hit's type cannot hold more than that policy allows.
+
+The examples in this document are illustrative. No gist printed here is a served
+gist, and the private-layer example uses the demo's public-domain novel.
 
 ## 0. What changes, and why
 
 Today the engine has two layers named by type: an `ArchiveRecord` is quotable, a
 `PrivateNote` is searchable but reduced to a `RoutingHint` with no text field
-before the answer model sees it. That boundary works, and it stays. Three things
+before the answer model sees it. That boundary works, and it stays. Four things
 it cannot do are the reason for this contract.
 
 1. It cannot say "this material may be *described* but never quoted." A
@@ -24,141 +30,182 @@ it cannot do are the reason for this contract.
    middle exposure.
 2. The boundary sits at `assembleEvidence`, just before the model. Retrieval
    output still carries the private text. A retrieval-only consumer, one that
-   returns hits to a caller instead of synthesizing an answer, needs the boundary
-   at the retrieval output.
-3. A hit carries almost no provenance. There is no field for a date, a version, a
-   creator, a catalogue identifier, or a locator inside the source. A caller that
-   wants to reason about *when* something was said and *who* said it cannot.
+   returns hits to a caller instead of synthesizing an answer, needs the crossing
+   at the retrieval output, and needs its serializer typed on the crossed object.
+3. A hit carries almost no provenance. A hint carries a label, a locator, and a
+   URL; a record carries an optional date and nothing else. Neither has a field
+   for a version, a creator, a catalogue identifier, or a locator inside the
+   source. A caller that wants to reason about *when* something was said and
+   *who* said it cannot.
+4. Two consumers cannot share one `retrieve()`. The production deployment
+   carries its own copy of retrieval with six boosts this package does not have.
+   Scoring needs a plugin seam so that one core serves both.
 
-The contract fixes those three things and nothing else. It does not add a vector
-database, a graph, an agent, a permission framework, an HTTP layer, or any
-synthesis to this package. The two consumers that exist today, a constrained
-question-answering product and a retrieval-only API, both live outside this
-package and import it.
+The contract fixes those four things and nothing else. It does not add a vector
+database, a graph, an agent, a permission framework, an HTTP layer, or a
+production synthesis service to this package.
+
+Two consumers are in view. The constrained question-answering product exists
+today in two copies: a teaching-sized one inside this package (`src/answer.ts`,
+`src/prompt.ts`, `src/cli/ask.ts`, the `--full` tier of `src/cli/eval.ts`, and
+the answer step of `demo/run.ts`) and the production one in the site's
+`ask-the-archive/`, which does not yet import this package. Under 3.0.0 the
+in-package copy stays, as the reference consumer the gold suite's full tier
+exercises, consuming hits; the production copy imports this package. The
+retrieval-only consumer does not exist yet.
 
 ```
-corpus -> ingest -> index -> retrieve -> project() -> EvidenceHit[]
-                                                        |-> consumer A: constrained synthesis (cite or refuse)
-                                                        '-> consumer B: retrieval only (the caller's model thinks)
+corpus -> ingest -> index -> retrieve() -> ScoredHit[] -> project() -> EvidenceHit[]
+                                                                          |-> consumer A: constrained synthesis (cite or refuse)
+                                                                          '-> consumer B: retrieval only (the caller's model thinks)
 ```
 
 ## 1. Vocabulary
 
 - **Entity.** An identifiable thing in the archive: a book, a paper, an essay, a
-  song recording, a podcast episode, a page, a letter. It has identity and
-  provenance: title, type, creators, date, version, a canonical URL, and
-  identifiers.
+  song recording, a podcast episode, a transcript, a page, a letter. It has
+  identity and provenance: title, type, creators, date, version, a canonical
+  URL, and identifiers.
 - **Fragment.** A retrievable part of an entity: a page, a chapter, a section, a
-  timecode window, a whole short record. It carries the retrieval text, an
-  embedding, a locator inside its entity, and a disclosure policy.
+  timecode window, or the whole of a short entity. It carries the retrieval
+  text, an embedding, a locator inside its entity, and a disclosure policy.
 - **Identifier.** A catalogue number on an entity or a person, as a
   `{scheme, value}` pair. The scheme set is open: `isbn`, `isrc`, `iswc`,
   `ipi`, `isni`, `doi`, `orcid`, `url`, `spotify`, `wikidata`. One bucket, no
   per-scheme fields.
-- **Locator.** Where a fragment sits in its entity, as a `{scheme, value, end?}`
-  triple. The scheme set is open: `page`, `chapter`, `section`, `paragraph`,
-  `timecode` (seconds), `chunk`, `note`. `end` is set only for ranges.
+- **Locator.** Where a fragment sits in its entity, as `{scheme, value, end?}`.
+  The scheme set is open: `whole` (the fragment is its entire entity), `page`,
+  `chapter`, `section`, `paragraph`, `timecode`, `chunk` (one of several
+  windows), `note`. `end` is set only for ranges and is inclusive. `timecode`
+  values are decimal seconds with `.` as the separator, no unit, integers when
+  whole. A compound locator is ordered coarse to fine (`chapter` before `page`).
 - **Attribution.** Who made or spoke something: a name, an optional role, and
   optional identifiers. On an entity it names creators; on a fragment it names
-  the speakers in that window.
+  the speakers in that window. Two placeholders are structural, not names of
+  people: `placeholder: 'unnamed'` (a speaker who is not a creator and is not
+  named, labelled `Other` today) and `placeholder: 'unverified'` (attribution
+  not established).
 - **Disclosure.** Two dimensions on every fragment: `raw`, whether the source
-  text is public or private; and `expose`, what a hit may carry about it:
+  text is public or private; and `exposure`, what a hit may carry about it:
   `text`, `semantic`, `locator`, or `none`.
 - **Projection.** A short description of what a fragment is about, written to be
-  served in place of the text. Generated by the system at ingest, stored as
+  served in place of the text. Drafted by the system at ingest, stored as
   private material, released only by policy.
-- **Hit.** The one object that leaves retrieval. Its type is a union on
-  `expose`, so a hit for a `locator` fragment has no field that could hold text.
+- **Hit.** The one object that leaves the substrate toward a model or a caller.
+  Its type is a union on `exposure`, so a hit for a `locator` fragment has no
+  field that could hold text.
 - **Substrate.** This package. **Consumer.** Anything that imports it.
 
 Plain English throughout. The engine's own two phrases stay: a private moment is
-reduced to a *routing hint*, and *retrieved is not cited*. "Framed automation" is
-the companion paper's term for the wider pattern and is cited, not redefined,
-here.
+reduced to a *routing hint*, and *retrieved is not cited*. The wider pattern this
+package instantiates is named *framed automation* in the companion paper
+(*Building Answerable AI: Framed Automation*, Walton 2026, concept DOI
+10.5281/zenodo.20682306); the term is cited, not redefined, here.
+
+The one guarantee has one name: **disclosure on the served path**. Where this
+document says "the boundary," it means that.
 
 ## 2. Types
 
-Normative. Field order and comments are informative. The file is `src/contract.ts`.
+Normative. Field order and comments are informative. The file is
+`src/contract.ts`; brands are defined in `src/public-safe.ts` and re-exported.
 
 ```ts
-export interface Identifier { scheme: string; value: string }
-export interface Locator    { scheme: string; value: string; end?: string }
-export interface Attribution { name: string; role?: string; identifiers?: Identifier[] }
+export interface Identifier  { scheme: string; value: string }
+export interface Locator     { scheme: string; value: string; end?: string }
+export interface Attribution { name: string; role?: string; identifiers?: Identifier[]; placeholder?: 'unnamed' | 'unverified' }
 
 export type Exposure = 'text' | 'semantic' | 'locator' | 'none';
+export type ServedExposure = Exclude<Exposure, 'none'>;
 
 /** private + text is not a member of this union. */
 export type Disclosure =
-  | { raw: 'public';  expose: Exposure }
-  | { raw: 'private'; expose: 'semantic' | 'locator' | 'none' };
+  | { raw: 'public';  exposure: Exposure }
+  | { raw: 'private'; exposure: 'semantic' | 'locator' | 'none' };
 
 export interface Entity {
   id: string;                 // `${type}:${slug}`; today's record ids are kept
-  type: string;               // open: book, paper, essay, song, album, episode, page, letter, ...
+  type: string;               // open: book, paper, essay, song, album, episode, transcript, page, letter, ...
   title: string;
-  attribution: Attribution[];
-  date?: string;              // ISO-8601 date or a bare year; absent means unknown, never guessed
+  attribution: Attribution[]; // creators
+  date?: string;              // YYYY, YYYY-MM, or YYYY-MM-DD; absent means unknown, never guessed
   version?: string;           // edition, preprint version, "manuscript"
   url: string;                // the accountable surface a citation links to
   identifiers: Identifier[];
+  parent?: string;            // entity id this one belongs to (a transcript's episode)
   themes?: string[];          // consumer boost input
-  disclosure: Disclosure;     // entity default; a fragment may override `expose`, never `raw`
+  disclosure: Disclosure;     // entity default; a fragment may override `exposure`, never `raw`
   policy?: { requireReview?: boolean };
 }
 
-export interface SemanticProjection {
-  gist: string;
+/** A gist the lint has passed. Constructible only through assertSemanticProjection (section 6). */
+export type LintedGist = string & { readonly __lint: 'gist' };
+
+interface ProjectionBase {
   source: 'generated' | 'edited';
   review: 'unreviewed' | 'reviewed';
   vetoed?: boolean;
-  lint: 'passed' | 'failed';
+  stale?: boolean;            // an edited gist whose fragment text changed afterwards
   contentHash: string;        // sha1(fragment.text + promptVersion + model)
   model?: string; promptVersion?: string; generatedAt?: string;
-  stale?: boolean;            // an edited gist whose fragment text changed afterwards
 }
+export type SemanticProjection =
+  | (ProjectionBase & { lint: 'passed'; gist: LintedGist })
+  | (ProjectionBase & { lint: 'failed'; draft: string });   // never servable; kept for the author to edit
 
 /** Index-side. `disclosure` is the RESOLVED policy (section 3), stored at build. */
 export interface Fragment {
-  id: string;                 // `${entityId}#${key}`: book:x#p184, episode:y#12, writing:z#s3
+  id: string;                 // `${entityId}#${key}`: book:x#p184, transcript:y#12, writing:z#s3
   entityId: string;
   locator: Locator[];
-  text: string;               // the retrieval text; private or public per disclosure.raw
-  disclosure: Disclosure;
+  text: string;               // the embedded text; '' in a served index unless exposure is `text`
+  disclosure: Disclosure;     // raw equals the entity's; exposure is the resolved value
   projection?: SemanticProjection;
-  attribution?: Attribution[];
+  attribution?: Attribution[];      // speakers in this window
   date?: string;              // overrides the entity date for this fragment
-  summary?: string;           // a public liftable summary, for `text` fragments
+  summary?: string;           // a public liftable summary; '' in a served index unless exposure is `text`
   themes?: string[];
-  review?: 'unreviewed' | 'in-review' | 'reviewed';
+  sourceReview?: 'unreviewed' | 'in-review' | 'reviewed';   // review of the SOURCE (transcript attribution); not the gist
+}
+
+/** What retrieve() returns. Internal to the process; never serialized. */
+export interface ScoredHit {
+  fragment: Fragment;
+  entity: Entity;
+  cosine: number;
+  score: number;
+  breakdown: Record<string, number>;   // { cosine, ...one entry per plugin that fired }
 }
 
 interface HitBase {
   fragmentId: string;
-  entity: Pick<Entity, 'id' | 'type' | 'title' | 'attribution' | 'date' | 'version' | 'url' | 'identifiers'>;
+  entity: Pick<Entity, 'id' | 'type' | 'title' | 'attribution' | 'date' | 'version' | 'url' | 'identifiers' | 'parent'>;
+  raw: 'public' | 'private';  // the policy dimension, not a content field
   locator: Locator[];
-  locatorLabel: string;       // "p. 184", "12:30–14:05", "ch. 12, §3"
-  date?: string;              // fragment date, else entity date
-  attribution?: Attribution[];
-  score: number;
-  breakdown?: Record<string, number>;   // cosine plus one entry per plugin that fired
+  locatorLabel: string;       // rendered from `locator` by renderLocatorLabel(): "p. 184", "12:30–14:05", "ch. 12, §3"
+  date?: string;              // the effective date: fragment.date ?? entity.date; absent only when both are unknown
+  attribution?: Attribution[];      // the speakers in this window; present whenever the fragment carries speaker data
+  score: number;              // public hits: full precision; private hits: rounded to 0.05 (section 4)
+  breakdown?: Record<string, number>;   // public hits only; omitted on private hits (section 4)
 }
 
 /** The wire type and the boundary. A private fragment's text has no field to travel in. */
 export type EvidenceHit =
   | (HitBase & { exposure: 'text';     text: string; summary?: string })
-  | (HitBase & { exposure: 'semantic'; gist: string })
+  | (HitBase & { exposure: 'semantic'; gist: LintedGist; gistSource: 'generated' | 'edited'; gistReview: 'unreviewed' | 'reviewed' })
   | (HitBase & { exposure: 'locator' });
 // There is no 'none' variant. Such fragments are not in a served index.
 
 export interface SearchRequest {
   q: string;
-  limit?: number;             // 1..20, default 10
+  limit?: number;             // 1..20, default 10; the total across exposures after filters and floor
   filters?: {
     type?: string[];
-    dateFrom?: string; dateTo?: string;          // YYYY, YYYY-MM, or YYYY-MM-DD
+    dateFrom?: string; dateTo?: string;          // YYYY, YYYY-MM, or YYYY-MM-DD; interval semantics (section 7)
     undated?: 'include' | 'exclude';             // default 'exclude' when a bound is set
-    attribution?: string;                        // name match on creators or speakers
-    exposure?: Exposure[];
+    creator?: string;                            // name match on entity creators
+    speaker?: string;                            // name match on fragment speakers; placeholders never match
+    exposure?: ServedExposure[];
     raw?: 'public' | 'private';
   };
   recency?: 'none' | 'prefer-recent' | 'auto';
@@ -168,19 +215,22 @@ export interface SearchResponse {
   contract: 'archive-search/1';
   query: string;
   hits: EvidenceHit[];
-  index: { builtAt: string; embeddingModel: string; dimensions: number; entityCount: number; fragmentCount: number };
-  policy: { exposure: Record<'text' | 'semantic' | 'locator', string>; note: string };  // fixed copy
+  matched: number;            // hits above the floor after filters, before `limit`
+  excludedUndated: number;    // fragments dropped by a date bound because they carry no date
+  index: { builtAt: string; entityCount: number; fragmentCount: number };   // served counts; no embedding model or dimensions (section 10)
+  policy: { exposure: Record<ServedExposure, string>; note: string };     // the fixed copy of section 8
 }
 ```
 
 Two naming rules. The cosine similarity is called `cosine` everywhere in this
-package (`breakdown.cosine`, `ScoredHit.cosine`); `semantic` names the exposure
+package (`ScoredHit.cosine`, `breakdown.cosine`); `semantic` names the exposure
 level and nothing else. The 2.x field `ScoredRecord.semantic` is removed, not
-aliased.
+aliased. And the dimension is spelled `exposure` everywhere; the prose says
+"exposure level."
 
 ## 3. Disclosure
 
-| | `expose: text` | `expose: semantic` | `expose: locator` | `expose: none` |
+| | `exposure: text` | `exposure: semantic` | `exposure: locator` | `exposure: none` |
 |---|---|---|---|---|
 | `raw: public` | the passage travels (a published page) | a gist travels, the passage does not (a public text the archive does not want to republish, or a long document before it is fragmented) | only where it is | indexed, never served |
 | `raw: private` | **not representable** | a gist travels (a copyrighted book, by its author's policy) | only where it is (today's transcript windows) | indexed, never served (a notebook) |
@@ -188,20 +238,43 @@ aliased.
 Rules.
 
 1. `raw` is set on the entity and inherited by every fragment. A fragment may
-   override `expose` only.
-2. The effective `expose` is **resolved at build and stored on the fragment**.
-   `resolveDisclosure(entity, input)` starts from `input.expose ??
-   entity.disclosure.expose` and may only **downgrade**: a requested `semantic`
-   becomes `locator` when the projection is missing, its lint failed, it is
-   vetoed, or the entity sets `policy.requireReview` and the projection is not
-   reviewed. `none` stays `none`. Nothing is upgraded, and nothing is resolved
-   again at query time.
-3. A `none` fragment is kept in the private artifacts for a future authenticated
-   consumer and dropped from any served index.
-4. A served index strips what the policy does not release: `text` for every
-   private fragment, `projection` for every fragment whose resolved exposure is
-   not `semantic`. This is defense in depth behind rule 2, in the spirit of
-   today's `stripChunkForIndex` in the production adapter.
+   override `exposure` only, and an override may be more permissive than the
+   entity default; that is the author's act. A fragment on a private entity that
+   requests `text` is a misauthored input, and `resolveDisclosure` throws with
+   the fragment's path.
+2. The effective `exposure` is **resolved at build and stored on the fragment**.
+   One predicate decides whether a gist may be served, and every later check
+   cites it rather than restating it:
+
+   ```ts
+   isServableGist(fragment, entity) :=
+     fragment.projection !== undefined
+     && fragment.projection.lint === 'passed'
+     && !fragment.projection.vetoed
+     && !fragment.projection.stale
+     && (!entity.policy?.requireReview || fragment.projection.review === 'reviewed')
+   ```
+
+   `resolveDisclosure(entity, input)` starts from `input.exposure ??
+   entity.disclosure.exposure` and may only **downgrade**: a requested `semantic`
+   becomes `locator` when `isServableGist` is false. `none` stays `none`.
+   Nothing is upgraded by the resolver, and nothing is resolved again at query
+   time.
+3. A `none` fragment is kept in the private index for a future authenticated
+   consumer and is never in a served index.
+4. There are two artifacts. The **private index** holds everything (text,
+   projections, policy). The **served index** is `toServedIndex(privateIndex)`,
+   a projection run last in the build, after embedding and after the lint: it
+   drops every `none` fragment and every entity left with no served fragment;
+   sets `text` and `summary` to `''` for every fragment whose resolved exposure
+   is not `text` (every private fragment, and any public fragment resolved to
+   `semantic` or `locator`); drops `projection` for every fragment whose
+   resolved exposure is not `semantic`, and on the ones it keeps drops every
+   projection field except `gist`, `lint`, `source`, and `review`; drops
+   `contentHash`, `policy`, and `sourceReview`. Counts in `SearchResponse.index`
+   are served counts. This is defense in depth behind rule 2, in the spirit of
+   today's `stripChunkForIndex` in the production adapter, and the load-time
+   validator checks that it happened (section 12).
 
 The policy is small on purpose. Two dimensions, one forbidden cell, an entity
 default, a fragment override, and one optional review flag. Anything a deployer
@@ -209,75 +282,106 @@ needs beyond that is a consumer's concern.
 
 ## 4. The crossing: `project()`
 
-`src/no-leak.ts` keeps its name and its first comment. Its one export becomes:
+`src/no-leak.ts` keeps its name. Its two 2.x exports, `toRoutingHint` and
+`assembleEvidence`, are replaced by one, and its first comment is rewritten for
+it in the same spirit ("the disclosure boundary; this is the whole file on
+purpose"):
 
 ```ts
-export function project(
-  fragment: Fragment,
-  entity: Entity,
-  scored: { score: number; breakdown?: Record<string, number> },
-): EvidenceHit
+export function project(hit: ScoredHit): EvidenceHit
+export function search(queryVector: readonly number[], query: string, index: RetrievalIndex, options?: RetrieveOptions): EvidenceHit[]
+// search = retrieve(...).map(project): the path a retrieval-only consumer takes, so it never holds a ScoredHit.
 ```
 
 Behaviour by resolved exposure:
 
 - `text`: copies `text` and `summary`. The `Disclosure` union already makes this
-  branch unreachable for a private fragment.
-- `semantic`: copies `projection.gist`. Throws if the projection is absent, its
-  lint is not `passed`, or it is vetoed. A served index in that state was
-  misbuilt; the failure is loud, not silent.
+  branch unreachable for a private fragment; `project()` also throws if it is
+  reached with `raw: 'private'`, because a runtime guard behind a type costs
+  nothing.
+- `semantic`: copies `projection.gist`, `source` as `gistSource`, and `review`
+  as `gistReview`. Throws if `isServableGist` is false. A served index in that
+  state was misbuilt; the failure is loud, not silent.
 - `locator`: copies provenance only.
 - `none`: throws. It is never in a served index.
 
-The claim, and its bound. On the typed path, a consumer that holds an
-`EvidenceHit` whose `exposure` is `locator` has no field from which to read the
-source text, and one whose `exposure` is `semantic` has only the gist. The
-forbidden move is absent from the type, not caught by a check. The bound is the
-same as in 2.x: the guarantee holds along the supported path. TypeScript's
-escape hatches (`any`, assertions), a deployer who logs raw fragments, a
-hand-built index, or a consumer that reads `Fragment` instead of `EvidenceHit`
-are outside what the type can police. The contribution is to make the leak
-inexpressible on the supported path, not to prove that no unsupported path
-exists.
+Every variant carries `raw`, the entity provenance, the locator and its rendered
+label (`renderLocatorLabel(locator)`, a pure per-scheme renderer: `page` → "p.
+184", `timecode` → "12:30–14:05", `chapter` + `section` → "ch. 12, §3", `whole`
+→ "whole record"), the effective date, and the speakers.
 
-Trust posture. The `LintedGist` brand (section 6) erases at JSON boundaries,
-exactly as the 2.x `PublicSafe` brand does. An index read from disk, or a bundle
-read from a blob store, is trusted to have been built through the gate. A
-versioned index fails fast on a shape mismatch; the evaluation's canary sweep
-(section 11) backstops at eval time. Nothing re-checks a gist at query time.
+**Scores on private hits are coarse.** For a fragment whose `raw` is `private`,
+`score` is rounded to the nearest 0.05 and `breakdown` is omitted. A
+full-precision cosine against a private vector is a measurement of that vector;
+a caller who can embed its own queries and read exact scores can take as many
+measurements as it has queries, and vectors derived from private text can be
+inverted to approximate content. The hit carries a coarse relevance signal, not
+the measurement. Consumers that need the exact score for their own selection
+read it from `ScoredHit` before projecting; it does not leave the process.
+
+The claim, and its bound. On the typed path, a consumer's prompt builder or
+serializer accepts `EvidenceHit`, not `Fragment` or `ScoredHit`. A consumer
+holding a hit whose `exposure` is `locator` has no field from which to read the
+source text, and one whose `exposure` is `semantic` has only the gist. The
+forbidden move is absent from the type, not caught by a check. The bound is this
+contract's own: the guarantee holds along the supported path. TypeScript's escape
+hatches (`any`, assertions), a deployer who logs a `Fragment`, a hand-built index,
+or a consumer that serializes `ScoredHit` are outside what the type can police.
+The contribution is to make the leak inexpressible on the supported path, not to
+prove that no unsupported path exists.
+
+Trust posture. The `LintedGist` brand erases at JSON boundaries, exactly as the
+2.x `PublicSafe` brand does. An index read from disk, or a bundle read from a
+blob store, is trusted to have been built through the gate. A versioned index
+fails fast on a shape mismatch, and the load-time validator (section 12) checks
+the served-index invariants of rule 4; the evaluation's canary sweep (section 11)
+backstops at eval time. Nothing re-checks a gist at query time.
 
 ## 5. Projections: proposed by the system, authorized by the author
 
 Authorship and authorization are different acts, and the contract keeps them
 apart.
 
-**The system proposes.** At ingest, a drafter produces one gist per fragment from
-the fragment's text. The drafter is an interface; the shipped implementation calls
-a hosted model with `store: false` and a JSON-schema output. The prompt asks for
-a one-paragraph, third-person catalogue note of what the passage is about: its
-situation, subject, and themes; no quotation, no close paraphrase, no dialogue,
-no line breaks, a length cap; and a names rule the author sets per entity (the
-pre-publication default forbids naming characters, places, and invented terms).
+**The system proposes, and only where asked.** At ingest, a drafter produces one
+gist per fragment **whose requested exposure is `semantic`**. Fragments requested
+as `locator` or `none` are never sent to the drafter; the drafter sees only text
+whose author asked for a gist. The drafter is an interface; the shipped
+implementation calls a hosted model through the Responses API with `store:
+false` and a JSON-schema output. The prompt asks for a one-paragraph,
+third-person catalogue note of what the passage is about: its situation,
+subject, and themes; no quotation, no close paraphrase, no dialogue, no line
+breaks, a length cap; and a names rule the author sets per entity in the
+drafter's configuration (the pre-publication default forbids naming characters,
+places, and invented terms). The names rule is drafter configuration keyed by
+entity id, not a contract type.
+
 Each gist is stored with a content hash over the fragment text, the prompt
-version, and the model. Re-running ingest skips unchanged generated gists, never
-overwrites a gist whose `source` is `edited`, and marks an edited gist `stale`
-when its fragment text has changed. A draft that fails the lint is retried once
+version, and the model. The ingest order is: read the requested exposure, draft
+where it is `semantic`, lint, resolve, store. Re-running ingest skips unchanged
+generated gists, never overwrites a gist whose `source` is `edited`, and marks an
+edited gist `stale` when its fragment text has changed; a stale gist is not
+servable (rule 2) until a person re-edits or re-reviews it, because it describes
+text the author has since changed. A draft that fails the lint is retried once
 with an instruction to describe rather than quote; a second failure is stored as
-`lint: 'failed'` and the fragment resolves to `locator` until a person edits it.
+`lint: 'failed'` with the draft kept for editing, and the fragment resolves to
+`locator`.
 
 **The author authorizes.** A stored gist is private material. It is in the same
 custody class as the fragment text it describes: never committed, never served,
 unless the fragment's resolved exposure is `semantic`. The author authorizes at
-the entity level (`disclosure.expose`), overrides per fragment, vetoes a single
+the entity level (`disclosure.exposure`), overrides per fragment, vetoes a single
 gist, edits one, or requires per-gist review before release
 (`policy.requireReview`). None of that is required for a gist to be served when
-the entity policy says `semantic`; all of it is available.
+the entity policy says `semantic`; all of it is available. A served hit says
+which it got: `gistSource` and `gistReview` travel with the gist, so a caller can
+tell an author-edited description from an unreviewed machine draft.
 
 **The projection is content.** "It is only a gist" does not bypass the source's
 policy. A gist can reveal a plot, a thesis, a name, or more than its author would
-choose. That is why generation is not authorization, why the lint exists, and
-why the residue the lint cannot catch (section 13) is owned by the policy, the
-veto, and the optional review rather than claimed as guaranteed.
+choose, and the set of an entity's gists composes into more than any one of them
+says. That is why generation is not authorization, why the lint exists, and why
+the residue the lint cannot catch (section 13) is owned by the policy, the veto,
+and the optional review rather than claimed as guaranteed.
 
 **Nothing is generated at query time.** A request to the substrate retrieves and
 projects stored material. No model reads private text in the request path, and
@@ -287,13 +391,12 @@ reintroduce it one layer down.
 
 ## 6. The lint
 
-`src/public-safe.ts` keeps `assertPublicSafeField` for labels and locators and
-adds the gist lint beside it:
+`src/public-safe.ts` keeps `assertPublicSafeField` and adds the gist lint
+beside it:
 
 ```ts
 export const GIST_MAX_CHARS = 400;
 export const GIST_NGRAM_WORDS = 5;
-export type LintedGist = string & { readonly __lint: 'gist' };
 
 export function assertSemanticProjection(
   gist: string,
@@ -303,22 +406,43 @@ export function assertSemanticProjection(
 
 Checks, each failing loudly with the path: non-empty; one paragraph (no line
 breaks); at most `maxChars` characters; no run of `ngramWords` consecutive
-normalized words shared with the fragment text; and, when `entityText` is
-supplied, no such run shared with the whole entity's text, so the gist of one
-page cannot quote the page before it. The function is the only constructor of
-`LintedGist`.
+normalized words shared with the fragment text; and no such run shared with the
+whole entity's text, so the gist of one page cannot quote the page before it.
+`entityText` is optional inside the drafter loop and **required at index build
+for any entity with more than one fragment**. The function is the only
+constructor of `LintedGist`.
 
-Why these numbers. 120 characters is a caption; a gist of a page needs two or
-three sentences, and past about 400 characters a gist has room to retell. Five
-raw tokens is where legitimate description ends and quotation begins for prose;
-four trips on function-word runs any honest gist shares with its source, and
-three is unusable. Both constants are exported so a consumer can tune them per
-entity, and the recommended practice is to run the lint at four in a dry run and
-count the trips before choosing.
+Normalization is Unicode-aware (`\p{L}` and `\p{N}`, not `[a-z0-9]`), and for a
+script without word spacing the run is counted in characters (a fixed
+character-n-gram length, exported) rather than words, because the archive holds
+Japanese work and a word-based tripwire would be vacuous on it.
+
+Why these numbers. The 2.x label and locator cap (`PUBLIC_SAFE_MAX_CHARS`, 120)
+is a caption; a gist of a page needs two or three sentences, and past about 400
+characters a gist has room to retell. Five raw tokens is where legitimate
+description ends and quotation begins for prose; four trips on function-word
+runs any honest gist shares with its source, and three is unusable. Both
+constants are exported so a consumer can tune them per entity, and the
+recommended practice is to run the lint at four in a dry run and count the trips
+before choosing.
+
+**What travels besides the gist, and how it is checked.** On a private entity,
+the strings a hit carries that are authored rather than structural are the
+entity `title` and `version`, any free-text locator value (schemes `note`,
+`section`, `chapter`), and the rendered `locatorLabel`. At index build,
+`assertPublicSafeField` runs on each of them against the entity's full text (the
+2.x check: single line, 120 characters, no five-word run). Its `PublicSafe`
+return brand is **retired as a type** in 3.0.0: `title`, `locator`, and
+`locatorLabel` are shared by public and private entities, no section 2 type can
+carry the brand without splitting every type in two, and the brand erased at
+JSON anyway. The structural half of NEXT-STEPS A1 therefore becomes a build-time
+check named here, and the brand lives on the one traveling field that is prose,
+the gist. Creator and speaker names are configuration, public by construction.
+Identifiers and `date` are structural.
 
 Where the lint runs: at ingest, inside the drafter loop; at index build, over
-every gist that will be served, so a hand edit is checked too; and at evaluation,
-as the canary sweep. Never at query time.
+every gist and every authored string that will be served, so a hand edit is
+checked too; and at evaluation, as the canary sweep. Never at query time.
 
 ## 7. Retrieval
 
@@ -329,40 +453,65 @@ whether a hit is relevant. Relevance is tuned by the consumer against its gold
 suite.
 
 ```ts
+export interface RetrievalIndex { entities: Map<string, Entity>; entries: ReadonlyArray<{ fragment: Fragment; vector: readonly number[] }> }
+export interface QueryContext { query: string; normalized: string; asOf: Date; recency: 'none' | 'prefer-recent' | 'auto' }
 export interface BoostPlugin<P = unknown> {
   name: string;
   prepare?(index: RetrievalIndex, ctx: QueryContext): P;
   score(fragment: Fragment, entity: Entity, ctx: QueryContext, prepared: P): number;
 }
 export interface PostRank { name: string; apply(ranked: ScoredHit[], ctx: QueryContext): ScoredHit[] }
-export interface QueryContext { query: string; normalized: string; asOf: Date; recency: 'none' | 'prefer-recent' | 'auto' }
-
-export function retrieve(queryVector, query, index, options: RetrieveOptions): ScoredHit[]
+export interface RetrieveOptions {
+  scoreFloor?: number;                                  // default SCORE_FLOOR = 0.2 (teaching corpus); the production consumer passes 0.32
+  limit?: number;                                       // total across raw layers; used by the retrieval-only consumer
+  limitPerRaw?: { public?: number; private?: number };  // per-layer top-k, default 8 and 8; the 2.x per-stream behaviour the synthesis consumer keeps
+  filters?: SearchRequest['filters'];
+  recency?: QueryContext['recency'];                    // default 'auto'
+  plugins?: BoostPlugin[];                              // default: the built-ins below
+  postRank?: PostRank[];
+  asOf?: Date;
+}
+export function retrieve(queryVector: readonly number[], query: string, index: RetrievalIndex, options?: RetrieveOptions): ScoredHit[]
 export function partitionByRaw(hits: ScoredHit[]): { public: ScoredHit[]; private: ScoredHit[] }
 ```
 
+`limit` and `limitPerRaw` are exclusive: a consumer passes one. With `limit`
+the result is one ranked list capped at `limit`; with `limitPerRaw` each layer is
+ranked and capped separately, so a private hit cannot be crowded out by public
+records, which is what the gold suite's route cases rely on today.
+
 Built-in plugins, each with its constant exported: exact title or slug match
-(0.30); curated theme named in the query, with a document-frequency cap so a
-theme carried by more than 5% of entities boosts nothing (0.15); recency, a
-linear decay from fresh at 180 days to zero at 730 days on `fragment.date ??
-entity.date` (0.10); and disclosure, which favours public fragments and reviewed
-private ones (0.15). A consumer adds its own plugins (author aliases, guest
-speech, distinctive query n-grams, a cap on hub pages) and removes any of the
-built-ins. Every plugin that fires writes its name into `breakdown`.
+(0.30; the slug is the part of `entity.id` after the first `:`); curated theme
+named in the query, with a document-frequency cap so a theme carried by more
+than 5% of entities boosts nothing (0.15); recency, a linear decay from fresh at
+180 days to zero at 730 days on `fragment.date ?? entity.date` (0.10); and
+disclosure, which favours public fragments and private fragments whose
+`sourceReview` is `reviewed` (0.15; this reads the source review, never the
+gist's). A consumer adds its own plugins (author aliases, guest speech,
+distinctive query n-grams, a cap on hub pages) and removes any of the built-ins.
+`breakdown` always carries `cosine` and one entry per plugin that fired.
 
 Recency has three modes because two consumers want two defaults. `auto` fires
 the decay only when the query asks about the present, which is the product's
 behaviour today; `prefer-recent` always applies it; `none` never does. A
 retrieval-only API should default to `none` and let the caller opt in.
 
-Filters run before scoring: entity type; a date range on `fragment.date ??
-entity.date`, with undated fragments excluded by default whenever a bound is
-present, because a hit cannot be shown to satisfy a bound it has no date for;
-attribution, a case-insensitive name match on creators or speakers, where the
-labels `Other` and `Unverified` never match a person; exposure; and `raw`. A
-score floor is a consumer option; the teaching corpus uses 0.2 and the
-production deployment 0.32, both tuned against a gold suite for one embedding
-model.
+Filters run before scoring.
+
+- `type`: entity type in the set.
+- Dates. A date string denotes the interval at its precision: `2019` is
+  2019-01-01 through 2019-12-31, `2019-03` is the month, `2019-03-14` the day.
+  A fragment's effective date is `fragment.date ?? entity.date`. A fragment
+  satisfies a bound when its interval intersects the bound's interval. Hits are
+  ordered in time by interval start. Undated fragments are excluded whenever a
+  bound is present unless `undated: 'include'`, because a hit cannot be shown to
+  satisfy a bound it has no date for; the count dropped is returned as
+  `excludedUndated`.
+- `creator`: case-insensitive name match on the entity's creators. `speaker`:
+  the same on the fragment's speakers; a fragment with no speaker data never
+  matches, and placeholders never match a name. A caller asking "what did the
+  author say, not a guest" uses `speaker`.
+- `exposure`, `raw`: as named. A request naming `none` fails validation.
 
 *Retrieved is not cited* applies to hits as it applied to records. A hit is a
 candidate. A consumer that synthesizes decides what it cites; a consumer that
@@ -373,120 +522,164 @@ returns hits leaves that to its caller. Neither changes what a hit may carry.
 A retrieval-only consumer returns `SearchResponse`. Its `contract` field is the
 version; `archive-search/1` is additive-only. Adding an optional field, a new
 identifier or locator scheme, or a new plugin name in `breakdown` does not bump
-it. Removing a field, changing a field's meaning, or adding an exposure level
-does, to `archive-search/2`.
+it. Removing a field, changing a field's meaning, or changing the served
+exposure set does, to `archive-search/2`. The fixed copy below is part of the
+contract; rewording it is not a bump, changing what it asserts is.
 
-Every hit carries the same provenance regardless of exposure: the entity's id,
-type, title, creators, date, version, canonical URL, and identifiers; the
-fragment's locator and a rendered label; the fragment's date and speakers when
-they differ from the entity's; and the score. A caller can therefore order hits
-in time, separate what the archive's author said from what a guest said, and
-link every hit to a page a person can check, before it reads a word of content.
+Every hit carries the same provenance regardless of exposure: `raw`; the
+entity's id, type, title, creators, date, version, canonical URL, identifiers,
+and parent; the fragment's locator and a rendered label; the hit's effective
+date, so a caller never coalesces; the fragment's speakers whenever it carries
+speaker data; and the score. A caller can therefore order hits in time, separate
+what the archive's author said from what a guest said, and link every hit to a
+page a person can check, before it reads a word of content.
 
-Three hits, abridged:
+The fixed copy, normative:
 
 ```json
-{ "fragmentId": "book:the-signatories#p184", "exposure": "semantic",
-  "entity": { "id": "book:the-signatories", "type": "book", "title": "The Signatories",
-    "attribution": [ { "name": "Luke F. Walton", "role": "author" }, { "name": "Jonathan Gillie", "role": "author" } ],
-    "version": "manuscript", "url": "https://lukefwalton.com/writing/#fiction", "identifiers": [] },
-  "locator": [ { "scheme": "page", "value": "184" } ], "locatorLabel": "p. 184",
-  "gist": "A late-night negotiation in which one signatory realises the document commits them to events none of them witnessed.",
-  "score": 0.61, "breakdown": { "cosine": 0.46, "disclosure": 0.15 } }
+{ "exposure": {
+    "text":     "The passage is public and is included verbatim. Quote it with its entity.url.",
+    "semantic": "The source is not quotable here. gist is a description of what the passage is about, drafted by the archive's software at ingest and released under the archive owner's policy; gistSource says whether a person edited it and gistReview whether a person reviewed it. It is not a quotation and not the creators' wording.",
+    "locator":  "Only the location of relevant material is released. Do not infer its contents." },
+  "note": "Nothing in this response was synthesized at request time. Scores on private hits are rounded. Attribution entries with a placeholder are not people: unnamed is a speaker who is not a creator, unverified is attribution not established. Undated material is excluded when a date bound is given unless undated=include." }
+```
+
+Three hits, abridged and illustrative. The first is the demo's public-domain
+novel, which the demo treats as private to exercise the boundary; its gist is
+invented for this page.
+
+```json
+{ "fragmentId": "book:wizard-of-oz#ch12", "exposure": "semantic", "raw": "private",
+  "entity": { "id": "book:wizard-of-oz", "type": "book", "title": "The Wonderful Wizard of Oz",
+    "attribution": [ { "name": "L. Frank Baum", "role": "author" } ], "date": "1900",
+    "version": "Project Gutenberg #55", "url": "https://www.gutenberg.org/ebooks/55",
+    "identifiers": [ { "scheme": "url", "value": "https://www.gutenberg.org/ebooks/55" } ] },
+  "locator": [ { "scheme": "chapter", "value": "12" } ], "locatorLabel": "ch. 12", "date": "1900",
+  "gist": "The travellers are sent against a second ruler whose territory is guarded by successive animal armies, and the chapter turns on a borrowed object that compels obedience.",
+  "gistSource": "generated", "gistReview": "unreviewed",
+  "score": 0.60 }
 ```
 
 ```json
-{ "fragmentId": "episode:perfect-pitch#12", "exposure": "locator",
-  "entity": { "id": "episode:perfect-pitch", "type": "episode", "title": "Perfect Pitch: Nature or Nurture?",
+{ "fragmentId": "transcript:perfect-pitch#12", "exposure": "locator", "raw": "private",
+  "entity": { "id": "transcript:perfect-pitch", "type": "transcript", "title": "Perfect Pitch: Nature or Nurture?",
     "attribution": [ { "name": "Luke F. Walton", "role": "host" } ], "date": "2022-03-14",
-    "url": "https://lukefwalton.com/love-music-more/episodes/perfect-pitch/", "identifiers": [] },
-  "locator": [ { "scheme": "timecode", "value": "750", "end": "845" } ], "locatorLabel": "12:30–14:05",
-  "attribution": [ { "name": "Luke F. Walton", "role": "speaker" }, { "name": "Other", "role": "speaker" } ],
-  "score": 0.58, "breakdown": { "cosine": 0.43, "disclosure": 0.15 } }
+    "url": "https://lukefwalton.com/love-music-more/episodes/perfect-pitch/", "identifiers": [],
+    "parent": "episode:perfect-pitch" },
+  "locator": [ { "scheme": "timecode", "value": "750", "end": "845" } ], "locatorLabel": "12:30–14:05", "date": "2022-03-14",
+  "attribution": [ { "name": "Luke F. Walton", "role": "speaker" }, { "name": "Other", "role": "speaker", "placeholder": "unnamed" } ],
+  "score": 0.60 }
 ```
 
 ```json
-{ "fragmentId": "song:perfect-pitch#whole", "exposure": "text",
+{ "fragmentId": "song:perfect-pitch#whole", "exposure": "text", "raw": "public",
   "entity": { "id": "song:perfect-pitch", "type": "song", "title": "Perfect Pitch",
     "attribution": [ { "name": "Scoobert Doobert", "role": "performer" } ], "date": "2019",
     "url": "https://lukefwalton.com/songs/perfect-pitch/",
     "identifiers": [ { "scheme": "isrc", "value": "QZ2QB1900012" } ] },
-  "locator": [ { "scheme": "chunk", "value": "0" } ], "locatorLabel": "whole record",
+  "locator": [ { "scheme": "whole", "value": "" } ], "locatorLabel": "whole record", "date": "2019",
   "summary": "...", "text": "...",
-  "score": 0.83, "breakdown": { "cosine": 0.53, "exactMatch": 0.30 } }
+  "score": 0.98, "breakdown": { "cosine": 0.53, "exactMatch": 0.30, "disclosure": 0.15 } }
 ```
 
-The `policy` object in every response is fixed copy that tells a caller what each
-exposure level means and that nothing was synthesized. It is the same in every
-response so that a caller can cache it and a reader can quote it.
+The transcript is its own entity. Today's production corpus holds, for one
+episode, a public record (the episode page) and private transcript windows under
+the same slug. Because `raw` is fixed per entity, the windows belong to
+`transcript:<slug>` (`raw: 'private'`, `url` the episode page, `parent` the
+episode entity, creators shared), and the page stays `episode:<slug>`. A caller
+groups them by `parent`.
 
 ## 9. The two consumers
 
-Both are outside this package. The contract says what each may do with a hit.
+Both are outside this package except the teaching-sized reference consumer named
+in section 0. The contract says what each may do with a hit.
 
 **Constrained synthesis** (the question-answering product). Hits become
-`AnswerEvidence`: `text` hits are quotable evidence whose bodies the prompt may
-render; `semantic` and `locator` hits are hint-class. The four modes are
-unchanged: `supported` cites records and hints, `partial` cites records only,
-`related-material` cites hints only, `not-found` cites nothing and says nothing.
-A `semantic` hit cited alone yields `related-material`, and the fixed template
-for that mode renders the entity's title, creators, version, the locator label,
-and the gist. The model never writes prose about private material; the gist is
-the only content in that sentence, and it arrived through `project()`.
+`AnswerEvidence`: a `text` hit is a record in the 2.x sense, quotable evidence
+whose body the prompt may render; a `semantic` or `locator` hit is a hint. The
+four modes are unchanged, read with that mapping: `supported` cites records and
+hints, `partial` cites records only, `related-material` cites hints only,
+`not-found` cites nothing and says nothing. **The gist is never rendered into
+the prompt.** The prompt shows a `semantic` hit exactly as it shows a `locator`
+hit, provenance only; the model chooses citations; and after the mode is final,
+the fixed `related-material` template renders the entity's title, creators,
+version, the locator label, and the gist. The model never writes prose about
+private material in any mode, because in no mode does it see any; the gist is
+the only content in the template's sentence, and it arrived through `project()`.
 
 **Retrieval only** (the API and its MCP adapter). The consumer validates a
-request, embeds the query once, retrieves, projects, and returns
-`SearchResponse`. It does not synthesize, does not generate, and does not log
-query text unless the operator opts in. The MCP adapter is one tool over the same
-in-process function, not over HTTP, with a description that tells the calling
-model what the exposure levels mean, that a gist is a machine-drafted,
-author-authorized description and not a quotation, that dates and speakers are
-there to be used, and that it should run several narrow searches rather than one
-broad one.
+request, embeds the query once, calls `search()`, and returns `SearchResponse`.
+It does not synthesize, does not generate, and does not log query text unless
+the operator opts in. Rate limiting is load-bearing for confidentiality, not only
+for cost (section 10). The MCP adapter is one tool over the same in-process
+function, not over HTTP, with a description that repeats the fixed copy: what the
+exposure levels mean, that a gist is a machine-drafted description released by
+the owner's policy and not a quotation, that dates and speakers are there to be
+used, and that it should run several narrow searches rather than one broad one.
+
+In both consumers, every served string (gist, title, label, name, public text)
+is untrusted text to any model that reads it. The substrate bounds its length
+and nothing else; a consumer's prompt treats it as data.
 
 ## 10. Custody and threat model
 
-What "private" defends against is disclosure on the served path: a hit, an
-answer, a log line, a committed artifact that carries text or a gist the policy
-did not release. That is the boundary this contract makes structural.
+The guarantee is disclosure on the served path. What a served object (a hit, an
+answer built from hits, a log line that carries a hit, a committed artifact)
+can carry is bounded by the policy. Everything else is named here by channel:
+what the type closes, what the consumer must do, and what stays owned.
 
-What it does not defend against, stated so a reviewer does not have to find it:
+| Channel | The type closes | The consumer must | Owned (section 13) |
+|---|---|---|---|
+| Source text of a private fragment | no field on `locator`/`semantic` hits | serialize and prompt from `EvidenceHit` only | stepping off the typed path |
+| A gist for a fragment whose policy is `locator`/`none` | `isServableGist` and the served-index strip | validate the served index at load | mislabelled layers |
+| Private vectors | not committed; not on the wire | rate-limit; coarse scores on private hits; omit model and dimensions from responses | inversion of a vector an attacker already holds |
+| Score oracle (per-query cosine on a private vector) | scores rounded, `breakdown` omitted on private hits | rate-limit; cache | residual coarse signal per query |
+| Provider custody at ingest | nothing | choose the provider; check its data-use terms | retention by the provider |
+| Query text | nothing | no query logging by default; the query also reaches the embedding provider at request time | caller privacy is the consumer's |
+| Composition of gists | nothing | set policy per entity; veto; review | over-description |
+| Served strings as prompt input | length bounds | treat as data in any prompt | prompt injection through source text |
 
-- **Provider custody at ingest.** Private text leaves the operator's machine for
-  the embedding provider today, and under this contract also for the gist
-  drafter. Both calls are made with `store: false`. The boundary is quotability
-  on the served path, not confidentiality from the providers the operator
-  chooses.
-- **Embedding inversion.** Vectors derived from private text can expose
-  approximate content. Vectors are private-class and never committed; the one
-  exception, the public-domain demo corpus, is public-domain by construction.
-- **Stepping off the typed path.** `any`, assertions, logging a `Fragment`,
-  hand-editing an index. The type polices the supported path only (section 4).
+Three of those rows deserve a sentence.
+
+- **Provider custody.** Private text leaves the operator's machine for the
+  embedding provider today, and under this contract also for the gist drafter,
+  and only for fragments whose author asked for a gist. The drafter is called
+  through the Responses API with `store: false`. The embeddings endpoint has no
+  per-request retention switch; what the provider keeps from that call is
+  governed by its API data-use terms or an account-level retention arrangement,
+  which is the operator's to check and not this package's to assert. The boundary
+  is disclosure on the served path, not confidentiality from the providers the
+  operator chooses.
 - **Mislabelled layers.** A private text ingested with `raw: 'public'` defeats
   the boundary. Layer assignment is an authored act upstream of the type; the
   type enforces downstream of it.
-- **Over-description.** A gist that reveals more than its author would choose
-  passes the lint if it does not quote. Owned by policy, veto, review, and the
-  canary sweep, not by structure.
 - **Enumeration.** A caller that issues many queries can collect every served
-  gist. That set is finite and authorized one policy at a time; enumeration
-  exposes nothing the author did not release. A consumer should say so on its
-  documentation page.
+  gist of an entity and the composed set says more than any one gist. The set is
+  finite and released one policy at a time; the composition is not lint-checked
+  and is owned by the entity policy, the veto, and review. A consumer should say
+  so on its documentation page.
 
 ## 11. Evaluation
 
 The gold suite remains the admission gate for every change, and the contract
 extends what it gates. An exposure change on an entity is a change like a scoring
-change: it is admitted or rejected by the suite, never by intuition. Two
+change: it is admitted or rejected by the suite, never by intuition. Three
 additions:
 
 1. **A canary sweep over served gists.** Leakage canaries, distinctive phrases
    from private text that must never appear in output, are checked against
    every gist a served index would release, not only the gists a gold query
-   retrieves, because a retrieval-only consumer can surface any of them.
+   retrieves, because a retrieval-only consumer can surface any of them; and,
+   per entity, against the concatenation of its gists, so composition is at
+   least watched. The sweep includes at least one canary in a script without
+   word spacing.
 2. **Fragment ids in expected sources.** A gold query may require a specific
    fragment, not only a specific entity, so routing to the right page or window
    is testable.
+3. **Short verbatim runs are canaries, not lint.** A name, a number, or a
+   two-word phrase from private text is shorter than the lint's run and passes
+   it. The canary set is where such phrases are caught, and the names rule is
+   enforced by the drafter's prompt and the canaries, not by the lint.
 
 The rule that comes with the suite does not change: a failing query is fixed in
 the corpus, the scoring, the prompt, or the policy, never by special-casing the
@@ -494,19 +687,39 @@ question.
 
 ## 12. Index schema and migration
 
-The index file becomes schema 4: `{ version: 4, entities: Entity[], entries:
-[{ model, dimensions, vector, contentHash, fragment: Fragment }] }`. Entities are
-stored once; fragments reference them by id. Validation checks that every
-fragment's entity resolves, that its disclosure is a legal cell, and that a
-`semantic` fragment carries a projection whose lint passed. A schema-3 index
-fails fast with the rebuild instruction, as a schema-2 one does today.
+The private index file becomes schema 4: `{ version: 4, entities: Entity[],
+entries: [{ model, dimensions, vector, contentHash, fragment: Fragment }] }`.
+Entities are stored once; fragments reference them by id. A schema-3 index fails
+fast with the rebuild instruction, as a schema-2 one does today. The served
+index is the same shape after `toServedIndex`.
 
-The teaching corpus keeps working through adapters. `fromArchiveRecord` yields
-an entity with one `text` fragment; `fromPrivateNote` yields a private entity
-with one `locator` fragment whose label becomes the entity title and whose
-locator string becomes `[{ scheme: 'note', value }]`. The example content and
-the demo do not change shape; the demo gains one entity that exercises
-`semantic`.
+Validation at load checks, on every index: every fragment's entity resolves;
+`fragment.disclosure.raw` equals its entity's `raw`; the disclosure is a legal
+cell; a `semantic` fragment satisfies `isServableGist`. On a served index it
+also checks rule 4: no fragment has exposure `none`; `text` and `summary` are
+`''` wherever exposure is not `text`; `projection` is absent wherever exposure
+is not `semantic`; no `contentHash`, `policy`, or `sourceReview` remains. A
+served index that fails these was misbuilt and is refused with the rebuild
+instruction.
+
+Each entry's vector and `contentHash` are taken over the fragment's embed
+string, which the adapters define so that today's bytes are reproduced:
+`fromArchiveRecord` embeds title, summary, `Themes: ...`, and body (today's
+`embedText`) and copies `summary` to `fragment.summary`; `fromPrivateNote` sets
+`fragment.text` to the note's private title and body joined as today's
+`noteEmbedText` does, so the private title stays in the embedding and never
+leaves `text`. A pure, keyless `migrateIndexV3toV4` re-keys committed entries
+without re-embedding; the demo's committed `demo/corpus/*.json` are migrated
+with it, as the 2→3 migration did, and `demo/artifacts.test.ts` extends its
+source-id allowlist and provenance table for the new entity while keeping the
+hash derivation it pins.
+
+The teaching corpus keeps working through the adapters. `fromArchiveRecord`
+yields an entity with one `text` fragment whose locator is `[{ scheme: 'whole',
+value: '' }]`; `fromPrivateNote` yields a private entity with one `locator`
+fragment whose linted label becomes the entity title and whose locator string
+becomes `[{ scheme: 'note', value }]`. The example content does not change. The
+demo gains one entity that exercises `semantic`.
 
 ## 13. What remains owned rather than guaranteed
 
@@ -514,38 +727,45 @@ Named here so they are not discovered. Each is owned by a person and a policy,
 not by the type.
 
 - Paraphrase, plot, and meaning carried in public words pass the lint.
-- A generated gist can describe more than the author intended.
+- A verbatim run shorter than the lint's window, including a name or a number,
+  passes the lint; the canaries are where it is caught.
+- A generated gist can describe more than the author intended, and an entity's
+  gists compose.
+- A coarse score on a private hit is still a signal per query; rate limiting is
+  what bounds how many signals a caller gets.
 - Layer assignment, the choice of `raw`, is authored upstream of the type.
 - The brand erases at JSON boundaries; a served index is trusted to have been
-  built through the gate.
+  built through the gate, and the load-time validator checks the shape, not the
+  provenance, of what it loads.
 - Recall. A fragment below the floor is absent, and absence is what a gate cannot
   catch.
 - Provider custody at ingest.
 
-## 14. Answers to three standing audit items
+## 14. Three questions a reviewer of the 2.x design asks
 
-The pre-submission audit of the 2.x technical note raised three items this
-contract is written to answer in the record.
-
-- **Threat model.** Section 10 names what "private" defends against and what it
-  does not, including embedding-time custody and inversion. The word the
-  contract uses for the guarantee is disclosure on the served path; it does not
-  claim confidentiality from providers.
-- **The related-material residue.** 2.x closed it by templating that mode's
-  prose from a hint's public fields. `semantic` hits inherit the closure: the
-  gist is rendered by the template, not written by the model, and the gist
-  itself is lint-gated and policy-released.
-- **`partial` reads inverted to an outside reader.** The mode names are kept in
-  this contract because the consumer's gold suite pins them. The rationale
-  stands as before: in an archive whose centre is the private moment, an answer
-  that cannot route to one is partial relative to the corpus's own structure.
-  Renaming is the author's call and would be a consumer change, not a substrate
-  one.
+- **What does "private" defend against?** Disclosure on the served path, and
+  nothing else. Section 10 says what the type closes, what the consumer must do,
+  and what stays owned, channel by channel, including embedding-time custody,
+  inversion, and the score oracle that a retrieval-only wire opens and this
+  contract closes by rounding.
+- **Can the model fabricate the contents of private material and cite it?**
+  2.x closed this for the related-material mode by templating that mode's prose
+  from a hint's public fields. Under this contract the gist never enters the
+  prompt in any mode, so the closure holds for `supported` and `partial` as well:
+  the model has no description of the private material to restate. The gist
+  itself is lint-gated and policy-released, and travels with its own provenance.
+- **Does `partial` read backwards?** The mode names are kept because the
+  consumer's gold suite pins them. The rationale stands as before: in an archive
+  whose centre is the private moment, an answer that cannot route to one is
+  partial relative to the corpus's own structure. Renaming is the author's call
+  and would be a consumer change, not a substrate one.
 
 ## 15. What stays out of this package
 
 HTTP handlers, rate limits, caches, and CDN behaviour; the MCP transport;
 transcription and any site-specific corpus builder; product routes that answer
-without a model; a site's own boosts; synthesis. Each belongs to a consumer. The
-substrate's job is to make sure that whatever a consumer builds, the object it
-builds from cannot carry more than the archive's author released.
+without a model; a site's own boosts; a production synthesis service. Each
+belongs to a consumer. The teaching-sized reference consumer stays, as the thing
+the full tier of the gold suite exercises. The substrate's job is to make sure
+that whatever a consumer builds, the object it builds from cannot carry more
+than the archive's author released.

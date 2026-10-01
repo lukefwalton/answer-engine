@@ -12,7 +12,7 @@ workflow and archived on Zenodo under the concept DOI
 
 - `docs/CONTRACT.md`: the archive contract, the design of record for 3.0.0.
   Entities and fragments; a two-dimensional disclosure policy
-  (`raw: public | private`, `expose: text | semantic | locator | none`, with
+  (`raw: public | private`, `exposure: text | semantic | locator | none`, with
   `private + text` unrepresentable); `project()` as the single crossing from
   retrieval to a wire type that cannot carry more than the policy allows;
   system-generated, author-authorized semantic projections with a build-time
@@ -30,15 +30,25 @@ Recorded so the shape of the next major is visible before the code lands. See
   `private: true` is dropped.
 - `ArchiveRecord` / `PrivateNote` become inputs to adapters that produce
   `Entity` + `Fragment`; `RoutingHint` generalizes to the `locator` and
-  `semantic` variants of `EvidenceHit`.
-- `src/no-leak.ts` exports `project()` in place of `toRoutingHint` /
-  `assembleEvidence`.
+  `semantic` variants of `EvidenceHit`, which carries provenance (creators,
+  date, version, identifiers, locator) on every hit.
+- `src/no-leak.ts` exports `project()` and `search()` in place of
+  `toRoutingHint` / `assembleEvidence`.
 - The cosine score is renamed `cosine`; `semantic` names an exposure level.
-- Index schema 4 (entities stored once; fragments reference them).
+  Scores on private hits are rounded and carry no breakdown.
+- Index schema 4 (entities stored once; fragments reference them), a served
+  index produced by `toServedIndex()`, and a keyless schema 3 to 4 migration
+  for the demo's committed vectors.
 - Retrieval takes plugins and filters; the built-in boosts keep their values.
-- The governance files that describe the 2.x charter (`.github/STANDARDS.md`
-  §3 and §5, `CONTRIBUTING.md`, `SECURITY.md`, `NEXT-STEPS.md` A1 and D) are
-  revised in the same release.
+- The teaching-sized synthesis (`src/answer.ts`, `src/prompt.ts`, `src/cli/ask.ts`,
+  the `--full` eval tier) stays as the reference consumer, reading hits.
+- The `PublicSafe` brand is retired as a type for labels and locators (the
+  check stays, at build); the brand lives on the gist as `LintedGist`.
+- The files that describe the 2.x charter are revised in the same release:
+  `.github/STANDARDS.md` §1, §3, §5 and §6; `README.md` §§1–3, Quick start
+  and Commands; `CONTRIBUTING.md`; `SECURITY.md`; `NEXT-STEPS.md` A1, A2 and
+  D; cross-references in `docs/production-scaling.md`.
+  `scripts/build-blind-artifact.mjs` is retired.
 
 ## [2.1.0] - 2026-07-08
 
