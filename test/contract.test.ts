@@ -333,6 +333,12 @@ test('locator: labels and keys per scheme, coarse to fine', () => {
   assert.throws(() => renderLocatorLabel([]), /at least one locator/);
 
   assert.equal(formatTimecode('59.99'), '0:59');
+  // A malformed value fails without being echoed: the renderer runs inside the lint at index load.
+  assert.throws(
+    () => formatTimecode('twelve thirty'),
+    (err: unknown) => err instanceof Error && /not decimal seconds/.test(err.message) && !/twelve/.test(err.message),
+  );
+  assert.throws(() => renderLocatorLabel([{ scheme: 'timecode', value: '750', end: 'later' }]), /not decimal seconds/);
   assert.equal(locatorKey([{ scheme: 'timecode', value: '750', end: '845' }]), 't750-845');
   assert.equal(locatorKey([{ scheme: 'page', value: '184' }]), 'p184');
   assert.equal(locatorKey([{ scheme: 'whole', value: '' }]), 'whole');

@@ -256,6 +256,8 @@ test('store: validateIndex checks nested items and vector elements, and names th
     ['policy window', (f) => (f.entities[0]!.policy = { lint: { ngramWords: 0 } }), /'policy'\.lint\.ngramWords must be a positive integer/],
     ['locator item', (f) => ((f.entries[1]!.fragment.locator[0] as { value: unknown }).value = 2), /malformed entry 'book:example#p2': 'locator'\[0\]\.value must be a string/],
     ['locator end', (f) => ((f.entries[1]!.fragment.locator[0] as { end: unknown }).end = 3), /'locator'\[0\]\.end must be a string/],
+    ['timecode value', (f) => (f.entries[1]!.fragment.locator[0] = { scheme: 'timecode', value: 'twelve thirty' }), /'locator'\[0\]\.value must be decimal seconds for scheme 'timecode'/],
+    ['timecode end', (f) => (f.entries[1]!.fragment.locator[0] = { scheme: 'timecode', value: '750', end: 'later' }), /'locator'\[0\]\.end must be decimal seconds for scheme 'timecode'/],
     ['speaker item', (f) => ((f.entries[1]!.fragment as { attribution: unknown }).attribution = [{ role: 'host' }]), /'attribution'\[0\]\.name must be a string/],
     ['projection shape', (f) => ((f.entries[0]!.fragment.projection as { review: unknown }).review = 'maybe'), /'projection'\.review must be 'unreviewed' or 'reviewed'/],
     ['projection arm', (f) => delete (f.entries[0]!.fragment.projection as { gist?: unknown }).gist, /'projection'\.gist must be a string when lint is 'passed'/],
@@ -270,7 +272,8 @@ test('store: validateIndex checks nested items and vector elements, and names th
     // Every message ends with the remedy and carries no fragment text.
     assert.throws(
       () => validateIndex(broken(mutate), 'idx'),
-      (err: unknown) => err instanceof Error && /npm run index/.test(err.message) && !/letter|Page two|Page three/.test(err.message),
+      (err: unknown) =>
+        err instanceof Error && /npm run index/.test(err.message) && !/letter|Page two|Page three|twelve|later/.test(err.message),
       `${name}: remedy present, text absent`,
     );
   }

@@ -145,8 +145,10 @@ workflow and archived on Zenodo under the concept DOI
   takes them as options. `validateIndex` and `validateServedIndex` check nested
   items (attribution, identifiers, locators, projection, policy) and every
   vector element (exactly `dimensions` finite numbers), and name the field in
-  the message, never a value; both refuse an entity with no fragment and a
-  fragment id listed twice. `projectionContentHash` moves to
+  the message, never a value; both refuse an entity with no fragment, a
+  fragment id listed twice, and a `timecode` locator whose value is not decimal
+  seconds (checked by field name, so `formatTimecode`, which now throws without
+  echoing the value, never meets one inside the lint). `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed

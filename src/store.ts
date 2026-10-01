@@ -36,6 +36,7 @@ import {
 import type { Entity, Fragment, LintedGist } from './contract.js';
 import { isServableGist } from './ingest/disclosure.js';
 import { projectionContentHash, projectionProblem } from './ingest/projections.js';
+import { isTimecodeValue } from './locator.js';
 import { assertPublicSafeMetadata, assertSemanticProjection, entityLintText } from './public-safe.js';
 import type { IndexEntry } from './types.js';
 
@@ -141,11 +142,17 @@ function attributionProblem(x: unknown, at: string): Problem {
   return x.identifiers === undefined ? null : listProblem(x.identifiers, `${at}.identifiers`, identifierProblem);
 }
 
+/** A `timecode` value is checked here, by field name, so the renderer never
+ *  meets a malformed one inside the lint. */
 function locatorProblem(x: unknown, at: string): Problem {
   if (!isRecord(x)) return `${at} must be an object`;
   if (!isString(x.scheme)) return `${at}.scheme must be a string`;
   if (!isString(x.value)) return `${at}.value must be a string`;
   if (!isOptionalString(x.end)) return `${at}.end must be a string`;
+  if (x.scheme === 'timecode') {
+    if (!isTimecodeValue(x.value)) return `${at}.value must be decimal seconds for scheme 'timecode'`;
+    if (x.end !== undefined && !isTimecodeValue(x.end as string)) return `${at}.end must be decimal seconds for scheme 'timecode'`;
+  }
   return null;
 }
 

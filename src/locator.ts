@@ -9,10 +9,21 @@ import type { Locator } from './contract.js';
 
 const RANGE = '–';
 
-/** Seconds (possibly decimal, as a string) to m:ss, or h:mm:ss past an hour. */
+/** True when a `timecode` locator value is what the scheme requires: decimal
+ *  seconds. The store's validator checks this by field name before anything
+ *  renders (src/store.ts), so a malformed value fails there, not here. */
+export function isTimecodeValue(value: string): boolean {
+  return value.trim() !== '' && Number.isFinite(Number(value));
+}
+
+/** Seconds (possibly decimal, as a string) to m:ss, or h:mm:ss past an hour.
+ *  Throws without echoing the value: this runs inside the metadata lint at
+ *  index load, whose messages carry no values (STANDARDS §4). */
 export function formatTimecode(seconds: number | string): string {
+  if (!isTimecodeValue(String(seconds))) {
+    throw new Error("timecode locator value is not decimal seconds (the value is not printed; see the 'timecode' locator)");
+  }
   const total = Math.max(0, Math.floor(Number(seconds)));
-  if (!Number.isFinite(total)) throw new Error(`timecode is not a number: '${seconds}'`);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
