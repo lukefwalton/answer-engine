@@ -165,7 +165,11 @@ workflow and archived on Zenodo under the concept DOI
   runtime guard). `npm run index` refuses a previous index that fails the
   load-time lint instead of warning and re-embedding around it: the message
   carries the remedy (fix the source, delete the file, rerun), and nothing in
-  a refused artifact is reused. `projectionContentHash` moves to
+  a refused artifact is reused. `npm run index` groups adapter output through
+  the new `collectEntities` (`src/ingest/collect.ts`): entities once, every
+  fragment under its entity, so a fragmenter's many pairs for one entity build
+  as the contract describes; an id described two ways or a fragment produced
+  twice is refused by id. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed

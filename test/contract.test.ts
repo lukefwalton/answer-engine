@@ -4,7 +4,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { Entity, SemanticProjection } from '../src/contract.js';
+import type { Entity, Fragment, SemanticProjection } from '../src/contract.js';
+import { collectEntities } from '../src/ingest/collect.js';
 import { isServableGist, resolveDisclosure } from '../src/ingest/disclosure.js';
 import { fragmentByHeadings, fragmentByPageMarkers, splitLong } from '../src/ingest/fragment.js';
 import { formatTimecode, locatorKey, renderLocatorLabel } from '../src/locator.js';
@@ -446,5 +447,44 @@ test('public-safe metadata lint: policy.publicTitle skips the run check on the t
         { path: 't' },
       ),
     /'creator name' quotes private text/,
+  );
+});
+
+test('collectEntities: entities once, many fragments; an id described two ways or a fragment produced twice is refused', () => {
+  const book = entity({ id: 'book:x', title: 'X', disclosure: { raw: 'private', exposure: 'locator' } });
+  const page = (n: number, text: string): Fragment => ({
+    id: `book:x#p${n}`,
+    entityId: 'book:x',
+    locator: [{ scheme: 'page', value: String(n) }],
+    text,
+    disclosure: { raw: 'private', exposure: 'locator' },
+  });
+  const essay = entity({ id: 'essay:y', title: 'Y' });
+  const whole: Fragment = { id: 'essay:y#whole', entityId: essay.id, locator: [{ scheme: 'whole', value: '' }], text: 'public', disclosure: essay.disclosure };
+
+  // A fragmenter's output: one entity, many pairs, each with its own copy of the entity.
+  const grouped = collectEntities([
+    { entity: { ...book }, fragment: page(1, 'one') },
+    { entity: essay, fragment: whole },
+    { entity: { ...book }, fragment: page(2, 'two') },
+  ]);
+  assert.deepEqual([...grouped.entities.keys()], ['book:x', 'essay:y']);
+  assert.deepEqual(grouped.fragments.get('book:x')!.map((f) => f.id), ['book:x#p1', 'book:x#p2']);
+  assert.deepEqual(grouped.fragments.get('essay:y')!.map((f) => f.id), ['essay:y#whole']);
+
+  // The same id, described differently, is two sources colliding (two notes with one slug).
+  assert.throws(
+    () => collectEntities([{ entity: book, fragment: page(1, 'one') }, { entity: { ...book, title: 'Other' }, fragment: page(2, 'two') }]),
+    /entity 'book:x' is described two ways/,
+  );
+  // The same fragment twice is refused by id, whatever its text.
+  assert.throws(
+    () => collectEntities([{ entity: book, fragment: page(1, 'one') }, { entity: book, fragment: page(1, 'uno') }]),
+    /two sources produce the fragment 'book:x#p1'/,
+  );
+  // A fragment filed under the wrong entity is refused too.
+  assert.throws(
+    () => collectEntities([{ entity: essay, fragment: page(1, 'one') }]),
+    /fragment 'book:x#p1' names entity 'book:x' but was produced under 'essay:y'/,
   );
 });

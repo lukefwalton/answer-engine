@@ -30,6 +30,7 @@ import type { Entity, EntityPolicy, Fragment, SemanticProjection } from '../cont
 import { buildCorpus, buildPrivateNotes } from '../corpus.js';
 import { embedStringFor } from '../embed-string.js';
 import { batchInputs, embedBatch, truncateForEmbedding } from '../embedding.js';
+import { collectEntities } from '../ingest/collect.js';
 import { resolveDisclosure } from '../ingest/disclosure.js';
 import { createOpenAIGistDrafter, draftProjections } from '../ingest/gist.js';
 import type { GistDrafter, ProjectionDraftInput } from '../ingest/gist.js';
@@ -110,17 +111,12 @@ async function main(): Promise<void> {
 
   const sources: Source[] = [...records.map(fromArchiveRecord), ...notes.map(fromPrivateNote)];
   const lint = lintPolicy(config.gist);
-  const entities = new Map<string, Entity>();
-  const byEntity = new Map<string, Source[]>();
-  for (const source of sources) {
-    const { entity } = source;
-    if (entities.has(entity.id)) {
-      throw new Error(`two sources share the id '${entity.id}'; ids must be unique across collections and notes.`);
-    }
-    if (lint) entity.policy = { ...entity.policy, lint };
-    entities.set(entity.id, entity);
-    byEntity.set(entity.id, [source]);
-  }
+  if (lint) for (const { entity } of sources) entity.policy = { ...entity.policy, lint };
+  // Entities once, every fragment under its entity (CONTRACT.md §12). The
+  // teaching adapters yield one fragment per entity; a fragmenter yields many,
+  // and collectEntities groups either, refusing an id described two ways or a
+  // fragment produced twice.
+  const { entities, fragments: byEntity } = collectEntities(sources);
 
   // Projections: draft where the author asked for a gist, keep edits, carry the rest.
   const stored = readProjections(PROJECTIONS_PATH);
@@ -130,7 +126,7 @@ async function main(): Promise<void> {
   const totals = { drafted: 0, skipped: 0, kept: 0, failed: 0 };
   for (const [entityId, group] of byEntity) {
     const entity = entities.get(entityId)!;
-    const inputs: ProjectionDraftInput[] = group.map(({ fragment }) => ({
+    const inputs: ProjectionDraftInput[] = group.map((fragment) => ({
       id: fragment.id,
       text: fragment.text,
       locator: fragment.locator,
@@ -157,7 +153,8 @@ async function main(): Promise<void> {
 
   // Resolve every fragment's exposure from the entity default and its projection
   // (docs/CONTRACT.md §3): the one place the policy is decided, stored on the fragment.
-  for (const { entity, fragment } of sources) {
+  for (const { fragment } of sources) {
+    const entity = entities.get(fragment.entityId)!;
     const projection = projections.get(fragment.id);
     if (projection) fragment.projection = projection;
     fragment.disclosure = resolveDisclosure(entity, { exposure: entity.disclosure.exposure, projection }, { path: fragment.id });
