@@ -152,7 +152,8 @@ workflow and archived on Zenodo under the concept DOI
   canary or an answer pattern that fired by its index in the gold file
   (`canaries[3] appears in the served gist of '…'`,
   `answer matched forbidAnswerPatterns[0]`), never by its text: canaries are
-  private wording, and `npm run eval` prints the issues. `projectionContentHash` moves to
+  private wording, and `npm run eval` prints the issues. A private note's
+  malformed `exposure` is named by field, not echoed. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed

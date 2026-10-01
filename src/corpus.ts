@@ -154,8 +154,10 @@ export function buildPrivateNotes(config: ArchiveConfig): PrivateNote[] {
     }
     const exposure = data.exposure;
     if (exposure !== undefined && exposure !== 'semantic' && exposure !== 'locator' && exposure !== 'none') {
+      // The field is named, not echoed: it is authored frontmatter on a private
+      // note, and this message is what `npm run index` prints (STANDARDS §4).
       throw new Error(
-        `${path}: 'exposure' must be semantic, locator, or none (got ${JSON.stringify(exposure)}). ` +
+        `${path}: 'exposure' must be semantic, locator, or none. ` +
           `Private text is never exposed as text; see docs/CONTRACT.md §3.`,
       );
     }

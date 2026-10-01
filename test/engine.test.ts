@@ -234,10 +234,15 @@ test('corpus: a note may request its exposure; anything but semantic, locator, o
   const plain = fromPrivateNote(notes.find((n) => n.id === 'note:plain')!);
   assert.equal('exposure' in toPrivateNote(plain.entity, plain.fragment), false);
 
-  writeFileSync(join(root, 'notebook', 'text.md'), front('text'), 'utf8');
+  // A malformed value is named by field, never echoed: the frontmatter is on a
+  // private note and `npm run index` prints this message.
+  writeFileSync(join(root, 'notebook', 'text.md'), front('text or the whole first stanza'), 'utf8');
   assert.throws(
     () => buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') }),
-    /text\.md: 'exposure' must be semantic, locator, or none \(got "text"\)/,
+    (err: unknown) =>
+      err instanceof Error &&
+      /text\.md: 'exposure' must be semantic, locator, or none\./.test(err.message) &&
+      !/stanza/.test(err.message),
   );
 });
 
