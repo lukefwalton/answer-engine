@@ -1,0 +1,15 @@
+{
+  // The published surface: src/ without the CLIs (which read archive.config.ts
+  // from the repo root and are the clone-and-run teaching path, not the library).
+  // `npm test` keeps running src/ through tsx; this file only produces dist/.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "artifacts", "dist", "src/cli/**"]
+}

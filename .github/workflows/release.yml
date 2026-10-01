@@ -1,12 +1,16 @@
 name: release
 
 # Intentional releases only — not on every green CI run.
-# Each GitHub release can trigger a new Zenodo archive and citable DOI.
+# Each GitHub release can trigger a new Zenodo archive and citable DOI, and
+# publishes the package to npm.
 on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Semver bump from the latest v* tag
+        description: >-
+          Semver bump from the latest v* tag. premajor starts a pre-release line
+          (2.1.0 → 3.0.0-alpha.1); prerelease continues one (→ 3.0.0-alpha.2);
+          patch, minor, or major on a pre-release finalize it (→ 3.0.0).
         required: true
         default: patch
         type: choice
@@ -14,6 +18,8 @@ on:
           - patch
           - minor
           - major
+          - premajor
+          - prerelease
       notes:
         description: Release notes (optional; shown on the GitHub release)
         required: false
@@ -25,6 +31,8 @@ concurrency:
 
 permissions:
   contents: write
+  # npm trusted publishing (OIDC). Harmless when an NPM_TOKEN secret is used instead.
+  id-token: write
 
 jobs:
   release:
@@ -38,6 +46,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: npm
 
       - name: Require main
         run: |
@@ -50,7 +59,9 @@ jobs:
       - name: Verify baseline tag matches checked-in metadata
         id: baseline
         run: |
-          latest="$(git tag -l 'v*' --sort=-v:refname | head -1)"
+          # versionsort.suffix=- makes v3.0.0-alpha.2 sort BEFORE v3.0.0, so a
+          # finalized release is the latest tag once it exists.
+          latest="$(git -c versionsort.suffix=- tag -l 'v*' --sort=-v:refname | head -1)"
           if [ -z "$latest" ]; then
             echo "No v* tags found. Tag main to match checked-in metadata before running release."
             exit 1
@@ -75,17 +86,20 @@ jobs:
         id: version
         run: |
           latest="${{ steps.baseline.outputs.latest }}"
-          version="${latest#v}"
-          IFS=. read -r major minor patch <<< "$version"
-          case "${{ inputs.bump }}" in
-            patch) patch=$((patch + 1)) ;;
-            minor) minor=$((minor + 1)); patch=0 ;;
-            major) major=$((major + 1)); minor=0; patch=0 ;;
-          esac
-          next="${major}.${minor}.${patch}"
+          next="$(node scripts/next-version.mjs "$latest" "${{ inputs.bump }}")"
+          prerelease=false
+          case "$next" in *-*) prerelease=true ;; esac
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
           echo "tag=v${next}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      # Build and smoke the package BEFORE any ref is pushed: a release whose
+      # dist does not import is not cut.
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:dist
 
       - name: Sync release metadata
         run: node scripts/sync-release-metadata.mjs "${{ steps.version.outputs.next }}"
@@ -104,9 +118,30 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
           body: |
             ${{ inputs.notes }}
 
             ---
-            Archived on Zenodo after publish. Cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773) for latest, or this release's version DOI to pin the snapshot.
+            Archived on Zenodo after publish. Cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773) for latest, or this release's version DOI to pin the snapshot. Published to npm as `@lukefwalton/answer-engine@${{ steps.version.outputs.next }}`.
           generate_release_notes: true
+
+      # Publishing. Two ways to authenticate, either is enough:
+      #   1. npm trusted publishing: on npmjs.com, add this repository and this
+      #      workflow file as a trusted publisher for @lukefwalton/answer-engine;
+      #      the id-token permission above lets npm (>= 11.5, Node 24) mint the
+      #      token itself. No secret.
+      #   2. An NPM_TOKEN repository secret (an automation token), written to
+      #      ~/.npmrc here. If both exist the token wins.
+      # Pre-releases publish under the `next` dist-tag so `npm install
+      # @lukefwalton/answer-engine` keeps resolving to the latest release.
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+          fi
+          tag=latest
+          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then tag=next; fi
+          npm publish --provenance --access public --tag "$tag"

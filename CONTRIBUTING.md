@@ -1,17 +1,18 @@
 # Contributing
 
-This repo is deliberately the smallest version of the answer contract that keeps
-its promises (see [What stays out](./README.md#what-stays-out) and
+This repo is deliberately the smallest version of the archive contract that
+keeps its promises (see [What stays out](./README.md#what-stays-out),
+[`docs/CONTRACT.md`](./docs/CONTRACT.md) §15, and
 [`.github/STANDARDS.md`](./.github/STANDARDS.md)). That makes it an unusual place
 to contribute: **most additions are, correctly, out of scope.** A caching layer,
-a nicer CLI, a vector-store adapter, an ingestion pipeline — all reasonable, all
-declined here, not because the work is poor but because the value this repo
-carries is the boundary and the answer contract, not feature coverage. If a
-change makes the engine bigger without making a promise more checkable, it
-belongs in a consumer adapter, not here.
+a nicer CLI, a vector-store adapter, an HTTP or MCP endpoint, a transcription
+pipeline, a site's boosts — all reasonable, all declined here, not because the
+work is poor but because the value this repo carries is the contract, the
+boundary, and the eval harness, not feature coverage. If a change makes the
+substrate bigger without making a promise more checkable, it belongs in a
+consumer, not here.
 
-So this file names the surface where contribution *is* in scope — the one
-boundary the repo otherwise leaves implicit.
+So this file names the surfaces where contribution *is* in scope.
 
 ## The most valuable contribution: a gold case that broke
 
@@ -30,18 +31,30 @@ special-casing the question will be declined even when it is green. See
 
 ## Also in scope
 
-- **A port that keeps the boundary structural.** The no-leak boundary here is a
-  type with no field for private prose, so the prohibited move is structurally
-  inexpressible — a property of the type's *shape*, not a checker that complains
-  (`src/no-leak.ts`). A port to another language is a real contribution if it
-  keeps that boundary structural rather than a guard someone has to remember, and
-  it stress-tests whether the pattern is language-independent or secretly
-  TypeScript-shaped. A port that demotes the boundary to a runtime check is not
-  the same artifact.
-- **Adversarial cases against the boundary.** Try to get private prose into the
-  prompt, or to make the model claim `supported` while citing only hints. Either
-  it breaks — we fix it, and the suite grows — or it holds, and the boundary
-  earns more credibility. Both outcomes are useful; the second most of all.
+- **A plugin or an ingest helper that is generic.** The seams exist for this:
+  a `BoostPlugin` or `PostRank` that any archive could use (not one site's
+  author aliases), a fragmenter for a document shape the two shipped ones do
+  not cover, an adapter from a common corpus format to `Entity` + `Fragment`,
+  a `GistDrafter` for another provider. The shape of such a PR: pure logic in
+  `src/`, tests that run without a key, no change to `DEFAULT_PLUGINS` or to a
+  shipped constant without the gold evidence that motivates it, and the demo
+  headline unmoved. A consumer's own adapter stays in the consumer.
+- **A port that keeps the boundary structural.** The crossing here is a type:
+  `project()` produces an `EvidenceHit` whose `locator` variant has no field
+  for text and whose `semantic` variant carries only a lint-passed gist, so the
+  prohibited move is structurally inexpressible — a property of the type's
+  *shape*, not a checker that complains (`src/no-leak.ts`). A port to another
+  language is a real contribution if it keeps that boundary structural rather
+  than a guard someone has to remember, and it stress-tests whether the pattern
+  is language-independent or secretly TypeScript-shaped. A port that demotes
+  the boundary to a runtime check is not the same artifact.
+- **Adversarial cases against the boundary.** Try to get private prose into a
+  hit or the prompt, a gist past the lint that quotes, a served index that
+  carries what its policy withholds, or the model to claim `supported` while
+  citing only hints. Either it breaks — we fix it, and the suite grows — or it
+  holds, and the boundary earns more credibility. Both outcomes are useful; the
+  second most of all. What the lint cannot catch by design (a short private
+  phrase, paraphrase) is a canary, not a bug: see `docs/CONTRACT.md` §13.
 
 ## Forking is a contribution too
 
@@ -66,13 +79,15 @@ Always, before any PR — both are offline and need no API key:
 ```sh
 npm test          # offline, deterministic engine tests — the CI gate
 npm run typecheck # tsc --noEmit
+npm run test:dist # build the package and import it by name (also in CI)
 ```
 
 `npm test` must stay green **without an API key**; don't add hidden dependencies
 on live calls.
 
-If your change touches the prompt, retrieval, validation, or repair, run the
-eval too (it needs a key — one cheap embedding call per query):
+If your change touches the prompt, retrieval, validation, repair, or an
+entity's exposure, run the eval too (the canary sweep is keyless; the retrieval
+checks need a key — one cheap embedding call per query):
 
 ```sh
 npm run eval                          # retrieval checks against eval/gold.yaml

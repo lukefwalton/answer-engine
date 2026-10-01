@@ -6,8 +6,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const next = process.argv[2];
-if (!next || !/^\d+\.\d+\.\d+$/.test(next)) {
-  console.error('Usage: node scripts/sync-release-metadata.mjs <semver>');
+if (!next || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+\.\d+)?$/.test(next)) {
+  console.error('Usage: node scripts/sync-release-metadata.mjs <semver>   (X.Y.Z or X.Y.Z-<preid>.N)');
   process.exit(1);
 }
 
@@ -56,7 +56,7 @@ writeFileSync('CITATION.cff', cff);
 // manual follow-up commit. Targets only the baseline line, not the illustrative
 // version examples elsewhere in the prose; throws if the phrasing drifts.
 let readme = readFileSync('README.md', 'utf8');
-const readmeBaseline = /(latest `v\*` tag on the remote \(`v)\d+\.\d+\.\d+(`)/;
+const readmeBaseline = /(latest `v\*` tag on the remote \(`v)\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+\.\d+)?(`)/;
 if (!readmeBaseline.test(readme)) {
   throw new Error('Could not find the release-baseline version reference in README.md to update.');
 }

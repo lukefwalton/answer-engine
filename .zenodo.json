@@ -13,7 +13,7 @@
       "type": "Researcher"
     }
   ],
-  "description": "A teaching-sized answer engine that keeps the authorial frame outside the model: bounded sources, no-leak private routing, grounded citations, refusal modes, and an eval harness.",
+  "description": "A retrieval substrate for a body of work its author owns. Every retrievable fragment carries a disclosure policy (public or private; text, gist, locator, or nothing), every hit carries provenance (creators, date, version, identifiers, locator), and the only object a consumer may hand to a model or a caller is a hit whose type cannot hold more than that policy allows. Gists are drafted by the system and authorized by the author. Ships a teaching-sized synthesis consumer that cites or refuses, and an evaluation harness whose gold suite and canary sweep gate every change.",
   "keywords": [
     "answer engine",
     "answerability",
@@ -23,7 +23,10 @@
     "citations",
     "LLM evaluation",
     "AI ethics",
-    "human authorship"
+    "human authorship",
+    "retrieval contract",
+    "disclosure policy",
+    "provenance"
   ],
   "related_identifiers": [
     {

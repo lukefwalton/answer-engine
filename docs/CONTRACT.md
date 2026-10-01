@@ -1,14 +1,19 @@
 # The archive contract
 
-**Status.** Design of record for answer-engine 3.0.0. Nothing in this document is
-implemented yet; it is the contract the implementation will be read against. When
-the code lands, the files that still describe the 2.x charter are revised in the
-same release: `.github/STANDARDS.md` §1, §3, §5 and §6; `README.md` §§1–3, Quick
-start and Commands (keeping the release-baseline sentence and the `v1.4.0` /
-`v1.4.1` example that `test/release-metadata.test.ts` pins); `CONTRIBUTING.md`;
-`SECURITY.md`; `NEXT-STEPS.md` A1, A2 and D; and the cross-references in
-`docs/production-scaling.md`. Until then this file and those files disagree on
-purpose: this one says where the repo is going.
+**Status.** Design of record for answer-engine 3.0.0, and the text the
+implementation is read against. Implemented in this package on the 3.0.0 line:
+the types (§2), disclosure and its resolution (§3), the crossing (§4),
+projections (§5), the lints (§6), retrieval with plugins and filters (§7), the
+in-package consumer (§9), the private and served index with load-time
+validation and the keyless migration (§12), and the evaluation's canary sweep
+and fragment ids (§11). Not in this package by design: the wire contract (§8)
+and the retrieval-only consumer, which a consumer implements over `search()`
+(§15). Still owed in this repository: the demo's `semantic` entity (§12, a
+keyed build). The charter files were revised with the code in the same release:
+`.github/STANDARDS.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`,
+`NEXT-STEPS.md`, and `docs/production-scaling.md`. Where this document and the
+code disagree, the disagreement is a bug in one of them, and `CHANGELOG.md`
+says which release changed what.
 
 **One sentence.** Every retrievable piece of an archive carries a disclosure
 policy; the only object a consumer may hand to a model or a caller is a hit, and
@@ -801,8 +806,10 @@ The teaching corpus keeps working through the adapters. `fromArchiveRecord`
 yields an entity with one `text` fragment whose locator is `[{ scheme: 'whole',
 value: '' }]`; `fromPrivateNote` yields a private entity with one `locator`
 fragment whose linted label becomes the entity title and whose locator string
-becomes `[{ scheme: 'note', value }]`. The example content does not change. The
-demo gains one entity that exercises `semantic`.
+becomes `[{ scheme: 'note', value }]`, and whose frontmatter may ask for an
+`exposure`. The example content does not change. The demo gains one entity that
+exercises `semantic` in a following release: a public-domain novel with its
+chapter gists committed beside the vectors, which needs a keyed build.
 
 ## 13. What remains owned rather than guaranteed
 

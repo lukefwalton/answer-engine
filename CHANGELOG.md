@@ -99,34 +99,60 @@ workflow and archived on Zenodo under the concept DOI
   `retrieve()` still sees them. The demo's `semantic` entity (a public-domain
   novel with committed gists) is a separate, keyed pull request.
 
-### Planned for 3.0.0 (breaking)
+- Step 5 of 3.0.0, packaging and the governance re-charter (#30, #31). The
+  package is installable: `@lukefwalton/answer-engine` (`private: true` dropped;
+  `main`, `types`, `exports` for `.`, `./contract`, `./retrieve`, `./boosts`,
+  `./no-leak`, `./store`, `./ingest`, `./eval`, `./public-safe`, `./locator`;
+  `tsconfig.build.json` emits `dist/` from `src/` without the CLIs, which stay
+  the clone-and-run path). `npm run build`; `npm run test:dist` builds and
+  imports the package by name through its own `exports`, keyless, and runs in
+  CI. The release workflow learns pre-releases (`premajor` starts
+  `3.0.0-alpha.1`, `prerelease` continues the line, patch/minor/major finalize
+  it; `scripts/next-version.mjs`, tested), sorts tags so a finalized release
+  outranks its pre-releases, builds and smokes before any ref is pushed, marks
+  GitHub pre-releases, and publishes to npm with provenance (trusted publishing
+  or an `NPM_TOKEN` secret; pre-releases under the `next` dist-tag).
+  `scripts/sync-release-metadata.mjs` accepts pre-release versions.
+  `.github/STANDARDS.md` is re-chartered for the substrate (`project()` as the
+  one crossing, exposure resolved at build, the linted-not-typed metadata rule,
+  the gist never in the prompt, the seams as the extension points, the
+  consumer's list); `README.md` §§1–3, the eval section, Commands, "Where to
+  take it", "What stays out", and the release notes are rewritten for entities,
+  fragments, and hits; `CONTRIBUTING.md` names generic plugins and ingest
+  helpers as in scope; `SECURITY.md` states custody and what is and is not a
+  boundary report; `NEXT-STEPS.md` A1 is superseded by the contract's §6 and
+  §13 with the residue restated, A2 extends to gists, B3 is closed as a design
+  question, D names the rate limiter as load-bearing; `docs/production-scaling.md`
+  points at the contract; `CITATION.cff` and `.zenodo.json` describe the
+  substrate (the title is unchanged).
 
-Recorded so the shape of the next major is visible before the code lands. See
-`docs/CONTRACT.md` for the normative text.
+### Removed
 
-- The package becomes installable (`dist/`, `exports`, published to npm);
-  `private: true` is dropped.
-- `ArchiveRecord` / `PrivateNote` become inputs to adapters that produce
-  `Entity` + `Fragment`; `RoutingHint` generalizes to the `locator` and
-  `semantic` variants of `EvidenceHit`, which carries provenance (creators,
-  date, version, identifiers, locator) on every hit.
+- `scripts/build-blind-artifact.mjs`. Review is open, not blind; the script's
+  anonymized tarball has no remaining use.
+
+### Breaking in the 3.0.0 line (summary)
+
+Recorded here in one place; `docs/CONTRACT.md` is the normative text.
+
+- `ArchiveRecord` / `PrivateNote` are inputs to the teaching adapters, which
+  produce `Entity` + `Fragment`; the index is schema 4 and a schema-3 file is
+  migrated with `npm run migrate:index`.
 - `src/no-leak.ts` exports `project()` and `search()` in place of
-  `toRoutingHint` / `assembleEvidence`.
-- The cosine score is renamed `cosine`; `semantic` names an exposure level.
-  Scores on private hits are rounded and carry no breakdown.
-- Index schema 4 (entities stored once; fragments reference them), a served
-  index produced by `toServedIndex()`, and a keyless schema 3 to 4 migration
-  for the demo's committed vectors.
-- Retrieval takes plugins and filters; the built-in boosts keep their values.
-- The teaching-sized synthesis (`src/answer.ts`, `src/prompt.ts`, `src/cli/ask.ts`,
-  the `--full` eval tier) stays as the reference consumer, reading hits.
-- The `PublicSafe` brand is retired as a type for labels and locators (the
-  check stays, at build); the brand lives on the gist as `LintedGist`.
-- The files that describe the 2.x charter are revised in the same release:
-  `.github/STANDARDS.md` §1, §3, §5 and §6; `README.md` §§1–3, Quick start
-  and Commands; `CONTRIBUTING.md`; `SECURITY.md`; `NEXT-STEPS.md` A1, A2 and
-  D; cross-references in `docs/production-scaling.md`.
-  `scripts/build-blind-artifact.mjs` is retired.
+  `toRoutingHint` / `assembleEvidence`; `RoutingHint` is a plain-string view
+  the in-package consumer derives from `EvidenceHit`, which carries provenance
+  on every hit.
+- `retrieve()` takes a `RetrievalIndex` and `RetrieveOptions` (plugins,
+  filters, `limit` or `limitPerRaw`, recency modes) and returns `ScoredHit[]`;
+  the cosine score is `cosine` and `semantic` names an exposure; scores on
+  private hits are rounded and carry no breakdown.
+- `npm run index` writes `artifacts/index.json` (schema 4) and
+  `artifacts/projections.json`; the `PublicSafe` brand is retired as a type (the
+  check stays, at build and at every load) and the brand lives on the gist as
+  `LintedGist`.
+- `judgeRetrieval` reads `ScoredHit[]` and matches an expected id against an
+  entity id or a fragment id; `loadGoldFile` returns queries and canaries.
+- The package name is `@lukefwalton/answer-engine`.
 
 ## [2.1.0] - 2026-07-08
 

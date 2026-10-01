@@ -4,7 +4,12 @@ The [artifact note](./ARTIFACT-NOTE-v1.2.md) §6 leaves one question open on
 purpose: the contract (no-leak, grounding, modes, refusal) is established here,
 but whether operating it at public scale is *affordable* "remains empirical."
 This is the empirical companion: what was learned running the same pattern
-behind [Ask the Archive](https://lukefwalton.com/ask/) on a real corpus.
+behind [Ask the Archive](https://lukefwalton.com/ask/) on a real corpus. Since
+3.0.0 the contract's design of record is [`CONTRACT.md`](./CONTRACT.md); the
+levers below apply to the **served index** it defines (§3 rule 4, §12), and its
+§10 names the two that are now part of the threat model rather than only the
+cost model: the rate limiter, and the omission of the embedding model and
+dimensions from a retrieval-only response.
 
 The README's "Where to take it" lists scaling levers "in the order we'd add
 them." Deployment surfaced two that list does **not** name (vector dimension
