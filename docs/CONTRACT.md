@@ -60,6 +60,24 @@ corpus -> ingest -> index -> retrieve() -> ScoredHit[] -> project() -> EvidenceH
                                                                           '-> consumer B: retrieval only (the caller's model thinks)
 ```
 
+### Compatibility with the 2.x guarantees
+
+Until 3.0.0 ships, the 2.x code and the gold suite's semantics are the source
+of truth, and this document changes none of them. Three guarantees carry over
+unchanged, restated in the new vocabulary so no reader mistakes the extension
+for a loosening:
+
+- Private text never reaches a model. In 2.x the type that crosses is
+  `RoutingHint`; here it is the `locator` and `semantic` variants of
+  `EvidenceHit`, neither of which has a field for the source text.
+- Provenance is not grounding. A hit says where something is and who made it;
+  whether a hit may back a claim in an answer is decided by the synthesis
+  consumer's citation gate (exact retrieved identifier and URL, mode derived
+  from the final citation mix, empty refusal), which this contract does not
+  touch.
+- A refusal is empty and uncited; `not-found` and the four modes keep their
+  2.x meaning (section 9).
+
 ## 1. Vocabulary
 
 - **Entity.** An identifiable thing in the archive: a book, a paper, an essay, a
@@ -516,11 +534,18 @@ Filters run before scoring.
 *Retrieved is not cited* applies to hits as it applied to records. A hit is a
 candidate. A consumer that synthesizes decides what it cites; a consumer that
 returns hits leaves that to its caller. Neither changes what a hit may carry.
+In the wire contract's terms (section 8): a hit is a policy-safe retrieval
+artifact, not a citation, and `archive-search/1` says nothing about what may
+back a claim.
 
 ## 8. The wire contract
 
-A retrieval-only consumer returns `SearchResponse`. Its `contract` field is the
-version; `archive-search/1` is additive-only. Adding an optional field, a new
+A retrieval-only consumer returns `SearchResponse`. Every hit in it is a
+policy-safe retrieval artifact: what the archive's policy allows to be known
+about a relevant fragment. It is not a citation, and nothing in this contract
+makes it one; a consumer that writes answers still runs its own grounding gate
+over the hits it chooses to cite. The `contract` field is the version;
+`archive-search/1` is additive-only. Adding an optional field, a new
 identifier or locator scheme, or a new plugin name in `breakdown` does not bump
 it. Removing a field, changing a field's meaning, or changing the served
 exposure set does, to `archive-search/2`. The fixed copy below is part of the

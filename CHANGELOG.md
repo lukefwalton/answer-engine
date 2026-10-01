@@ -18,7 +18,9 @@ workflow and archived on Zenodo under the concept DOI
   system-generated, author-authorized semantic projections with a build-time
   lint; provenance (date, version, creators, identifiers, locators) on every
   hit; a pluggable retrieval core; and the wire contract `archive-search/1`
-  for a retrieval-only consumer. Nothing in it is implemented yet.
+  for a retrieval-only consumer. Documentation only: nothing in it is
+  implemented, and the 2.x code and the gold suite's semantics remain the
+  source of truth until 3.0.0 ships.
 - This changelog.
 
 ### Planned for 3.0.0 (breaking)
