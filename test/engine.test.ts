@@ -21,19 +21,30 @@ import {
   judgeAnswerMode,
   judgeRetrieval,
   loadGold,
+  loadGoldFile,
+  sweepCanaries,
   parseEvalReport,
   parseEvalReportJson,
 } from '../src/evaluate.js';
 import { filterGoldQueries, parseQueryIdList } from '../src/eval-select.js';
-import { assembleEvidence, toRoutingHint } from '../src/no-leak.js';
+import { toAnswerEvidence } from '../src/evidence.js';
+import { fromPrivateNote, toPrivateNote } from '../src/adapters/teaching.js';
+import { project, search } from '../src/no-leak.js';
 import {
   assertPublicSafeField,
+  assertSemanticProjection,
   PUBLIC_SAFE_MAX_CHARS,
   renderRelatedMaterialAnswer,
 } from '../src/public-safe.js';
 import { buildSystemPrompt, buildUserPrompt, MAX_PROMPT_BODY_CHARS } from '../src/prompt.js';
-import { containsPhrase, cosine, hasThemeMatch, retrieve } from '../src/retrieve.js';
-import { assertHomogeneousIndex, readIndexFile, writeIndexFile } from '../src/store.js';
+import { buildRetrievalIndex, containsPhrase, cosine, partitionByRaw, retrieve } from '../src/retrieve.js';
+import {
+  assertHomogeneousIndex,
+  indexFileFromLegacyEntries,
+  legacyEntriesFromIndexFile,
+  readIndexFile,
+  writeIndexFile,
+} from '../src/store.js';
 import type { AnswerEvidence, ArchiveRecord, IndexEntry, PrivateNote } from '../src/types.js';
 
 function makeRecord(overrides: Partial<ArchiveRecord> = {}): ArchiveRecord {
@@ -98,8 +109,23 @@ function noteEntry(note: PrivateNote, vector: number[]): IndexEntry {
   };
 }
 
+/** The in-package consumer's evidence shape, built directly: records as given,
+ *  notes reduced to hints (hintId, label, url, locator; no text). */
 function evidenceOf(records: ArchiveRecord[], notes: PrivateNote[] = []): AnswerEvidence {
-  return assembleEvidence(records, notes);
+  return {
+    records,
+    hints: notes.map((n) => ({ hintId: n.id, label: n.label, url: n.url, locator: n.locator })),
+  };
+}
+
+/** A note reduced to the hint the in-package consumer sees (no text). */
+function hintOf(note: PrivateNote) {
+  return { hintId: note.id, label: note.label as string, url: note.url, locator: note.locator as string };
+}
+
+/** A retrieval index from legacy record/note entries (through the adapters). */
+function indexOf(entries: IndexEntry[]) {
+  return buildRetrievalIndex(indexFileFromLegacyEntries(entries));
 }
 
 const RECORD_CITE = {
@@ -184,6 +210,49 @@ test('corpus: malformed frontmatter and missing required fields name the file', 
   );
 });
 
+test('corpus: a note may request its exposure; anything but semantic, locator, or none names the file', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ae-exposure-'));
+  mkdirSync(join(root, 'notebook'));
+  const front = (exposure: string) =>
+    `---\ntitle: "A note"\nlabel: "A note"\nabout: https://example.com/x/\nlocator: "p. 1"\nexposure: ${exposure}\n---\nprivate text\n`;
+  writeFileSync(join(root, 'notebook', 'semantic.md'), front('semantic'), 'utf8');
+  writeFileSync(join(root, 'notebook', 'none.md'), front('none'), 'utf8');
+  writeFileSync(join(root, 'notebook', 'plain.md'), front('locator').replace('exposure: locator\n', ''), 'utf8');
+  const notes = buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') });
+  assert.deepEqual(
+    notes.map((n) => [n.id, n.exposure]),
+    [
+      ['note:none', 'none'],
+      ['note:plain', undefined],
+      ['note:semantic', 'semantic'],
+    ],
+  );
+  // Through the adapter: the request is the entity default, and the fragment carries
+  // the same request until a build resolves it against a projection (CONTRACT.md §3).
+  const semantic = fromPrivateNote(notes.find((n) => n.id === 'note:semantic')!);
+  assert.deepEqual(semantic.entity.disclosure, { raw: 'private', exposure: 'semantic' });
+  assert.deepEqual(semantic.fragment.disclosure, { raw: 'private', exposure: 'semantic' });
+  assert.equal(toPrivateNote(semantic.entity, semantic.fragment).exposure, 'semantic');
+  // The legacy view drafts no gist, so it resolves the request to locator and still round-trips it.
+  const legacy = indexFileFromLegacyEntries([noteEntry(notes.find((n) => n.id === 'note:semantic')!, [1, 0])]);
+  assert.deepEqual(legacy.entries[0]!.fragment.disclosure, { raw: 'private', exposure: 'locator' });
+  const back = legacyEntriesFromIndexFile(legacy)[0]!;
+  assert.ok(back.sourceType === 'note' && back.note.exposure === 'semantic');
+  const plain = fromPrivateNote(notes.find((n) => n.id === 'note:plain')!);
+  assert.equal('exposure' in toPrivateNote(plain.entity, plain.fragment), false);
+
+  // A malformed value is named by field, never echoed: the frontmatter is on a
+  // private note and `npm run index` prints this message.
+  writeFileSync(join(root, 'notebook', 'text.md'), front('text or the whole first stanza'), 'utf8');
+  assert.throws(
+    () => buildPrivateNotes({ ...config, privateNotesDir: join(root, 'notebook') }),
+    (err: unknown) =>
+      err instanceof Error &&
+      /text\.md: 'exposure' must be semantic, locator, or none\./.test(err.message) &&
+      !/stanza/.test(err.message),
+  );
+});
+
 test('corpus: the public-safe lint rejects traveling fields that quote private text', () => {
   const body =
     'The bridge originally modulated up a whole step and we scrapped it in the second session.';
@@ -196,7 +265,7 @@ test('corpus: the public-safe lint rejects traveling fields that quote private t
         path: 'n.md',
         privateText: body,
       }),
-    /n\.md: 'label' quotes the note's private body \("originally modulated up a whole"\)/,
+    /n\.md: 'label' quotes private text at words 2–6: a traveling field must not contain 5 consecutive words/,
   );
   // Four shared words is citation-grade overlap and passes — the demo
   // corpus's own locators depend on exactly this margin (PUBLIC_SAFE_NGRAM_WORDS).
@@ -216,7 +285,7 @@ test('corpus: the public-safe lint rejects traveling fields that quote private t
         path: 'n.md',
         privateText: body,
       }),
-    /quotes the note's private body/,
+    /quotes private text/,
   );
 
   assert.throws(
@@ -285,42 +354,110 @@ test('retrieve: cosine, boosts, score floor, and the two-stream split', () => {
   const far = recordEntry(makeRecord({ id: 'essay:far', slug: 'far', title: 'Far' }), [0, 1]);
   const note = noteEntry(makeNote(), [0.9, 0.45]);
 
-  const hits = retrieve([1, 0], 'what is paper crown about', [close, named, far, note]);
+  const hits = retrieve([1, 0], 'what is paper crown about', indexOf([close, named, far, note]));
+  const { public: pub, private: priv } = partitionByRaw(hits);
   // Exact title match outranks the pure semantic neighbor; weak hit floored out.
-  assert.deepEqual(hits.records.map((h) => h.record.id), ['song:paper-crown', 'essay:on-listening']);
-  // Notes ride a separate stream — present, but never mixed into records.
-  assert.deepEqual(hits.notes.map((h) => h.note.id), ['note:harbor-lights-session']);
+  assert.deepEqual(pub.map((h) => h.entity.id), ['song:paper-crown', 'essay:on-listening']);
+  assert.equal(pub[0]!.breakdown.exactMatch, 0.3);
+  assert.ok(pub[0]!.cosine < pub[0]!.score);
+  // Notes are capped as their own layer — present, never crowded out by records —
+  // and under the default plugins they ride on cosine alone (2.x behaviour).
+  assert.deepEqual(priv.map((h) => h.entity.id), ['note:harbor-lights-session']);
+  assert.deepEqual(Object.keys(priv[0]!.breakdown), ['cosine']);
 });
 
 test('retrieve: theme boost rewards curated frontmatter vocabulary', () => {
-  const record = makeRecord();
-  assert.ok(hasThemeMatch(record, 'where is attention discussed'));
-  assert.ok(!hasThemeMatch(record, 'where is focus discussed'));
-
-  const themed = recordEntry(record, [1, 0]);
+  const themed = recordEntry(makeRecord(), [1, 0]);
   const plain = recordEntry(
     makeRecord({ id: 'essay:other', slug: 'other', title: 'Other', themes: [] }),
     [1, 0],
   );
-  const hits = retrieve([1, 0], 'where is attention discussed', [plain, themed]);
-  assert.equal(hits.records[0]!.record.id, 'essay:on-listening');
-  assert.ok(hits.records[0]!.score > hits.records[1]!.score);
+  const hits = retrieve([1, 0], 'where is attention discussed', indexOf([plain, themed]));
+  assert.equal(hits[0]!.entity.id, 'essay:on-listening');
+  assert.ok(hits[0]!.score > hits[1]!.score);
+  assert.equal(hits[0]!.breakdown.theme, 0.15);
+  const unthemed = retrieve([1, 0], 'where is focus discussed', indexOf([plain, themed]));
+  assert.ok(unthemed.every((h) => h.breakdown.theme === undefined));
 });
 
-test('no-leak: a routing hint carries WHERE and structurally cannot carry the text', () => {
+test('no-leak: project() crosses a private hit as WHERE and structurally cannot carry the text', () => {
   const note = makeNote();
-  const hint = toRoutingHint(note);
-  assert.deepEqual(hint, {
-    hintId: note.id,
-    label: note.label,
-    url: note.url,
-    locator: note.locator,
-  });
-  // The boundary, asserted: nothing on the hint contains the private prose.
-  assert.ok(!JSON.stringify(hint).includes('modulated'));
+  const index = indexOf([recordEntry(makeRecord(), [1, 0]), noteEntry(note, [1, 0])]);
+  const hits = retrieve([1, 0], 'q', index).map(project);
 
-  const evidence = assembleEvidence([makeRecord()], [note]);
+  const privateHit = hits.find((h) => h.raw === 'private')!;
+  assert.equal(privateHit.exposure, 'locator');
+  assert.equal(privateHit.locatorLabel, 'notebook, p. 12');
+  assert.equal(privateHit.entity.title, note.label);
+  assert.ok(!('text' in privateHit));
+  // The boundary, asserted: the private prose never travels. (The label may
+  // repeat the title — that is the author's per-note choice, linted at build.)
+  assert.ok(!JSON.stringify(privateHit).includes('modulated'));
+  // Private hits carry a coarse score and no breakdown (CONTRACT.md §4).
+  assert.equal(privateHit.breakdown, undefined);
+  assert.equal(privateHit.score, 1);
+
+  const publicHit = hits.find((h) => h.raw === 'public')!;
+  assert.equal(publicHit.exposure, 'text');
+  assert.ok(publicHit.exposure === 'text' && publicHit.text.includes('suspending the verdict'));
+  assert.equal(publicHit.breakdown?.cosine, 1);
+
+  const evidence = toAnswerEvidence(hits);
   assert.ok(!JSON.stringify(evidence.hints).includes('modulated'));
+  assert.deepEqual(evidence.hints, [
+    { hintId: 'note:harbor-lights-session#notebook-p-12', label: note.label, url: note.url, locator: 'notebook, p. 12' },
+  ]);
+  assert.deepEqual(evidence.gists, {}); // a locator hit has no gist to carry
+  assert.equal(evidence.records[0]!.id, 'essay:on-listening#whole');
+});
+
+test('no-leak: a semantic hit carries its gist beside the hints, never in the prompt, and search() skips none', () => {
+  const gist = assertSemanticProjection('A session note about changing the key of a bridge.', {
+    path: 't',
+    fragmentText: 'The bridge originally modulated up a whole step.',
+  });
+  const note = makeNote({ exposure: 'semantic' });
+  const file = indexFileFromLegacyEntries([recordEntry(makeRecord(), [1, 0]), noteEntry(note, [1, 0])]);
+  // The build attaches the projection and resolves again; do the same by hand.
+  const semantic = file.entries.find((e) => e.fragment.disclosure.raw === 'private')!;
+  semantic.fragment.projection = {
+    lint: 'passed',
+    gist,
+    source: 'generated',
+    review: 'unreviewed',
+    contentHash: 'h',
+  };
+  semantic.fragment.disclosure = { raw: 'private', exposure: 'semantic' };
+  const hits = search([1, 0], 'q', buildRetrievalIndex(file));
+  const hit = hits.find((h) => h.raw === 'private')!;
+  assert.equal(hit.exposure, 'semantic');
+  assert.ok(hit.exposure === 'semantic' && hit.gist === gist && hit.gistSource === 'generated');
+
+  const evidence = toAnswerEvidence(hits);
+  assert.equal(evidence.hints.length, 1);
+  assert.ok(!JSON.stringify(evidence.hints).includes('changing the key'));
+  assert.deepEqual(evidence.gists, { 'note:harbor-lights-session#notebook-p-12': gist });
+  // The prompt builder's signature takes records and hints: the gist has no way in.
+  const user = buildUserPrompt('how was the bridge written?', evidence.records, evidence.hints);
+  assert.ok(!user.includes('changing the key'));
+  assert.ok(!user.includes('modulated'));
+  // The template renders it after the mode is final, after the fixed sentence.
+  const cite = { kind: 'hint' as const, hintId: 'note:harbor-lights-session#notebook-p-12', url: note.url };
+  const answer = finalizeAnswer({ mode: 'related-material', answer: 'The note says it modulated.', citations: [cite] }, evidence);
+  assert.match(
+    answer.answer,
+    /^There is private material related to this: Harbor Lights — writing session \(notebook, p\. 12\)\. It can't be quoted here — the citation links to the public page it belongs to\. What Harbor Lights — writing session \(notebook, p\. 12\) is about, as a description the author authorized \(not a quotation\): A session note about changing the key of a bridge\.$/,
+  );
+  assert.ok(!answer.answer.includes('modulated'));
+
+  // A `none` fragment is in the private index and is never served: retrieve() sees it, search() does not.
+  const none = indexFileFromLegacyEntries([noteEntry(makeNote({ id: 'note:hidden', exposure: 'none' }), [1, 0])]);
+  assert.equal(none.entries[0]!.fragment.disclosure.exposure, 'none');
+  const index = buildRetrievalIndex(none);
+  assert.equal(retrieve([1, 0], 'q', index).length, 1);
+  assert.deepEqual(search([1, 0], 'q', index), []);
+  // Naming exposures explicitly still cannot ask for `none`.
+  assert.throws(() => search([1, 0], 'q', index, { filters: { exposure: ['none' as never] } }), /not a served exposure/);
 });
 
 test('prompt: renders records with bodies and hints without text', () => {
@@ -330,10 +467,11 @@ test('prompt: renders records with bodies and hints without text', () => {
   assert.ok(system.includes('Canon vs process'));
   assert.ok(system.includes('hints are NEVER evidence'));
 
-  const user = buildUserPrompt('why listen?', [makeRecord()], [toRoutingHint(makeNote())]);
+  const { hints } = toAnswerEvidence(retrieve([1, 0], 'q', indexOf([noteEntry(makeNote(), [1, 0])])).map(project));
+  const user = buildUserPrompt('why listen?', [makeRecord()], hints);
   assert.ok(user.includes('recordId: essay:on-listening'));
   assert.ok(user.includes('suspending the verdict')); // record body travels
-  assert.ok(user.includes('hintId: note:harbor-lights-session'));
+  assert.ok(user.includes('hintId: note:harbor-lights-session#notebook-p-12'));
   assert.ok(user.includes('notebook, p. 12'));
   assert.ok(!user.includes('modulated')); // private text cannot appear
 
@@ -480,8 +618,8 @@ test('answer: grounding rejects invented citations and mode/mix mismatches', () 
 
 test('public-safe: the related-material template points, never asserts', () => {
   const hints = [
-    toRoutingHint(makeNote()),
-    toRoutingHint(
+    hintOf(makeNote()),
+    hintOf(
       makeNote({ id: 'note:paper-crown-draft', label: 'Paper Crown — early draft', locator: 'notebook, p. 31' }),
     ),
   ];
@@ -599,27 +737,34 @@ test('store: index file round-trips; unversioned or malformed files fail fast', 
 
   // Pre-versioning shape (a bare array) and junk both get the rebuild message.
   writeFileSync(path, JSON.stringify(entries), 'utf8');
-  assert.throws(() => readIndexFile(path), /not schema version 3.*npm run index/);
+  assert.throws(() => readIndexFile(path), /not schema version 4.*npm run index/);
   writeFileSync(path, 'not json', 'utf8');
   assert.throws(() => readIndexFile(path), /not valid JSON/);
 
   // Versioned but structurally bad entries get the rebuild message too.
   writeFileSync(
     path,
-    JSON.stringify({ version: 3, entries: [{ sourceType: 'record', record: { id: 'x' }, model: 'm' }] }),
+    JSON.stringify({ version: 4, entities: [], entries: [{ fragment: { id: 'x' }, model: 'm' }] }),
     'utf8',
   );
   assert.throws(() => readIndexFile(path), /malformed entry.*npm run index/);
 
-  // A v2-shaped note smuggled under a v3 header (no title) fails the same way.
-  const [, v2Note] = entries;
-  const { title: _title, ...v2Shape } = (v2Note as Extract<IndexEntry, { sourceType: 'note' }>).note;
+  // A fragment claiming the unrepresentable cell (private + text) under a v4
+  // header fails the same way: the cell is checked at load, not trusted.
   writeFileSync(
     path,
-    JSON.stringify({ version: 3, entries: [{ ...v2Note, note: v2Shape }] }),
+    JSON.stringify({
+      version: 4,
+      entities: [{ id: 'note:x', type: 'note', title: 'x', url: 'https://example.com/x/', attribution: [], identifiers: [], disclosure: { raw: 'private', exposure: 'locator' } }],
+      entries: [{ model: 'm', dimensions: 1, vector: [1], contentHash: 'h', fragment: { id: 'note:x#n', entityId: 'note:x', locator: [{ scheme: 'note', value: 'p. 1' }], text: 'secret', disclosure: { raw: 'private', exposure: 'text' } } }],
+    }),
     'utf8',
   );
   assert.throws(() => readIndexFile(path), /malformed entry.*npm run index/);
+
+  // A v3 file is pointed at the migration, not at a paid rebuild.
+  writeFileSync(path, JSON.stringify({ version: 3, entries }), 'utf8');
+  assert.throws(() => readIndexFile(path), /schema version 3, not schema version 4.*migrate:index/);
 });
 
 test('store: assertHomogeneousIndex rejects mixed embedding specs', () => {
@@ -656,13 +801,87 @@ test('eval: gold set loads, substitutes the author, and only references real sou
   }
   const goldIds = gold.map((g) => g.id);
   assert.equal(new Set(goldIds).size, goldIds.length, 'gold ids must be unique');
+
+  // The canary list is the private wording the queries forbid, in one place,
+  // and every canary is absent from every public record.
+  const { canaries } = loadGoldFile('eval/gold.yaml', config.authorName);
+  assert.ok(canaries.length >= 4);
+  for (const r of buildCorpus(config)) {
+    for (const c of canaries) assert.ok(!new RegExp(c, 'i').test(embedText(r)), `canary /${c}/ appears in public record ${r.id}`);
+  }
+  const forbidden = new Set(gold.flatMap((g) => g.forbidAnswerPatterns ?? []));
+  for (const c of canaries) assert.ok(forbidden.has(c), `canary /${c}/ should also be a forbidAnswerPattern somewhere`);
+});
+
+test('eval: the canary sweep checks every served gist and each entity\'s gists together', () => {
+  const lint = (text: string, fragmentText: string) => assertSemanticProjection(text, { path: 't', fragmentText });
+  const projection = (gist: ReturnType<typeof lint>) => ({
+    lint: 'passed' as const,
+    gist,
+    source: 'generated' as const,
+    review: 'unreviewed' as const,
+    contentHash: 'h',
+  });
+  const entry = (id: string, entityId: string, exposure: 'semantic' | 'locator', gist?: ReturnType<typeof lint>) => ({
+    fragment: {
+      id,
+      entityId,
+      disclosure: { raw: 'private' as const, exposure },
+      ...(gist !== undefined ? { projection: projection(gist) } : {}),
+    },
+  });
+  const clean = lint('A note about a key change in a bridge.', 'The bridge originally modulated up a whole step.');
+  const leaky = lint('The ferry horn sounds as the keeper waits.', 'Some other private text entirely.');
+  const half1 = lint('A note on the lighthouse.', 'x');
+  const half2 = lint('Keeper of the light appears later.', 'y');
+  const unspaced = lint('署名の重みに気づく女性の場面。', 'z');
+
+  const index = {
+    entries: [
+      entry('note:a#1', 'note:a', 'semantic', clean),
+      entry('note:b#1', 'note:b', 'semantic', leaky),
+      entry('note:c#1', 'note:c', 'semantic', half1),
+      entry('note:c#2', 'note:c', 'semantic', half2),
+      entry('note:d#1', 'note:d', 'locator', leaky), // not served as a gist: resolved locator
+      entry('note:e#1', 'note:e', 'semantic', unspaced),
+    ],
+  };
+  const canaries = ['ferry horn', 'lighthouse\\.? keeper', '署名の重み'];
+  const sweep = sweepCanaries(index, canaries);
+  assert.equal(sweep.gists, 5);
+  assert.equal(sweep.pass, false);
+  // Issues name the canary by its index and the fragment or entity, never the
+  // pattern or the gist: `npm run eval` prints them and CI keeps the log.
+  assert.deepEqual(sweep.issues, [
+    "canaries[0] appears in the served gist of 'note:b#1'",
+    "canaries[2] appears in the served gist of 'note:e#1'",
+    "canaries[1] appears across the served gists of 'note:c' (composition)",
+  ]);
+  for (const issue of sweep.issues) {
+    assert.ok(!/ferry|lighthouse|署名/.test(issue), `issue echoes a canary: ${issue}`);
+  }
+  assert.deepEqual(sweepCanaries({ entries: [entry('note:a#1', 'note:a', 'semantic', clean)] }, canaries), {
+    pass: true,
+    issues: [],
+    gists: 1,
+  });
+  assert.equal(sweepCanaries(index, []).pass, true);
+
+  // loadGoldFile validates the list.
+  const dir = mkdtempSync(join(tmpdir(), 'ae-gold-'));
+  const good = join(dir, 'good.yaml');
+  writeFileSync(good, 'canaries: [one]\nqueries:\n  - id: a\n    query: q\n    expectAnswerMode: not-found\n', 'utf8');
+  assert.deepEqual(loadGoldFile(good).canaries, ['one']);
+  const bad = join(dir, 'bad.yaml');
+  writeFileSync(bad, 'canaries: ["("]\nqueries:\n  - id: a\n    query: q\n    expectAnswerMode: not-found\n', 'utf8');
+  assert.throws(() => loadGoldFile(bad), (err: unknown) => err instanceof Error && /canaries\[0\] is not a valid regex/.test(err.message) && !err.message.includes('('));
+  const shape = join(dir, 'shape.yaml');
+  writeFileSync(shape, 'canaries: nope\nqueries:\n  - id: a\n    query: q\n    expectAnswerMode: not-found\n', 'utf8');
+  assert.throws(() => loadGoldFile(shape), /'canaries' must be a list/);
 });
 
 test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
-  const hits = {
-    records: [{ record: makeRecord(), score: 0.5, semantic: 0.5 }],
-    notes: [{ note: makeNote(), score: 0.4, semantic: 0.4 }],
-  };
+  const hits = retrieve([1, 0], 'q', indexOf([recordEntry(makeRecord(), [1, 0]), noteEntry(makeNote(), [1, 0])]));
   const gold = {
     id: 'test',
     query: 'q',
@@ -720,7 +939,7 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
         citations: [{ kind: 'hint', hintId: 'note:harbor-lights-session', url: 'https://example.com' }],
       },
     ).issues[0]!,
-    /forbidden pattern/,
+    /matched forbidAnswerPatterns\[0\]/,
   );
   assert.match(
     judgeAnswer(
@@ -766,7 +985,7 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
       },
       routed,
     ).issues[0]!,
-    /did not match expected pattern/,
+    /did not match expectAnswerPatterns\[0\]/,
   );
 });
 
@@ -808,7 +1027,7 @@ test('eval: loadGold rejects invalid answer patterns at load time', () => {
 `,
       'utf8',
     );
-    assert.throws(() => loadGold(path), new RegExp(`${key} contains invalid regex`));
+    assert.throws(() => loadGold(path), new RegExp(`queries\\[0\\]\\.${key}\\[0\\] is not a valid regex`));
   }
 });
 

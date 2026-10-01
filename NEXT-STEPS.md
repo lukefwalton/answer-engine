@@ -8,10 +8,14 @@ levers an adopter might pull that trade quality for cost.
 Naming these is the point. The whole design rests on answerability: make the
 unauthored move structurally inexpressible where you can, and answer for the
 rest in the open. The boundary the implementation guarantees holds as shipped —
-private text cannot reach the prompt along the typed path, and every answer
+a private fragment's text cannot reach a model or a caller along the typed path
+(`project()` in `src/no-leak.ts`; `docs/CONTRACT.md` §4), and every answer
 either cites retrieved evidence or refuses. Everything in this file lives
 *beyond* that boundary. None of it has to be fixed for the implementation to do
-what it claims; these are the edges of the claim, written down.
+what it claims; these are the edges of the claim, written down. Since 3.0.0 the
+contract itself keeps the canonical list of what is owned rather than
+guaranteed (`docs/CONTRACT.md` §13); the entries below say how each is owned
+in this package.
 
 Two audiences:
 
@@ -37,36 +41,42 @@ failure mode first.
 These are places where the structure does not (or cannot) catch the unwanted
 move, so it is held by a softer guard and owned openly.
 
-### A1. Routing-hint metadata — the boundary is now structural; its edges named
-The type that crosses to the model (`RoutingHint` in `src/types.ts`) has no
-field for a note's body text, so the body cannot leak along that path
-(`src/no-leak.ts`). Two fields do travel — the **label** and the **locator**
-— and they used to be raw frontmatter guarded by a warning comment: a note
-with a sensitive title leaked through its own label, and nothing in the type
-stopped it.
+### A1. The strings a hit carries — linted, not typed; superseded by CONTRACT.md §6 and §13
+The object that crosses (`EvidenceHit`, produced only by `project()` in
+`src/no-leak.ts`) has no field for a private fragment's text, so the text
+cannot leak along that path. What does travel on a private entity is short and
+authored: the title, a version, creator and speaker names and roles, themes,
+the locator values and their rendered label, and, where the author released
+one, a gist. In 2.x two of those (the label and the locator) were typed
+`PublicSafe`; the brand erased at JSON, and a type shared by public and
+private entities cannot carry it anyway.
 
-- **Current posture:** structural, three layers deep. The traveling label is
-  an explicit `label:` frontmatter field, distinct from the private `title`
-  (which is embedded for retrieval and never travels) — a fork upgrading past
-  this change fails loudly until each note declares one, which is the point:
-  what travels is now an authored decision per note, not a default. Both
-  traveling fields are typed `PublicSafe`, whose only constructor is the
-  build-time lint (`assertPublicSafeField` in `src/public-safe.ts`): single
-  line, capped length, and no run of five consecutive words shared with the
-  note's private body — a field that quotes the note fails the build, not the
-  answer. The index schema versioned past the split (v3, `src/store.ts`), so
-  a stale artifact fails fast with the remedy.
-- **The residue, named:** the lint is a tripwire, not a classifier — a short
-  private phrase, or private meaning carried in public words, still passes
-  it. `url` (`about:`) travels unlinted as a declared public page. And the
-  brand erases at JSON boundaries: an index read from disk is trusted to have
-  been built through the lint, not re-checked. The gold canaries
-  (`eval/gold.yaml`) backstop all three at answer time.
-- **For a fork / contributor:** tune `PUBLIC_SAFE_NGRAM_WORDS` against your
-  corpus (5 is calibrated so bibliographic locators pass; see the constant's
-  comment), and if your private layer has a known sensitive vocabulary, add a
-  denylist check beside the n-gram tripwire — the lint is one function with
-  one call site, built to take it.
+- **Current posture:** linted wherever the text to lint against is present.
+  `assertPublicSafeMetadata` (`src/public-safe.ts`) runs the 2.x rule — one
+  line, 120 characters, no five-word run with the entity's private text
+  (characters, for a script without word spacing) — over every authored string
+  on a private entity at index build and at every load of a private index
+  (`validateIndex` in `src/store.ts`), so a hand edit to the artifact fails at
+  load with the field and the position of the run (never the run: the message
+  is printed). A gist passes `assertSemanticProjection`
+  (400 characters, the same run rule against the fragment and the whole
+  entity) and is served only when `isServableGist` says so. What travels is an
+  authored decision per note: the `label:` field, and now the `exposure:` it
+  asks for.
+- **The residue, named** (`docs/CONTRACT.md` §13): a private phrase shorter
+  than the window, private meaning carried in public words, paraphrase and
+  plot in a gist, a gist that describes more than the author intended, and the
+  composition of an entity's gists. Those are owned by the exposure policy,
+  the veto, optional review, and the canaries, which `npm run eval` now sweeps
+  over every served gist, not only the ones a query retrieves. `url` (`about:`)
+  travels unlinted as a declared public page. A served index carries no text
+  to lint against and is trusted to descend from a validated private one.
+- **For a fork / contributor:** tune `PUBLIC_SAFE_NGRAM_WORDS` and
+  `GIST_NGRAM_WORDS` against your corpus (5 is calibrated so bibliographic
+  locators pass; run a dry ingest at 4 and count the trips before choosing), and
+  if your private layer has a known sensitive vocabulary, add a denylist check
+  beside the n-gram tripwire — both lints share one matcher
+  (`privateTextMatcher`), built to take it.
 
 ### A2. Related-material confabulation — closed structurally; the residue moved
 In related-material mode the answer cites a routing hint, and a hint is real
@@ -86,14 +96,22 @@ only by a soft prompt instruction (route, don't restate).
   (`expectAnswerPatterns` on q07 and the extraction queries) so a regression
   cannot silently un-template the mode.
 - **What the closure is worth:** exactly the safety of the fields it renders.
-  The template's prose is label + locator — which is A1's seam. Closing A2
-  raised the stakes on closing A1.
+  The template's prose is label + locator, and, for a `semantic` hit, the gist
+  the author authorized — which is A1's seam. Closing A2 raised the stakes on
+  closing A1.
+- **Extended to gists (3.0.0):** a `semantic` hit's gist never enters the
+  prompt in any mode. `toAnswerEvidence` carries it beside the hints, not on
+  them (`RoutingHint` still has no prose field), and only the related-material
+  template renders it, after the mode is final. So the model never holds a
+  description of private material it could restate, in `supported` or
+  `partial` either; the gist a reader sees is the authorized one, verbatim.
 - **The residue, named:** `supported` mode still carries a hint citation under
   free prose (a record backs the prose; the hint adds where else to look), so
-  a model could still confabulate a note's contents *there*. That residue is
-  owned by gold canary patterns (q15 and the canary comment in
-  `eval/gold.yaml`), not by structure — templating supported-mode prose would
-  mean templating record-backed answers, which is the product.
+  a model could still confabulate a note's contents *there*, knowing only that
+  a moment exists and where. That residue is owned by gold canary patterns
+  (q15 and the canary comment in `eval/gold.yaml`), not by structure —
+  templating supported-mode prose would mean templating record-backed answers,
+  which is the product.
 
 ### A3. Forbidden-answer patterns are hand-written and partial
 The checks that catch a few specific bad outputs (for example, a raw URL where
@@ -163,23 +181,24 @@ the answer.
   corpus grows; treat every recall miss found in use as a new gold entry, not a
   one-off patch.
 
-### B3. The repository does not chunk; chunking is the first step when documents grow
-This repository indexes each document whole (`buildCorpus` in `src/corpus.ts`
-maps one markdown file to one record, one vector). Once a document is long
-enough that a single embedding dilutes its topical center, the standard move is
-to split it into overlapping windows so each vector keeps a tighter topical
-center; the README's "Where to take it" lists this as the first thing to take
-on, and the production deployment behind the project already does it on its
-transcription path.
+### B3. Fragments exist; the teaching corpus still indexes documents whole
+The index is fragments (`docs/CONTRACT.md` §12), and `src/ingest/fragment.ts`
+splits a long document on headings or page markers into pieces with structural
+locators (a chapter number, a page), stable per locator across rebuilds. The
+teaching adapters still produce one `whole` fragment per record and per note
+(`src/adapters/teaching.ts`): at this corpus size one vector per document is
+the simplest thing that works, and the demo's certified verdicts depend on it.
 
-- **Trade-off:** smaller windows sharpen retrieval precision and grow the index
-  by passage count; whole-document indexing, as here, keeps the index small and
-  lets a long document's topical center blur.
-- **Current posture:** unchunked, by design — whole-document indexing is the
-  simplest thing that works at this corpus size.
-- **For a fork / contributor:** add chunking when your documents are long, make
-  the window granularity configurable, and tune it against the gold suite for
-  your corpus; document the size you chose and why.
+- **Trade-off:** smaller fragments sharpen retrieval precision and grow the
+  index by passage count; whole-document fragments keep the index small and
+  let a long document's topical center blur.
+- **Current posture:** closed as a design question, open as a default. The
+  fragmenters are in the package; the shipped corpus does not use them; a
+  consumer with long documents does, through its own adapter.
+- **For a fork / contributor:** fragment when your documents are long, choose
+  `maxFragmentChars` against the gold suite for your corpus, keep a `whole`
+  fragment where entity-level citations must stay stable, and prune to one
+  fragment per entity before synthesis (README, "Where to take it").
 
 ### B4. Index homogeneity is maintained by hand
 The store asserts that every vector shares one model and dimensionality, and
@@ -282,18 +301,24 @@ precomputed and reused.
 
 ---
 
-## D. Production hardening (out of scope by design)
+## D. Production hardening (the consumer's, by design)
 
-The implementation is not a production framework, and says so. An adopter taking
-it to production has to add the parts deliberately left out. **None of these
-changes the answer contract** — the evidence boundary, the citation modes, and
-the refusal discipline hold regardless of what is wrapped around them.
+The package is a substrate, not a production framework, and says so
+(`docs/CONTRACT.md` §15). A consumer taking it to production adds the parts
+deliberately left out. **None of these changes the contract** — the disclosure
+boundary, the citation modes, and the refusal discipline hold regardless of
+what is wrapped around them — but one of them is load-bearing for it.
 
 - **D1. A service layer:** request handling, rate limiting, caching,
-  persistence, observability. The contract sits underneath all of it.
-- **D2. Transport and versioning at scale:** moving the index to stateless
-  serving instances, the cold-start cost that motivates C1, and versioning every
-  encoding so a code/data mismatch fails loudly instead of misreading bytes.
+  persistence, observability. The contract sits underneath all of it, and names
+  the rate limiter as part of its threat model (§10): a private hit's score is
+  coarse so that one query reveals little; the limiter is what bounds how many
+  queries a caller gets. A retrieval-only endpoint without one has not
+  implemented the contract.
+- **D2. Transport and versioning at scale:** moving the served index
+  (`toServedIndex`, validated at load) to stateless serving instances, the
+  cold-start cost that motivates C1, and versioning every encoding so a
+  code/data mismatch fails loudly instead of misreading bytes.
 
 ---
 

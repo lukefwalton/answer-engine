@@ -16,14 +16,16 @@ import { EVAL_USAGE, filterGoldQueries, parseQueryIdList } from '../eval-select.
 import {
   judgeAnswer,
   judgeRetrieval,
-  loadGold,
+  loadGoldFile,
   parseEvalReportJson,
   summarizeEvalReport,
+  sweepCanaries,
 } from '../evaluate.js';
 import type { EvalQueryResult } from '../evaluate.js';
-import { assembleEvidence } from '../no-leak.js';
-import { retrieve } from '../retrieve.js';
-import { assertHomogeneousIndex, readIndexFile } from '../store.js';
+import { toAnswerEvidence } from '../evidence.js';
+import { search } from '../no-leak.js';
+import { buildRetrievalIndex } from '../retrieve.js';
+import { readIndex } from '../store.js';
 
 const GOLD_PATH = resolve('eval/gold.yaml');
 const EVAL_REPORT_DIR = resolve('artifacts/eval');
@@ -111,7 +113,7 @@ function parseArgs(argv: string[]): EvalArgs {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const allGold = loadGold(GOLD_PATH, config.authorName);
+  const { queries: allGold, canaries } = loadGoldFile(GOLD_PATH, config.authorName);
 
   let fromReportIds: string[] | undefined;
   if (args.fromReport) {
@@ -162,21 +164,34 @@ async function main(): Promise<void> {
     );
   }
 
-  const index = readIndexFile();
-  if (index.length === 0) throw new Error('Index is empty. Run `npm run index` first.');
-  assertHomogeneousIndex(index);
+  const file = readIndex();
+  if (file.entries.length === 0) throw new Error('Index is empty. Run `npm run index` first.');
+  const index = buildRetrievalIndex(file);
+
+  // The canary sweep is keyless and runs first: every gist the index would
+  // serve, against every canary, whatever the queries retrieve (CONTRACT.md §11).
+  let sweepFailed = false;
+  if (canaries.length > 0) {
+    const sweep = sweepCanaries(file, canaries);
+    if (sweep.pass) {
+      console.log(`Canary sweep: ${sweep.gists} served gist(s) against ${canaries.length} canaries — clean`);
+    } else {
+      sweepFailed = true;
+      console.log(`Canary sweep: FAIL (${sweep.gists} served gist(s), ${sweep.issues.length} issue(s))`);
+      for (const issue of sweep.issues) console.log(`       - ${issue}`);
+    }
+  }
 
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is not set. Put it in .env or the environment.');
   }
   const client = new OpenAI();
 
-  const spec = index[0]!;
   const vectorById = new Map<string, number[]>();
   for (const batch of batchInputs(gold.map((g) => ({ id: g.id, text: g.query })))) {
     const results = await embedBatch(client, batch, {
-      model: spec.model,
-      dimensions: spec.dimensions,
+      model: index.model,
+      dimensions: index.dimensions,
     });
     for (const r of results) vectorById.set(r.id, r.vector);
   }
@@ -194,15 +209,15 @@ async function main(): Promise<void> {
     if (!vector) {
       throw new Error(`embedding missing for query '${g.id}'`);
     }
-    const hits = retrieve(vector, g.query, index);
+    // search() is the one served path (retrieve().map(project) behind the
+    // exposure filter): the eval judges what a consumer would be handed, so a
+    // `none` fragment is never retrieved here and never reaches project().
+    const hits = search(vector, g.query, index);
 
     const issues = [...judgeRetrieval(g, hits).issues];
     if (args.full) {
       try {
-        const evidence = assembleEvidence(
-          hits.records.map((h) => h.record),
-          hits.notes.map((h) => h.note),
-        );
+        const evidence = toAnswerEvidence(hits);
         const answer = await answerQuestion(client, g.query, evidence, config);
         issues.push(...judgeAnswer(g, answer).issues);
       } catch (err) {
@@ -237,10 +252,11 @@ async function main(): Promise<void> {
 
   console.log(
     `\n${report.passed}/${report.total} passed` +
-      (args.full ? ' (retrieval + answer)' : ' (retrieval only; use --full to check answers)'),
+      (args.full ? ' (retrieval + answer)' : ' (retrieval only; use --full to check answers)') +
+      (sweepFailed ? '; canary sweep FAILED' : ''),
   );
   console.log(`report: ${reportPath}`);
-  if (failures > 0) process.exitCode = 1;
+  if (failures > 0 || sweepFailed) process.exitCode = 1;
 }
 
 main().catch((err) => {

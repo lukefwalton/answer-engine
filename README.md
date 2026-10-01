@@ -24,88 +24,104 @@ box on a bundled example corpus (by "Person A" — a placeholder, not a
 person), it's small enough to read in one sitting, and the whole design is
 five ideas, laid out below in the order the data flows.
 
-**What this is:** an example repo you clone and run locally (`npm install`,
-`npm run …`). It is not published to npm, and it is deliberately not a
+**What this is:** the reference implementation of the archive contract
+([`docs/CONTRACT.md`](./docs/CONTRACT.md)), in two forms. Clone it and run the
+teaching commands (`npm install`, `npm run …`) on the bundled example corpus;
+or, from 3.0.0, import it (`@lukefwalton/answer-engine`) as the substrate
+under your own consumer: a question-answering product, or a retrieval-only
+endpoint whose caller brings its own model. It is deliberately not a
 framework, hosted app, chatbot UI, or vector-database starter. It is the
-smallest useful version of the answer contract: what evidence may enter the
-prompt, what must stay out, how citations are grounded, and when the system
-must decline.
+smallest useful version of the answer contract: what may travel from each
+piece of an archive, what must stay behind, how citations are grounded, and
+when the system must decline.
 
 **Example content:** everything under `example-content/` is synthetic
 fiction, including the first-person notebook entries — written to show the
 private-layer boundary, not real notes.
 
-## 1. Public records are quotable; private text is not
+## 1. Every fragment carries a disclosure policy
 
-The corpus has two layers, and the distinction drives everything downstream
-(`src/corpus.ts`, `src/types.ts`):
+The corpus is **entities** (a page, a song, a book, an episode) and
+**fragments**, the retrievable pieces of one (a whole page, a chapter, a window
+of a transcript). Each entity declares two things (`src/contract.ts`,
+[`docs/CONTRACT.md`](./docs/CONTRACT.md) §3): which **layer** its text is in,
+`raw: public | private`, and how much of a fragment may **travel**,
+`exposure: text | semantic | locator | none`. The cell `private + text` has no
+member in the type, so it cannot be written down.
 
-- **Records** are published pages — each markdown file becomes a flat,
-  citable record: title, canonical URL, summary, curated themes, full body.
-  The body travels all the way to the model, because you already published it.
-- **Private notes** are material you want *searchable but never quotable* —
-  here, the songwriter's notebook in `example-content/notebook/`. Each note
-  declares the public page it routes to (`about`), where the moment lives
-  (`locator`), and a public-safe display name (`label`) — its `title` and
-  text stay private, embedded so retrieval can find the moment but never
-  shown to the model.
+- **Public text** travels whole: title, canonical URL, summary, curated
+  themes, full body. You already published it.
+- **Private material** is searchable but never quotable. A fragment may travel
+  as a **locator** (where the moment is: "notebook, p. 12", "12:30–14:05"), as
+  a **gist** (`semantic`: a one-paragraph description the system drafts at
+  build and the author authorizes, linted so it cannot quote), or not at all
+  (`none`: indexed, never served).
+
+In the bundled example, the essays and lyrics are public and the songwriter's
+notebook in `example-content/notebook/` is the private layer. Each note
+declares the public page it routes to (`about`), where the moment lives
+(`locator`), a linted display name (`label`), and, optionally, the `exposure`
+it wants; its `title` and body stay private, embedded so retrieval can find the
+moment. The teaching adapters (`src/adapters/teaching.ts`) turn those files
+into entities and fragments; a consumer writes its own.
 
 > In production ([Ask the Archive](https://lukefwalton.com/ask/)), published
-> podcast passages are **records** — retrieved and cited — while unpublished
-> transcript text is embedded for search but reaches the model only as a
-> **routing hint**: where to listen, never what was said. This repo shows the
-> same boundary with hand-written notebook entries instead of a transcription
-> pipeline.
+> podcast passages are public fragments while unpublished transcript text is
+> private: embedded for search, served as where to listen, never what was
+> said. The same contract covers a book the archive holds but may not quote:
+> each chapter travels as a gist its author released.
 
-## 2. Retrieval returns both; assembly strips prose
+## 2. Retrieval returns hits; `project()` is the one crossing
 
-Both layers share one embedding space in one versioned index file
-(`artifacts/index.json` — gitignored, because vectors derived from private
-text are private). Retrieval (`src/retrieve.ts`) scores everything with
-brute-force cosine plus two conservative boosts: naming a work's title
-(0.30) and using a curated theme verbatim (0.15) — metadata you maintain
-should outrank raw similarity. Anything under a score floor is dropped. Weak
-matches don't get to masquerade as evidence; an empty result is where "I
-don't know" begins, before any model is involved.
+Both layers share one embedding space in one versioned index
+(`artifacts/index.json`, schema 4 — gitignored, because vectors derived from
+private text are private). Retrieval (`src/retrieve.ts`) applies filters first
+(type, date, creator, speaker, exposure, layer), scores every fragment by
+brute-force cosine, adds boosts through a plugin seam (`src/boosts.ts`: an
+exact title match, a curated theme, recency, disclosure; the default set is
+the two conservative 2.x boosts, 0.30 and 0.15, on public fragments), drops
+anything under a score floor, and caps per layer. Weak matches don't get to
+masquerade as evidence; an empty result is where "I don't know" begins, before
+any model is involved.
 
-The result keeps records and notes in **two separate lists**, because what
-happens next is different for each:
+Retrieval returns `ScoredHit`s, which hold the fragment and never leave the
+process. `project()` in `src/no-leak.ts` is the one place a hit crosses toward
+anything a model or a caller may see, and `search()` is `retrieve().map(project)`:
 
 ```
-                 ┌── records ────────────────────────────► quotable, citable
-corpus ─► index ─┤                                         (body travels)
-                 └── private notes ──► retrieval finds
-                     the moment        │
-                                       ▼
-                              assembleEvidence()           src/no-leak.ts
-                                       │  strips the text
-                                       ▼
-                         RoutingHint { hintId, label,
-                                       url, locator }      ◄─ no field for prose
-                                       │
-                     AnswerEvidence = { records, hints } ──► the model
+corpus ─► ingest ─► index ─► retrieve() ─► ScoredHit[] ─► project() ─► EvidenceHit[]
+                                                                             │
+  exposure: text     ──► { text, summary, provenance }                       ├─► constrained synthesis: cite or refuse
+  exposure: semantic ──► { gist (lint-passed), provenance }                  │   (src/answer.ts, src/prompt.ts, npm run ask)
+  exposure: locator  ──► { provenance only }                                 └─► retrieval only: the caller's model thinks
+  exposure: none     ──► never served                                            (a consumer's HTTP or MCP endpoint)
 ```
 
-`src/no-leak.ts` is small enough to audit by eye: the only thing
-`toRoutingHint` does is drop the note's text. `RoutingHint` has **no field
-for that text**, so there is no path by which private prose can reach the
-model. The boundary is the type's *shape*, not a guard somebody has to
-remember to write.
+`EvidenceHit` is a union on `exposure`: the `locator` variant has **no field
+for text**, the `semantic` variant carries only a gist the lint passed, and
+`text` is unreachable for a private fragment because the policy type has no
+such cell. Every variant carries provenance (creators, date, version, URL,
+identifiers, a locator and its rendered label), and a private hit's score is
+rounded with no breakdown. The short authored strings a hit does carry (a
+title, a locator label, a name) are not typed; they are linted against the
+private text at build and again at every load of a private index
+(`assertPublicSafeMetadata` in `src/public-safe.ts`). The bound on the whole
+claim is stated in [`docs/CONTRACT.md`](./docs/CONTRACT.md) §4.
 
 ## 3. The model only sees AnswerEvidence
 
 One Responses API call (`src/answer.ts`), with the policy versioned in code
-(`src/prompt.ts`). Records render with their full bodies. Hints render as
-label, locator, and URL — `buildUserPrompt` couldn't leak a hint's text if it
-wanted to, because the field doesn't exist. **What does travel is the label
-and the locator, and both are typed `PublicSafe`:** the label comes from an
-explicit `label:` frontmatter field (the private `title` never travels), and
-the only way to construct the type is the build-time lint
-(`assertPublicSafeField` in `src/public-safe.ts`), which rejects a traveling
-field that quotes the note's own body. The lint is a tripwire, not a
-classifier — a short private phrase still passes it — so write labels and
-locators like captions; what the lint can and can't catch is owned in
-[`NEXT-STEPS.md`](./NEXT-STEPS.md) A1.
+(`src/prompt.ts`). `toAnswerEvidence` (`src/evidence.ts`) turns hits into what
+the in-package consumer may show the model: `text` hits render with their full
+bodies; `semantic` and `locator` hits become hints (label, locator, URL), and
+`RoutingHint` has **no field for text or for a gist**, so `buildUserPrompt`
+couldn't leak either if it wanted to. A gist travels beside the hints, not in
+them, and only the related-material template renders it, after the mode is
+final: the model never holds a description of private material it could
+restate. The lint behind the label, the locator, and the gist is a tripwire,
+not a classifier — a short private phrase still passes it — so write labels
+and locators like captions; what the lint can and can't catch is owned in
+[`NEXT-STEPS.md`](./NEXT-STEPS.md) A1 and [`docs/CONTRACT.md`](./docs/CONTRACT.md) §13.
 The model is told what a hint *is*: the location of a relevant private
 moment, to be routed to, never restated. And if nothing cleared the score
 floor, the engine returns `not-found` without making the call at all —
@@ -137,10 +153,12 @@ an error, not a footnote.
 One mode gets a fourth layer. A `related-material` answer's prose is not the
 model's: after grounding, the engine replaces it with a fixed sentence
 rendered from the cited hints' label and locator
-(`renderRelatedMaterialAnswer` in `src/public-safe.ts`). A hint citation is
-provenance without backing — the hint carries no text — so free prose there
-was the one place a confabulated "summary" of private material could pass
-every gate. Now the mode can point, never assert content.
+(`renderRelatedMaterialAnswer` in `src/public-safe.ts`), followed, for a hint
+whose fragment is exposed as `semantic`, by the gist the author authorized,
+marked as a description and not a quotation. A hint citation is provenance
+without backing — the hint carries no text — so free prose there was the one
+place a confabulated "summary" of private material could pass every gate. Now
+the mode can point, and say only what the author released.
 
 One UI lesson: **retrieved is not cited**. Retrieved neighbors are
 candidates; final citations are evidence. If you build a web UI around this,
@@ -153,9 +171,13 @@ the engine declined to use.
 
 `eval/gold.yaml` is a fixed set of questions with required behavior —
 including questions the engine must refuse, and one that must route to the
-notebook without quoting it. `npm run eval` checks retrieval (one cheap
-batched embedding call); `-- --full` runs the answer engine and checks modes.
-**Prefer `--ids` or `--from-report` for `--full`** — see [`eval/README.md`](./eval/README.md).
+notebook without quoting it — plus a `canaries` list: private wording that
+must never appear in output. `npm run eval` sweeps the canaries over every
+gist the index would serve (keyless, before any API call), then checks
+retrieval (one cheap batched embedding call); `-- --full` runs the answer
+engine and checks modes. **Prefer `--ids` or `--from-report` for `--full`** —
+see [`eval/README.md`](./eval/README.md). An exposure change on an entity is
+gated like a scoring change: by the suite, never by intuition.
 
 The rule that makes the eval worth having: **when a query fails, fix the
 corpus, the scoring, or the prompt — never special-case the question.** We
@@ -237,8 +259,12 @@ get `temperature: 0`).
    `locator` ARE public surface, so write them like captions, not like the
    note itself. A build-time lint rejects a label or locator that quotes the
    note's body — repeating the title as the label is fine *when the title is
-   safe to publish*, and declaring that per note is the point. No private
-   layer? Remove `privateNotesDir` from the config and the engine runs
+   safe to publish*, and declaring that per note is the point. A note may also
+   set `exposure: semantic` to have `npm run index` draft a one-paragraph gist
+   of it that you then authorize, edit, or veto in `artifacts/projections.json`
+   (the gist is what travels; the text never does), or `exposure: none` to
+   index it without ever serving it — see `docs/CONTRACT.md` §3 and §5. No
+   private layer? Remove `privateNotesDir` from the config and the engine runs
    public-only.
 4. Replace `example-content/` with your corpus and rerun `npm run index`.
 5. Rewrite `eval/gold.yaml` for your corpus — keep the refusals.
@@ -246,31 +272,44 @@ get `temperature: 0`).
 ## Commands
 
 ```
-npm run index       # build/refresh artifacts/index.json (only embeds changes)
-npm run ask         # ask one question, get a cited answer
-npm run eval        # gold set, retrieval checks (-- --full for answers; prefer --ids / --from-report)
-npm test            # offline, deterministic engine tests — no API key
-npm run typecheck   # tsc --noEmit
+npm run index          # build/refresh artifacts/index.json and artifacts/projections.json (embeds and drafts only what changed)
+npm run migrate:index  # schema 3 → 4 for an index file, in place, keyless
+npm run ask            # ask one question, get a cited answer
+npm run eval           # canary sweep (keyless), then the gold set's retrieval checks (-- --full for answers; prefer --ids / --from-report)
+npm run build          # compile the package to dist/ (what npm publish ships)
+npm run test:dist      # build, then import the package by name and smoke it
+npm test               # offline, deterministic engine tests — no API key
+npm run typecheck      # tsc --noEmit
 ```
 
 ## Where to take it
 
-In the order we'd add them:
+[`docs/CONTRACT.md`](./docs/CONTRACT.md) is the design of record for 3.0.0, and
+this package is its reference implementation: the contract types, the
+crossing, the lints, policy resolution, fragmenters, the gist drafter and the
+author's projections file, retrieval with plugin seams, the private and served
+index artifacts, and the eval harness with its canary sweep. What a consumer
+adds, in the order we'd add it:
 
-- **Chunking** — split long documents into overlapping windows so retrieval
-  points at passages, not whole files.
-- **More retrieval signals** — recency (for "what do you think *now*"),
-  author aliases, per-collection weights.
-- **A document-frequency cap on the theme boost** — at four records a
-  verbatim theme match is signal; on a large corpus, a theme that appears on
-  half the records boosts nothing and should be discounted.
+- **Your corpus as entities and fragments** — an adapter from your shapes
+  (`fromArchiveRecord` and `fromPrivateNote` are the teaching ones);
+  `fragmentByHeadings` and `fragmentByPageMarkers` split a long document so
+  retrieval points at passages, not whole files, with locators that are
+  structural (a chapter number, a page) rather than authored prose.
+- **Your boosts as plugins** — author aliases, guest speech, distinctive query
+  n-grams, a cap on hub pages. `BoostPlugin` and `PostRank` are the seams;
+  `ALL_BUILTIN_PLUGINS` is the full built-in set (recency for "what do you
+  think *now*", disclosure, the theme boost with its document-frequency cap).
 - **Evidence pruning before synthesis** — on a large corpus, wide top-k
-  surfaces correlated neighbors instead of distinct sources; keep one record
-  per cluster, plus a single corroborator when the winner leads by a margin.
+  surfaces correlated neighbors instead of distinct sources; keep one fragment
+  per entity, plus a single corroborator when the winner leads by a margin.
   This shapes what synthesis *sees*, not what the gate certifies — retrieved
   is still not cited.
-- **An HTTP handler** around `retrieve` + `answerQuestion`, with a rate
-  limit, query cap, and cache.
+- **An HTTP handler** around `search()`, with a rate limit (load-bearing for
+  confidentiality: coarse scores bound what one query reveals, the limiter
+  bounds how many queries), a query cap, and a cache; a stateless MCP tool
+  over the same handler. The wire shape is `SearchResponse` in
+  `src/contract.ts`.
 - **SQLite or pgvector** when the archive outgrows in-memory cosine — the
   shapes don't change.
 
@@ -295,13 +334,14 @@ engine to keep its promises. Each entry is written to be pulled as a ticket.
 
 ## What stays out
 
-A running deployment grows layers this engine deliberately omits:
-deterministic product routes (help, usage, or corpus-count answers that never
-call a model), a domain-specific eval guard taxonomy, an ingestion or
-transcription pipeline, and the site's own config. Those belong to the site
-layer (for "Ask the Archive," the `ask-the-archive/` adapter), not the
-engine — what this repo carries is the boundary and the answer contract, not
-feature parity (`.github/STANDARDS.md` §3, "What Matters Less"). One line
+A running deployment grows layers this engine deliberately omits: an HTTP
+layer and the MCP transport, deterministic product routes (help, usage, or
+corpus-count answers that never call a model), a domain-specific eval guard
+taxonomy, a transcription pipeline, site-specific boosts, and the site's own
+config. Those belong to the consumer (for "Ask the Archive," the
+`ask-the-archive/` adapter), not the engine — what this repo carries is the
+contract, the boundary, and the eval harness, not feature parity
+(`.github/STANDARDS.md` §3, "What Matters Less"; `docs/CONTRACT.md` §15). One line
 worth holding if you add a deterministic route downstream: it may shortcut
 *delivery*, but it must never be how a gold query passes. A route that flips
 an eval outcome is special-casing the question wearing a hat — the same thing
@@ -337,13 +377,21 @@ To pin a specific archived snapshot, pick that release's version DOI on the
 [Zenodo versions page](https://zenodo.org/records/20676773) — no README update
 required when a new release lands.
 
-**Cutting a release:** on `main`, run **Actions → release** (patch/minor/major).
+**Cutting a release:** on `main`, run **Actions → release**
+(patch/minor/major, or `premajor` to start a pre-release line such as
+`3.0.0-alpha.1` and `prerelease` to continue it; patch/minor/major on a
+pre-release finalize it — [`scripts/next-version.mjs`](./scripts/next-version.mjs)).
 Checked-in metadata must match the latest `v*` tag on the remote (`v2.1.0`
-today — the tag already exists). The workflow queues concurrent runs, bumps
-semver via [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
-pushes `main` and the new tag atomically, then creates the GitHub release
-Zenodo archives. `CITATION.cff` and `.zenodo.json` both use the concept DOI for
-citation; Zenodo assigns a version DOI per release on its own.
+today — the tag already exists). The workflow queues concurrent runs, builds
+and smoke-imports the package, bumps semver via
+[`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
+pushes `main` and the new tag atomically, creates the GitHub release Zenodo
+archives (pre-releases are marked as such), then publishes
+`@lukefwalton/answer-engine` to npm with provenance (pre-releases under the
+`next` dist-tag). Publishing authenticates through npm trusted publishing or an
+`NPM_TOKEN` secret; the workflow file says how to set up either. `CITATION.cff`
+and `.zenodo.json` both use the concept DOI for citation; Zenodo assigns a
+version DOI per release on its own.
 If the workflow pushes refs but GitHub release creation fails, create the release
 manually from the existing tag in the GitHub UI — **do not re-run** this workflow:
 a rerun would bump semver again (e.g. skip `v1.4.0` and cut `v1.4.1`) because

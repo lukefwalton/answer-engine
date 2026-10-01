@@ -22,13 +22,20 @@ keywords:
   - answerability
   - answer engine
   - retrieval-augmented generation
+  - retrieval contract
+  - disclosure policy
+  - provenance
   - citation grounding
   - refusal
   - evaluation
 abstract: >
-  A small answer engine that keeps the authorial frame outside the model:
-  sources are bounded, private text cannot leak into the prompt, citations
-  are grounded against retrieved evidence, and refusals are tested.
+  A retrieval substrate for a body of work its author owns. Every retrievable
+  fragment carries a disclosure policy (public or private; text, gist, locator,
+  or nothing), every hit carries provenance, and the only object a consumer
+  may hand to a model or a caller is a hit whose type cannot hold more than
+  that policy allows. Gists are drafted by the system and authorized by the
+  author. Ships a teaching-sized synthesis consumer that cites or refuses, and
+  an evaluation harness whose gold suite and canary sweep gate every change.
 preferred-citation:
   type: software
   authors:

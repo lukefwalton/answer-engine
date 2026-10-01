@@ -1,5 +1,8 @@
-# Generated index (records + embedding vectors). Rebuild with `npm run index`.
+# Generated index and projections (private material). Rebuild with `npm run index`.
 artifacts/
+
+# Build output (`npm run build`); published to npm, never committed.
+dist/
 
 # Dependencies
 node_modules/
