@@ -798,9 +798,11 @@ index is the same shape after `toServedIndex`.
 Validation at load checks, on every index: every entity and every entry is
 well formed down to its nested items (attribution, identifiers, locators,
 projection, policy) and its vector (exactly `dimensions` finite numbers), and a
-failure names the field, never a value; every fragment's entity resolves;
-`fragment.disclosure.raw` equals its entity's `raw`; the disclosure is a legal
-cell; a `semantic` fragment satisfies `isServableGist`. On a private index it
+failure names the field, never a value; every entity and every fragment id is
+listed once; every fragment's entity resolves; every entity has at least one
+fragment; `fragment.disclosure.raw` equals its entity's `raw`; the disclosure
+is a legal cell; a `semantic` fragment satisfies `isServableGist`. On a private
+index it
 also re-earns, against the text it still holds, the two verdicts a served hit
 relies on rather than reading them from the file: the section 6 metadata lint
 runs over every private entity against that entity's text, heading exemption

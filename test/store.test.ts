@@ -227,6 +227,16 @@ test('store: validateIndex enforces the §12 invariants on a private index', () 
   const twice = privateBook();
   twice.entities.push(twice.entities[0]!);
   assert.throws(() => validateIndex(twice), /lists entity 'book:example' twice/);
+
+  // An entity with no fragment is a hand edit: it would vanish at toServedIndex instead of failing.
+  const orphan = privateBook();
+  orphan.entries = orphan.entries.filter((e) => e.fragment.entityId !== 'book:ghost');
+  assert.throws(() => validateIndex(orphan), /entity 'book:ghost' has no fragment/);
+
+  // Fragment ids key the projections file, vector reuse, and citations: listed once.
+  const twiceFragment = privateBook();
+  twiceFragment.entries.push({ ...twiceFragment.entries[1]!, vector: [9, 9] });
+  assert.throws(() => validateIndex(twiceFragment), /lists fragment 'book:example#p2' twice/);
 });
 
 /** Parse-and-poke: the file as JSON would hand it back, with one field broken. */
@@ -368,6 +378,9 @@ test('store: toServedIndex strips what the policy does not release, and the vali
   const badGist = JSON.parse(json) as ServedIndexLike;
   (badGist.entries[0]!.fragment.projection as Record<string, unknown>).gist = 3;
   assert.throws(() => validateServedIndex(badGist), /'projection'\.gist must be a string/);
+  const twiceFragment = JSON.parse(json) as ServedIndexLike;
+  twiceFragment.entries.push(twiceFragment.entries[1]!);
+  assert.throws(() => validateServedIndex(twiceFragment), /lists fragment 'book:example#p2' twice/);
 });
 
 interface ServedIndexLike {

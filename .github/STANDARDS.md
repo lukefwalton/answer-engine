@@ -43,7 +43,7 @@ The substrate owns the contract types, the projection boundary and its lint, pol
 Fail fast and name the problem and the remedy. Silent fallbacks hide bugs.
 
 - **Malformed corpus, index, projections file, or answer JSON → clear throw, not swallow.**
-- **A private index that would be refused at load is refused at write**: a dangling entity, a `semantic` fragment without a servable gist, an authored string that quotes the private text.
+- **A private index that would be refused at load is refused at write**: a fragment whose entity is missing, an entity with no fragment, an entity or fragment id listed twice, a `semantic` fragment without a servable gist, an authored string that quotes the private text, a gist that quotes the text it stands in for.
 - **Empty evidence → not-found without calling the model.**
 - **Validator/repair/grounding rejections stay explicit errors, not "best effort" answers.**
 - **Logging: minimal is fine. No PII, no API keys, no private text or gists in logs.**

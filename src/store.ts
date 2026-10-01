@@ -300,13 +300,23 @@ function checkEntities(file: Record<string, unknown>, path: string): Map<string,
   return entities;
 }
 
-/** One entry's fragment, well formed, under an entity the file lists and in that entity's layer. */
-function checkEntry(raw: unknown, served: boolean, entities: ReadonlyMap<string, Entity>, path: string): Fragment {
+/** One entry's fragment: well formed, listed once, under an entity the file
+ *  lists and in that entity's layer. Fragment ids key the projections file,
+ *  vector reuse, and citations, so a duplicate is refused here. */
+function checkEntry(
+  raw: unknown,
+  served: boolean,
+  entities: ReadonlyMap<string, Entity>,
+  seen: Set<string>,
+  path: string,
+): Fragment {
   const problem = entryProblem(raw, served);
   if (problem !== null) {
     throw new Error(`index at ${path} has a malformed entry${fragmentIdOf(raw)}: ${problem}. ${REBUILD}`);
   }
   const fragment = (raw as { fragment: Fragment }).fragment;
+  if (seen.has(fragment.id)) throw new Error(`index at ${path} lists fragment '${fragment.id}' twice. ${REBUILD}`);
+  seen.add(fragment.id);
   const entity = entities.get(fragment.entityId);
   if (!entity) {
     throw new Error(`index at ${path}: fragment '${fragment.id}' names unknown entity '${fragment.entityId}'. ${REBUILD}`);
@@ -323,8 +333,9 @@ function checkEntry(raw: unknown, served: boolean, entities: ReadonlyMap<string,
 /**
  * Validate a parsed private index (CONTRACT.md §12): every entity and every
  * entry well formed down to its nested items and vector elements; every
- * entity unique; every fragment's entity resolves and shares its `raw`; the
- * cell is legal; a `semantic` fragment satisfies isServableGist. Then, because
+ * entity and every fragment id listed once; every fragment's entity resolves
+ * and shares its `raw`; every entity has at least one fragment; the cell is
+ * legal; a `semantic` fragment satisfies isServableGist. Then, because
  * the private index is the one artifact that still holds the text, the two
  * verdicts a served hit relies on are re-earned against it rather than read
  * from the file: every authored string a hit on a private entity carries
@@ -338,8 +349,9 @@ export function validateIndex(parsed: unknown, path = 'index'): IndexFile {
   const file = checkVersion(parsed, path);
   const entities = checkEntities(file, path);
   const fragmentsByEntity = new Map<string, Fragment[]>();
+  const seen = new Set<string>();
   for (const raw of file.entries as unknown[]) {
-    const fragment = checkEntry(raw, false, entities, path);
+    const fragment = checkEntry(raw, false, entities, seen, path);
     const entity = entities.get(fragment.entityId)!;
     if (fragment.disclosure.exposure === 'semantic' && !isServableGist(fragment, entity)) {
       throw new Error(
@@ -351,7 +363,12 @@ export function validateIndex(parsed: unknown, path = 'index'): IndexFile {
     list.push(fragment);
   }
   for (const entity of entities.values()) {
-    const fragments = fragmentsByEntity.get(entity.id) ?? [];
+    const fragments = fragmentsByEntity.get(entity.id);
+    if (!fragments) {
+      // Every build writes an entity with its fragments; one without any is a
+      // hand edit, and it would vanish at toServedIndex instead of failing here.
+      throw new Error(`index at ${path}: entity '${entity.id}' has no fragment. ${REBUILD}`);
+    }
     if (entity.disclosure.raw === 'private') {
       assertPublicSafeMetadata(entity, fragments, { path: `index at ${path}` });
     }
@@ -392,9 +409,10 @@ export function validateServedIndex(parsed: unknown, path = 'served index'): Ser
     if ('policy' in e) throw new Error(`index at ${path}: entity '${e.id}' still carries policy. ${REBUILD}`);
   }
   const servedEntities = new Set<string>();
+  const seen = new Set<string>();
   for (const raw of file.entries as unknown[]) {
     if (isRecord(raw) && 'contentHash' in raw) throw new Error(`index at ${path} still carries contentHash. ${REBUILD}`);
-    const f = checkEntry(raw, true, entities, path);
+    const f = checkEntry(raw, true, entities, seen, path);
     const exposure = f.disclosure.exposure;
     if (exposure === 'none') throw new Error(`index at ${path}: fragment '${f.id}' has exposure 'none'. ${REBUILD}`);
     if (exposure !== 'text' && (f.text !== '' || (f.summary !== undefined && f.summary !== ''))) {

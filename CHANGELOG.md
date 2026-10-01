@@ -145,7 +145,8 @@ workflow and archived on Zenodo under the concept DOI
   takes them as options. `validateIndex` and `validateServedIndex` check nested
   items (attribution, identifiers, locators, projection, policy) and every
   vector element (exactly `dimensions` finite numbers), and name the field in
-  the message, never a value. `projectionContentHash` moves to
+  the message, never a value; both refuse an entity with no fragment and a
+  fragment id listed twice. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed
