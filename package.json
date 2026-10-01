@@ -38,6 +38,10 @@
       "types": "./dist/no-leak.d.ts",
       "default": "./dist/no-leak.js"
     },
+    "./wire": {
+      "types": "./dist/wire.d.ts",
+      "default": "./dist/wire.js"
+    },
     "./store": {
       "types": "./dist/store.d.ts",
       "default": "./dist/store.js"

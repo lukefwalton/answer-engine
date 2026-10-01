@@ -8,6 +8,7 @@ export type * from './contract.js';
 export type * from './types.js';
 
 export * from './no-leak.js';
+export * from './wire.js';
 export * from './retrieve.js';
 export * from './boosts.js';
 export * from './store.js';
