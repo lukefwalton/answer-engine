@@ -207,14 +207,16 @@ export function loadGoldFile(path: string, author = ''): GoldFile {
     if (!Array.isArray(parsed.canaries) || parsed.canaries.some((c) => typeof c !== 'string' || !c.trim())) {
       throw new Error(`${path}: 'canaries' must be a list of non-empty regex strings`);
     }
-    for (const pattern of parsed.canaries as string[]) {
+    // Canaries are private wording. Every message about one names its index in
+    // the gold file, never the pattern (.github/STANDARDS.md §4).
+    (parsed.canaries as string[]).forEach((pattern, i) => {
       try {
         new RegExp(pattern, 'i');
       } catch {
-        throw new Error(`${path}: canaries contains invalid regex /${pattern}/`);
+        throw new Error(`${path}: canaries[${i}] is not a valid regex`);
       }
       canaries.push(pattern);
-    }
+    });
   }
   const queries = parsed.queries.map((q, i): GoldQuery => {
     const item = q as Partial<GoldQuery>;
@@ -245,13 +247,13 @@ export function loadGoldFile(path: string, author = ''): GoldFile {
       if (!Array.isArray(patterns) || patterns.some((p) => typeof p !== 'string')) {
         throw new Error(`${path}: queries[${i}].${key} must be a list of regex strings`);
       }
-      for (const pattern of patterns) {
+      patterns.forEach((pattern, j) => {
         try {
           new RegExp(pattern, 'i');
         } catch {
-          throw new Error(`${path}: queries[${i}].${key} contains invalid regex /${pattern}/`);
+          throw new Error(`${path}: queries[${i}].${key}[${j}] is not a valid regex`);
         }
-      }
+      });
     }
     return item as GoldQuery;
   });
@@ -285,11 +287,16 @@ export interface CanarySweepResult extends JudgeResult {
  * because a retrieval-only consumer can surface any of them; and, per entity,
  * against the concatenation of its gists, so a phrase that straddles two gists
  * is at least watched. Keyless; runs before the embedding call in `npm run eval`.
+ *
+ * An issue names the canary by its index in the gold file's `canaries` list
+ * and the fragment or entity it tripped on, never the pattern or the gist:
+ * the issues are printed by `npm run eval` and land in CI logs, and a canary
+ * is private wording by definition.
  */
 export function sweepCanaries(index: { entries: readonly SweepableEntry[] }, canaries: readonly string[]): CanarySweepResult {
-  const patterns = canaries.map((c) => ({ source: c, regex: new RegExp(c, 'i') }));
+  const patterns = canaries.map((c, i) => ({ i, regex: new RegExp(c, 'i') }));
   const issues: string[] = [];
-  const perEntity = new Map<string, { gists: string[]; tripped: Set<string> }>();
+  const perEntity = new Map<string, { gists: string[]; tripped: Set<number> }>();
   let gists = 0;
   for (const { fragment } of index.entries) {
     const p = fragment.projection;
@@ -298,19 +305,19 @@ export function sweepCanaries(index: { entries: readonly SweepableEntry[] }, can
     let entry = perEntity.get(fragment.entityId);
     if (!entry) perEntity.set(fragment.entityId, (entry = { gists: [], tripped: new Set() }));
     entry.gists.push(p.gist);
-    for (const { source, regex } of patterns) {
+    for (const { i, regex } of patterns) {
       if (regex.test(p.gist)) {
-        issues.push(`canary /${source}/ appears in the served gist of '${fragment.id}'`);
-        entry.tripped.add(source);
+        issues.push(`canaries[${i}] appears in the served gist of '${fragment.id}'`);
+        entry.tripped.add(i);
       }
     }
   }
   for (const [entityId, { gists: list, tripped }] of perEntity) {
     if (list.length < 2) continue;
     const composed = list.join(' ');
-    for (const { source, regex } of patterns) {
-      if (!tripped.has(source) && regex.test(composed)) {
-        issues.push(`canary /${source}/ appears across the served gists of '${entityId}' (composition)`);
+    for (const { i, regex } of patterns) {
+      if (!tripped.has(i) && regex.test(composed)) {
+        issues.push(`canaries[${i}] appears across the served gists of '${entityId}' (composition)`);
       }
     }
   }
@@ -331,16 +338,18 @@ export function judgeAnswer(gold: GoldQuery, answer: AnswerOutput): JudgeResult 
   if (gold.expectAnswerMode === 'related-material' && hasRecord) {
     issues.push('related-material mode requires hint-only citations');
   }
-  for (const pattern of gold.forbidAnswerPatterns ?? []) {
+  // Patterns are reported by index, never by content: a forbidAnswerPattern is
+  // usually a canary, and the issues are printed and kept in the report.
+  (gold.forbidAnswerPatterns ?? []).forEach((pattern, i) => {
     if (new RegExp(pattern, 'i').test(answer.answer)) {
-      issues.push(`answer matched forbidden pattern /${pattern}/`);
+      issues.push(`answer matched forbidAnswerPatterns[${i}]`);
     }
-  }
-  for (const pattern of gold.expectAnswerPatterns ?? []) {
+  });
+  (gold.expectAnswerPatterns ?? []).forEach((pattern, i) => {
     if (!new RegExp(pattern, 'i').test(answer.answer)) {
-      issues.push(`answer did not match expected pattern /${pattern}/`);
+      issues.push(`answer did not match expectAnswerPatterns[${i}]`);
     }
-  }
+  });
   return { pass: issues.length === 0, issues };
 }
 

@@ -47,7 +47,7 @@ Fail fast and name the problem and the remedy. Silent fallbacks hide bugs.
 - **Empty evidence → not-found without calling the model.**
 - **Validator/repair/grounding rejections stay explicit errors, not "best effort" answers.**
 - **Logging: minimal is fine. No PII, no API keys, no private text or gists in logs.**
-- **A lint or validator message names ids, fields, and positions, never a value.** A run a string shares with private text is reported as `words 3–7`, not quoted; a malformed field is named, not echoed. What `npm run index`, CI, or a consumer's loader prints is therefore safe to print by construction.
+- **A lint, validator, or eval message names ids, fields, indices, and positions, never a value.** A run a string shares with private text is reported as `words 3–7`, not quoted; a malformed field is named, not echoed; a canary or an answer pattern that fired is `canaries[3]` or `forbidAnswerPatterns[0]`, never the pattern or the text it matched. What `npm run index`, `npm run eval`, CI, or a consumer's loader prints is therefore safe to print by construction.
 
 ## 5. Security & Performance (Light Touch, Specific)
 

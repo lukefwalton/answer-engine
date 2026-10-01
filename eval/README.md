@@ -44,7 +44,11 @@ frontmatter asks for `exposure: semantic` gets a machine-drafted description the
 author authorizes; see `docs/CONTRACT.md` §5) is checked against every canary,
 and each entity's gists are checked together for a phrase that straddles two. A
 retrieval-only consumer can surface any served gist, so the sweep does not wait
-for a query to retrieve one. The sweep is keyless and fails the run.
+for a query to retrieve one. The sweep is keyless and fails the run. A hit is
+reported as `canaries[3] appears in the served gist of '<fragment id>'`: the
+canary's index in this file and the fragment, never the pattern or the gist,
+because the report is printed and CI keeps the log. The same holds for
+`forbidAnswerPatterns` and `expectAnswerPatterns`, reported by index.
 
 ## Cost model (read this first)
 

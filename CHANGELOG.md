@@ -148,7 +148,11 @@ workflow and archived on Zenodo under the concept DOI
   the message, never a value; both refuse an entity with no fragment, a
   fragment id listed twice, and a `timecode` locator whose value is not decimal
   seconds (checked by field name, so `formatTimecode`, which now throws without
-  echoing the value, never meets one inside the lint). `projectionContentHash` moves to
+  echoing the value, never meets one inside the lint). The eval reports a
+  canary or an answer pattern that fired by its index in the gold file
+  (`canaries[3] appears in the served gist of '…'`,
+  `answer matched forbidAnswerPatterns[0]`), never by its text: canaries are
+  private wording, and `npm run eval` prints the issues. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed

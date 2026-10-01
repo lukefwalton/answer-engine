@@ -838,11 +838,16 @@ test('eval: the canary sweep checks every served gist and each entity\'s gists t
   const sweep = sweepCanaries(index, canaries);
   assert.equal(sweep.gists, 5);
   assert.equal(sweep.pass, false);
+  // Issues name the canary by its index and the fragment or entity, never the
+  // pattern or the gist: `npm run eval` prints them and CI keeps the log.
   assert.deepEqual(sweep.issues, [
-    "canary /ferry horn/ appears in the served gist of 'note:b#1'",
-    "canary /署名の重み/ appears in the served gist of 'note:e#1'",
-    "canary /lighthouse\\.? keeper/ appears across the served gists of 'note:c' (composition)",
+    "canaries[0] appears in the served gist of 'note:b#1'",
+    "canaries[2] appears in the served gist of 'note:e#1'",
+    "canaries[1] appears across the served gists of 'note:c' (composition)",
   ]);
+  for (const issue of sweep.issues) {
+    assert.ok(!/ferry|lighthouse|署名/.test(issue), `issue echoes a canary: ${issue}`);
+  }
   assert.deepEqual(sweepCanaries({ entries: [entry('note:a#1', 'note:a', 'semantic', clean)] }, canaries), {
     pass: true,
     issues: [],
@@ -857,7 +862,7 @@ test('eval: the canary sweep checks every served gist and each entity\'s gists t
   assert.deepEqual(loadGoldFile(good).canaries, ['one']);
   const bad = join(dir, 'bad.yaml');
   writeFileSync(bad, 'canaries: ["("]\nqueries:\n  - id: a\n    query: q\n    expectAnswerMode: not-found\n', 'utf8');
-  assert.throws(() => loadGoldFile(bad), /canaries contains invalid regex/);
+  assert.throws(() => loadGoldFile(bad), (err: unknown) => err instanceof Error && /canaries\[0\] is not a valid regex/.test(err.message) && !err.message.includes('('));
   const shape = join(dir, 'shape.yaml');
   writeFileSync(shape, 'canaries: nope\nqueries:\n  - id: a\n    query: q\n    expectAnswerMode: not-found\n', 'utf8');
   assert.throws(() => loadGoldFile(shape), /'canaries' must be a list/);
@@ -922,7 +927,7 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
         citations: [{ kind: 'hint', hintId: 'note:harbor-lights-session', url: 'https://example.com' }],
       },
     ).issues[0]!,
-    /forbidden pattern/,
+    /matched forbidAnswerPatterns\[0\]/,
   );
   assert.match(
     judgeAnswer(
@@ -968,7 +973,7 @@ test('eval: judgeRetrieval and judgeAnswer enforce the gold contract', () => {
       },
       routed,
     ).issues[0]!,
-    /did not match expected pattern/,
+    /did not match expectAnswerPatterns\[0\]/,
   );
 });
 
@@ -1010,7 +1015,7 @@ test('eval: loadGold rejects invalid answer patterns at load time', () => {
 `,
       'utf8',
     );
-    assert.throws(() => loadGold(path), new RegExp(`${key} contains invalid regex`));
+    assert.throws(() => loadGold(path), new RegExp(`queries\\[0\\]\\.${key}\\[0\\] is not a valid regex`));
   }
 });
 
