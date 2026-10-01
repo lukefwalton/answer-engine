@@ -148,7 +148,16 @@ test('retrieve: filters run before scoring; undated fragments are excluded by a 
   assert.deepEqual(after.hits.map((h) => h.entity.id), ['essay:new-view', 'transcript:ep1']);
   const inclusive = retrieve(Q, 'q', index, { filters: { dateFrom: '2022-03', undated: 'include' } });
   assert.deepEqual(inclusive.map((h) => h.entity.id), ['essay:new-view', 'transcript:ep1', 'book:novel']);
-  assert.throws(() => retrieve(Q, 'q', index, { filters: { dateFrom: 'yesterday' } }), /not YYYY, YYYY-MM, or YYYY-MM-DD/);
+  // A malformed bound is named by field, never echoed: a consumer may return or log this message.
+  assert.throws(
+    () => retrieve(Q, 'q', index, { filters: { dateFrom: 'yesterday' } }),
+    (err: unknown) =>
+      err instanceof Error && /filters\.dateFrom is not YYYY, YYYY-MM, or YYYY-MM-DD/.test(err.message) && !/yesterday/.test(err.message),
+  );
+  assert.throws(
+    () => retrieve(Q, 'q', index, { filters: { dateTo: 'the week it rained' } }),
+    (err: unknown) => err instanceof Error && /filters\.dateTo is not/.test(err.message) && !/rained/.test(err.message),
+  );
 });
 
 test('retrieve: limit is one list; limitPerRaw caps each layer; the two are exclusive', () => {

@@ -153,7 +153,8 @@ workflow and archived on Zenodo under the concept DOI
   (`canaries[3] appears in the served gist of '…'`,
   `answer matched forbidAnswerPatterns[0]`), never by its text: canaries are
   private wording, and `npm run eval` prints the issues. A private note's
-  malformed `exposure` is named by field, not echoed. `projectionContentHash` moves to
+  malformed `exposure` is named by field, not echoed, and so is a caller's
+  malformed `filters.dateFrom` / `filters.dateTo`. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
 
 ### Removed

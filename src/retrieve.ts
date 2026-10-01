@@ -132,8 +132,10 @@ export function compileFilters(filters: SearchFilters | undefined): {
   }
   const from = filters.dateFrom !== undefined ? parseDateInterval(filters.dateFrom) : null;
   const to = filters.dateTo !== undefined ? parseDateInterval(filters.dateTo) : null;
-  if (filters.dateFrom !== undefined && !from) throw new Error(`filters.dateFrom '${filters.dateFrom}' is not YYYY, YYYY-MM, or YYYY-MM-DD`);
-  if (filters.dateTo !== undefined && !to) throw new Error(`filters.dateTo '${filters.dateTo}' is not YYYY, YYYY-MM, or YYYY-MM-DD`);
+  // Named, not echoed: a caller's filter is arbitrary input, and a consumer may
+  // log or return this message (STANDARDS §4).
+  if (filters.dateFrom !== undefined && !from) throw new Error('filters.dateFrom is not YYYY, YYYY-MM, or YYYY-MM-DD');
+  if (filters.dateTo !== undefined && !to) throw new Error('filters.dateTo is not YYYY, YYYY-MM, or YYYY-MM-DD');
   const bound = from || to ? { start: from?.start ?? -Infinity, end: to?.end ?? Infinity } : null;
   const includeUndated = filters.undated === 'include';
   const types = filters.type ? new Set(filters.type) : null;
