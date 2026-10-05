@@ -38,6 +38,21 @@ is 1974" would be the accuracy-trivia test this file opens by refusing to be.
 `npm run eval -- --full` also runs the answer engine and checks modes. Either
 exits non-zero on any failure, so it can gate a deploy.
 
+A top-level `canaries` list carries the same phrases once, for the **canary
+sweep**: before any API call, every gist the index would serve (a note whose
+frontmatter asks for `exposure: semantic` gets a machine-drafted description the
+author authorizes; see `docs/CONTRACT.md` §5) is checked against every canary,
+and each entity's gists are checked together for a phrase that straddles two. A
+retrieval-only consumer can surface any served gist, so the sweep does not wait
+for a query to retrieve one. The sweep is keyless and fails the run. The
+retrieval checks judge the hits `search()` returns, which is what a consumer is
+handed: a fragment whose exposure is `none` is never retrieved there, so naming
+one in `expectSources` fails and naming one in `forbidSources` passes. A hit is
+reported as `canaries[3] appears in the served gist of '<fragment id>'`: the
+canary's index in this file and the fragment, never the pattern or the gist,
+because the report is printed and CI keeps the log. The same holds for
+`forbidAnswerPatterns` and `expectAnswerPatterns`, reported by index.
+
 ## Cost model (read this first)
 
 | Mode | API spend | When to use |

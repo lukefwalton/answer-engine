@@ -8,8 +8,16 @@
 
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
-import type { RetrievalResult } from './retrieve.js';
+import type { EvidenceHit, ScoredHit } from './contract.js';
 import type { AnswerMode, AnswerOutput } from './types.js';
+
+/** A gold file: the queries, and the leakage canaries swept over every served
+ *  gist (docs/CONTRACT.md §11). */
+export interface GoldFile {
+  queries: GoldQuery[];
+  /** Case-insensitive regexes over wording that exists only in private text. */
+  canaries: string[];
+}
 
 export interface GoldQuery {
   /** Stable id for targeted runs (--ids, --from-report). */
@@ -182,12 +190,33 @@ const GOLD_MODES: ReadonlySet<string> = new Set([
   'not-found',
 ]);
 
-/** Load the gold set. `{{author}}` in a query resolves to the configured
- *  authorName, so renaming the author never silently detunes the eval. */
+/** Load the gold set's queries. `{{author}}` in a query resolves to the
+ *  configured authorName, so renaming the author never silently detunes the eval. */
 export function loadGold(path: string, author = ''): GoldQuery[] {
-  const parsed = parse(readFileSync(path, 'utf8')) as { queries?: unknown };
+  return loadGoldFile(path, author).queries;
+}
+
+/** Load the whole gold file: queries plus the canary list (absent means none). */
+export function loadGoldFile(path: string, author = ''): GoldFile {
+  const parsed = parse(readFileSync(path, 'utf8')) as { queries?: unknown; canaries?: unknown };
   if (!parsed || !Array.isArray(parsed.queries) || parsed.queries.length === 0) {
     throw new Error(`${path} must contain a non-empty 'queries' list`);
+  }
+  const canaries: string[] = [];
+  if (parsed.canaries !== undefined) {
+    if (!Array.isArray(parsed.canaries) || parsed.canaries.some((c) => typeof c !== 'string' || !c.trim())) {
+      throw new Error(`${path}: 'canaries' must be a list of non-empty regex strings`);
+    }
+    // Canaries are private wording. Every message about one names its index in
+    // the gold file, never the pattern (.github/STANDARDS.md §4).
+    (parsed.canaries as string[]).forEach((pattern, i) => {
+      try {
+        new RegExp(pattern, 'i');
+      } catch {
+        throw new Error(`${path}: canaries[${i}] is not a valid regex`);
+      }
+      canaries.push(pattern);
+    });
   }
   const queries = parsed.queries.map((q, i): GoldQuery => {
     const item = q as Partial<GoldQuery>;
@@ -218,13 +247,13 @@ export function loadGold(path: string, author = ''): GoldQuery[] {
       if (!Array.isArray(patterns) || patterns.some((p) => typeof p !== 'string')) {
         throw new Error(`${path}: queries[${i}].${key} must be a list of regex strings`);
       }
-      for (const pattern of patterns) {
+      patterns.forEach((pattern, j) => {
         try {
           new RegExp(pattern, 'i');
         } catch {
-          throw new Error(`${path}: queries[${i}].${key} contains invalid regex /${pattern}/`);
+          throw new Error(`${path}: queries[${i}].${key}[${j}] is not a valid regex`);
         }
-      }
+      });
     }
     return item as GoldQuery;
   });
@@ -233,7 +262,66 @@ export function loadGold(path: string, author = ''): GoldQuery[] {
     if (seen.has(q.id)) throw new Error(`${path}: duplicate gold query id '${q.id}'`);
     seen.add(q.id);
   }
-  return queries;
+  return { queries, canaries };
+}
+
+/** The slice of an index entry the sweep reads; a private or a served index
+ *  file satisfies it. */
+export interface SweepableEntry {
+  fragment: {
+    id: string;
+    entityId: string;
+    disclosure: { exposure: string };
+    projection?: { lint: string; gist?: string };
+  };
+}
+
+export interface CanarySweepResult extends JudgeResult {
+  /** Served gists checked. */
+  gists: number;
+}
+
+/**
+ * The canary sweep (docs/CONTRACT.md §11): every canary against every gist a
+ * served index would release, not only the gists a gold query retrieves,
+ * because a retrieval-only consumer can surface any of them; and, per entity,
+ * against the concatenation of its gists, so a phrase that straddles two gists
+ * is at least watched. Keyless; runs before the embedding call in `npm run eval`.
+ *
+ * An issue names the canary by its index in the gold file's `canaries` list
+ * and the fragment or entity it tripped on, never the pattern or the gist:
+ * the issues are printed by `npm run eval` and land in CI logs, and a canary
+ * is private wording by definition.
+ */
+export function sweepCanaries(index: { entries: readonly SweepableEntry[] }, canaries: readonly string[]): CanarySweepResult {
+  const patterns = canaries.map((c, i) => ({ i, regex: new RegExp(c, 'i') }));
+  const issues: string[] = [];
+  const perEntity = new Map<string, { gists: string[]; tripped: Set<number> }>();
+  let gists = 0;
+  for (const { fragment } of index.entries) {
+    const p = fragment.projection;
+    if (fragment.disclosure.exposure !== 'semantic' || !p || p.lint !== 'passed' || typeof p.gist !== 'string') continue;
+    gists += 1;
+    let entry = perEntity.get(fragment.entityId);
+    if (!entry) perEntity.set(fragment.entityId, (entry = { gists: [], tripped: new Set() }));
+    entry.gists.push(p.gist);
+    for (const { i, regex } of patterns) {
+      if (regex.test(p.gist)) {
+        issues.push(`canaries[${i}] appears in the served gist of '${fragment.id}'`);
+        entry.tripped.add(i);
+      }
+    }
+  }
+  for (const [entityId, { gists: list, tripped }] of perEntity) {
+    if (list.length < 2) continue;
+    const composed = list.join(' ');
+    for (const { i, regex } of patterns) {
+      if (!tripped.has(i) && regex.test(composed)) {
+        issues.push(`canaries[${i}] appears across the served gists of '${entityId}' (composition)`);
+      }
+    }
+  }
+  return { pass: issues.length === 0, issues, gists };
 }
 
 /** Answer behavior: mode match plus citation guards aligned with mode semantics. */
@@ -250,16 +338,18 @@ export function judgeAnswer(gold: GoldQuery, answer: AnswerOutput): JudgeResult 
   if (gold.expectAnswerMode === 'related-material' && hasRecord) {
     issues.push('related-material mode requires hint-only citations');
   }
-  for (const pattern of gold.forbidAnswerPatterns ?? []) {
+  // Patterns are reported by index, never by content: a forbidAnswerPattern is
+  // usually a canary, and the issues are printed and kept in the report.
+  (gold.forbidAnswerPatterns ?? []).forEach((pattern, i) => {
     if (new RegExp(pattern, 'i').test(answer.answer)) {
-      issues.push(`answer matched forbidden pattern /${pattern}/`);
+      issues.push(`answer matched forbidAnswerPatterns[${i}]`);
     }
-  }
-  for (const pattern of gold.expectAnswerPatterns ?? []) {
+  });
+  (gold.expectAnswerPatterns ?? []).forEach((pattern, i) => {
     if (!new RegExp(pattern, 'i').test(answer.answer)) {
-      issues.push(`answer did not match expected pattern /${pattern}/`);
+      issues.push(`answer did not match expectAnswerPatterns[${i}]`);
     }
-  }
+  });
   return { pass: issues.length === 0, issues };
 }
 
@@ -269,16 +359,17 @@ export interface JudgeResult {
 }
 
 /** Retrieval floor: expected sources in the hits, forbidden sources out.
- *  Both streams count — a gold id can name a record or a private note.
- *  This is where the gold set *checks recall* on enumerated cases: every
- *  expectSources id is a source someone decided must surface in regression.
- *  The relevant source no gold query names is residue the suite can never
- *  reach — it catches what it lists, not the omission it never thought of. */
-export function judgeRetrieval(gold: GoldQuery, hits: RetrievalResult): JudgeResult {
-  const hitIds = new Set([
-    ...hits.records.map((h) => h.record.id),
-    ...hits.notes.map((h) => h.note.id),
-  ]);
+ *  Both layers count, and a gold id may name an entity (`essay:x`) or a
+ *  fragment (`essay:x#s3`). This is where the gold set *checks recall* on
+ *  enumerated cases: every expectSources id is a source someone decided must
+ *  surface in regression. The relevant source no gold query names is residue
+ *  the suite can never reach — it catches what it lists, not the omission it
+ *  never thought of. */
+export function judgeRetrieval(gold: GoldQuery, hits: readonly (ScoredHit | EvidenceHit)[]): JudgeResult {
+  // Either side of the crossing: a ScoredHit (retrieve(), the demo's ranking
+  // gate) or an EvidenceHit (search(), what `npm run eval` judges, so a `none`
+  // fragment counts as not retrieved exactly as a consumer would see it).
+  const hitIds = new Set(hits.flatMap((h) => [h.entity.id, 'fragment' in h ? h.fragment.id : h.fragmentId]));
   const issues: string[] = [];
   for (const id of gold.expectSources ?? []) {
     if (!hitIds.has(id)) issues.push(`expected source '${id}' not retrieved`);

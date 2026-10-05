@@ -152,6 +152,15 @@ export function buildPrivateNotes(config: ArchiveConfig): PrivateNote[] {
           `writing it out is the point — the choice is yours, made per note.`,
       );
     }
+    const exposure = data.exposure;
+    if (exposure !== undefined && exposure !== 'semantic' && exposure !== 'locator' && exposure !== 'none') {
+      // The field is named, not echoed: it is authored frontmatter on a private
+      // note, and this message is what `npm run index` prints (STANDARDS §4).
+      throw new Error(
+        `${path}: 'exposure' must be semantic, locator, or none. ` +
+          `Private text is never exposed as text; see docs/CONTRACT.md §3.`,
+      );
+    }
     const text = stripMarkdown(content);
     // `label` and `locator` travel to the model (RoutingHint, the answer
     // prompt, the related-material template). They are typed PublicSafe and
@@ -167,6 +176,7 @@ export function buildPrivateNotes(config: ArchiveConfig): PrivateNote[] {
       url: about,
       locator: assertPublicSafeField(locator, { field: 'locator', path, privateText: text }),
       text,
+      ...(exposure !== undefined ? { exposure } : {}),
     });
   }
   return notes.sort((a, b) => a.id.localeCompare(b.id));

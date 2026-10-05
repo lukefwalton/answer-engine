@@ -2,6 +2,8 @@
 // AnswerEvidence: RoutingHint has no field for private text, which makes
 // the privacy boundary a compile-time constraint rather than a review note.
 
+import type { LintedGist } from './public-safe.js';
+
 /** One piece of the PUBLIC archive — quotable, citable, body travels. */
 export interface ArchiveRecord {
   /** Stable id: `${type}:${slug}`. Citations point at this. */
@@ -25,9 +27,10 @@ export interface ArchiveRecord {
  * `assertPublicSafeField` (src/public-safe.ts), so corpus code cannot put a
  * raw frontmatter string on the path toward the model — the same trick as
  * RoutingHint's missing text field, applied to the fields that DO travel.
- * Honest scope: the brand erases at JSON boundaries, so an index read from
- * disk is trusted to have been built through the lint; the guarantee is
- * "linted when the corpus was built", not "re-checked on every read".
+ * Honest scope: the brand erases at JSON boundaries. A private index read from
+ * disk re-runs the lint at load (validateIndex in src/store.ts), because the
+ * text to check against is there; a served index has no text and is trusted
+ * to descend from a validated private one (docs/CONTRACT.md §4).
  */
 export type PublicSafe = string & { readonly __publicSafe: 'lint-passed' };
 
@@ -54,25 +57,37 @@ export interface PrivateNote {
   locator: PublicSafe;
   /** The private text. Embedded for retrieval; never rendered into a prompt. */
   text: string;
+  /** Frontmatter `exposure`: what may travel about this note (docs/CONTRACT.md
+   *  §3). `locator` (the default) is where it is; `semantic` asks the build to
+   *  draft a gist the author then authorizes; `none` is indexed, never served.
+   *  `text` is not an option for private material. */
+  exposure?: 'semantic' | 'locator' | 'none';
 }
 
 /**
- * A private note reduced to its public-safe routing surface. Deliberately has
- * NO field for the note's text or title — code that tried to hand private
- * prose to the model would not compile — and the fields it does carry are
- * PublicSafe: constructible only through the build-time lint.
+ * A hint: a private (or non-quotable) hit reduced to its routing surface for
+ * the in-package synthesis consumer (src/evidence.ts). Deliberately has NO
+ * field for the source's text or gist — code that tried to hand private prose
+ * to the model would not compile. The label and locator were linted when the
+ * index was built and again when it was loaded (docs/CONTRACT.md §6); the
+ * brand erases at JSON, so they are plain strings here. hintId is the fragment id.
  */
 export interface RoutingHint {
   hintId: string;
-  label: PublicSafe;
+  label: string;
   url: string;
-  locator: PublicSafe;
+  locator: string;
 }
 
-/** Everything the answer model is allowed to see. */
+/** What the consumer holds after the crossing. `records` and `hints` are
+ *  everything the answer model is allowed to see (buildUserPrompt takes those
+ *  two and nothing else). `gists` never reach the prompt: the related-material
+ *  template renders them after the mode is final, keyed by hintId, so the
+ *  model has no description of private material to restate in any mode. */
 export interface AnswerEvidence {
   records: ArchiveRecord[];
   hints: RoutingHint[];
+  gists?: Record<string, LintedGist>;
 }
 
 /** One entry of artifacts/index.json: a source plus its embedding. */
@@ -134,4 +149,17 @@ export interface ArchiveConfig {
    *  enough; raise it if the model starts applying the mode boundaries
    *  inconsistently — policy adherence costs reasoning. */
   reasoningEffort?: 'low' | 'medium' | 'high';
+  /** The gist drafter (docs/CONTRACT.md §5), used only for notes whose
+   *  frontmatter asks for `exposure: semantic`. */
+  gist?: {
+    /** Model that drafts gists. Default: answerModel. */
+    model?: string;
+    /** Default GIST_MAX_CHARS (400). Stored on each entity as `policy.lint.gistMaxChars`. */
+    maxChars?: number;
+    /** Default GIST_NGRAM_WORDS (5), for both lints. Dry-run at 4 and count the
+     *  trips before choosing. Stored on each entity as `policy.lint.ngramWords`. */
+    ngramWords?: number;
+    /** Proper names a gist may use, keyed by entity id. Default: none at all. */
+    allowedNames?: Record<string, string[]>;
+  };
 }

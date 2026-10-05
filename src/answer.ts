@@ -179,7 +179,7 @@ export function finalizeAnswer(validated: AnswerOutput, evidence: AnswerEvidence
   const repaired = repairCitationsToEvidence(validated, evidence);
   assertCitationsGroundedInEvidence(repaired, evidence);
   if (repaired.mode === 'related-material') {
-    return { ...repaired, answer: renderRelatedMaterialAnswer(repaired.citations, evidence.hints) };
+    return { ...repaired, answer: renderRelatedMaterialAnswer(repaired.citations, evidence.hints, evidence.gists) };
   }
   // validateAnswer admits empty prose only for a declared related-material,
   // whose prose is rendered above. If repair re-derived the mode out of
@@ -192,7 +192,7 @@ export function finalizeAnswer(validated: AnswerOutput, evidence: AnswerEvidence
 }
 
 /** Reasoning-family models reject non-default temperature. */
-function isReasoningModel(model: string): boolean {
+export function isReasoningModel(model: string): boolean {
   return /^gpt-5/.test(model) || /^o\d/.test(model);
 }
 

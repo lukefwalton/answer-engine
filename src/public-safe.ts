@@ -1,12 +1,31 @@
 // The counterpart to no-leak.ts: that file owns what must NOT travel toward
-// the model; this one owns the shape of what MAY. Two things live here:
-// the build-time lint that every traveling private-note field must pass
-// (the only constructor of the PublicSafe brand — NEXT-STEPS.md A1), and
-// the related-material answer template, rendered here instead of written by
-// the model so the mode can only point at private material and never assert
-// its contents (NEXT-STEPS.md A2). The template's safety is exactly the
-// lint's: it renders nothing but PublicSafe fields.
+// the model; this one owns the shape of what MAY. Three things live here:
+// the lint every authored string on a private entity passes before it may
+// travel (assertPublicSafeField for one string, assertPublicSafeMetadata for
+// an entity's whole metadata surface; together the only constructor of the
+// PublicSafe brand — NEXT-STEPS.md A1), the lint a semantic projection passes
+// before it may be served (the only constructor of the LintedGist brand —
+// docs/CONTRACT.md §6), and the related-material answer template, rendered
+// here instead of written by the model so the mode can only point at private
+// material and never assert its contents (NEXT-STEPS.md A2). The template's
+// safety is exactly the lint's: it renders nothing but linted fields.
+//
+// Both lints run wherever the text they check against is present: at corpus
+// read, at index build, and again at every load of a private index
+// (validateIndex in src/store.ts), so a hand edit to the index is caught at
+// load rather than in an answer. A served index carries no private text to
+// check against and is trusted to descend from a validated private one
+// (docs/CONTRACT.md §4).
+//
+// Nothing in this module returns or prints private text. A shared run is
+// reported by its position in the string under test, never by its words: a
+// lint failure is what a build tool, a CI job, or a consumer's loader logs,
+// and the run is private text by definition (.github/STANDARDS.md §4). The
+// position is enough for the author, who has the string, and for the drafter,
+// which has its draft.
 
+import type { Entity, Fragment } from './contract.js';
+import { renderLocatorLabel } from './locator.js';
 import type { Citation, PublicSafe, RoutingHint } from './types.js';
 
 /** Traveling fields are short display strings, not prose. Anything longer
@@ -20,22 +39,157 @@ export const PUBLIC_SAFE_MAX_CHARS = 120;
  *  corpora; retune against yours if it flags honest locators. */
 export const PUBLIC_SAFE_NGRAM_WORDS = 5;
 
-function normalizeWords(s: string): string[] {
+/** A gist is a paragraph: two or three sentences describing what a passage
+ *  is about. Past this it has room to retell (docs/CONTRACT.md §6). */
+export const GIST_MAX_CHARS = 400;
+
+/** The gist lint's word-run window. Same reasoning as PUBLIC_SAFE_NGRAM_WORDS:
+ *  four trips on function-word runs any honest description shares with its
+ *  source; three is unusable. Exported so a consumer can tune it per entity. */
+export const GIST_NGRAM_WORDS = 5;
+
+/** For text in a script without word spacing (Japanese, Chinese, Thai, ...),
+ *  a word-run tripwire is vacuous: the whole passage is one "word". The lint
+ *  then counts the run in characters instead, over the normalized text with
+ *  whitespace removed. Twelve characters is roughly the width five words
+ *  occupy in such scripts. */
+export const GIST_NGRAM_CHARS = 12;
+
+/** A gist the lint has passed. Constructible only through assertSemanticProjection. */
+export type LintedGist = string & { readonly __lint: 'gist' };
+
+/** What the traveling-string lint throws, so a caller can tell a lint failure
+ *  (fix the authored string) from a malformed file. */
+export class PublicSafeLintError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PublicSafeLintError';
+  }
+}
+
+/** Unicode-aware word normalization: NFKC, lowercase, every run of characters
+ *  that is not a letter or a digit becomes one space. For ASCII text this is
+ *  what the 2.x `[a-z0-9]` rule did; for accented and non-Latin text it keeps
+ *  the letters instead of deleting them. */
+export function normalizeWords(s: string): string[] {
   return s
+    .normalize('NFKC')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(/\s+/)
     .filter(Boolean);
 }
 
+function wordGramSet(words: readonly string[], n: number): Set<string> {
+  const grams = new Set<string>();
+  for (let i = 0; i + n <= words.length; i++) grams.add(words.slice(i, i + n).join(' '));
+  return grams;
+}
+
+function charGramSet(chars: string, n: number): Set<string> {
+  const grams = new Set<string>();
+  for (let i = 0; i + n <= chars.length; i++) grams.add(chars.slice(i, i + n));
+  return grams;
+}
+
+const UNSPACED_SCRIPT =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+
+/** True when the text contains a script written without word spacing. */
+export function hasUnspacedScript(text: string): boolean {
+  return UNSPACED_SCRIPT.test(text);
+}
+
+function normalizeChars(s: string): string {
+  return s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+/** A run a field shares with private text: in words, or in characters for a
+ *  script without word spacing. Position, not content (see the header). */
+export interface SharedRun {
+  unit: 'words' | 'characters';
+  /** The window: how many consecutive units matched. */
+  n: number;
+  /** 1-based index of the run's first unit in the normalized field. */
+  start: number;
+}
+
+function describeRun(run: SharedRun): string {
+  return `${run.unit} ${run.start}–${run.start + run.n - 1}`;
+}
+
 /**
- * The sole constructor of PublicSafe: a build-time lint on a private note's
- * traveling fields (label, locator). Checks, each failing loudly with the
- * file and field: non-empty, single-line, capped length, and no run of
- * PUBLIC_SAFE_NGRAM_WORDS consecutive words shared with the note's private
- * body — a traveling field that quotes the private text is the leak, caught
- * where the author can fix it instead of in an answer.
+ * The n-gram sets of one body of private text, built once, so that many
+ * fields (every locator of a long book, say) can be checked against it
+ * without re-normalizing the body each time. Word runs always; character runs
+ * when either side is in a script without word spacing.
+ */
+export function privateTextMatcher(
+  body: string,
+  options: { ngramWords?: number; ngramChars?: number } = {},
+): (field: string) => SharedRun | null {
+  const nWords = options.ngramWords ?? PUBLIC_SAFE_NGRAM_WORDS;
+  const nChars = options.ngramChars ?? GIST_NGRAM_CHARS;
+  const wordGrams = wordGramSet(normalizeWords(body), nWords);
+  const bodyUnspaced = hasUnspacedScript(body);
+  let charGrams: Set<string> | null = null;
+  return (field) => {
+    const words = normalizeWords(field);
+    for (let i = 0; i + nWords <= words.length; i++) {
+      const gram = words.slice(i, i + nWords).join(' ');
+      if (wordGrams.has(gram)) return { unit: 'words', n: nWords, start: i + 1 };
+    }
+    if (bodyUnspaced || hasUnspacedScript(field)) {
+      charGrams ??= charGramSet(normalizeChars(body), nChars);
+      const chars = normalizeChars(field);
+      for (let i = 0; i + nChars <= chars.length; i++) {
+        const gram = chars.slice(i, i + nChars);
+        if (charGrams.has(gram)) return { unit: 'characters', n: nChars, start: i + 1 };
+      }
+    }
+    return null;
+  };
+}
+
+/** The checks every traveling string passes, with the same wording wherever
+ *  it is called from: non-empty, one line, at most PUBLIC_SAFE_MAX_CHARS, and
+ *  no run shared with the private text it points into. */
+function assertPublicSafeString(
+  value: string,
+  where: string,
+  sharedRun: (field: string) => SharedRun | null,
+): PublicSafe {
+  if (!value.trim()) {
+    throw new PublicSafeLintError(`${where} must not be empty — it travels as a display string.`);
+  }
+  if (/[\r\n]/.test(value)) {
+    throw new PublicSafeLintError(`${where} must be a single line; a traveling field is a display string, not prose.`);
+  }
+  if (value.length > PUBLIC_SAFE_MAX_CHARS) {
+    throw new PublicSafeLintError(
+      `${where} is ${value.length} chars (max ${PUBLIC_SAFE_MAX_CHARS}); a traveling field is a display string, not prose.`,
+    );
+  }
+  const run = sharedRun(value);
+  if (run !== null) {
+    throw new PublicSafeLintError(
+      `${where} quotes private text at ${describeRun(run)}: a traveling field must not contain ` +
+        `${run.n} consecutive ${run.unit} of private text. Reword it to point, not quote.`,
+    );
+  }
+  return value as PublicSafe;
+}
+
+/**
+ * The lint one traveling string passes (the 2.x constructor of PublicSafe): a
+ * private note's label or locator at corpus read, and any other authored
+ * string checked on its own. Each check fails loudly with the path and the
+ * field: non-empty, single-line, capped length, and no run of
+ * PUBLIC_SAFE_NGRAM_WORDS consecutive words shared with the private text (or
+ * GIST_NGRAM_CHARS characters, for a script without word spacing) — a
+ * traveling field that quotes the private text is the leak, caught where the
+ * author can fix it instead of in an answer.
  *
  * This is a tripwire, not a classifier. A short private phrase, or private
  * meaning in public words, passes it — what remains owned by discipline is
@@ -43,46 +197,173 @@ function normalizeWords(s: string): string[] {
  */
 export function assertPublicSafeField(
   value: string,
-  context: { field: 'label' | 'locator'; path: string; privateText: string },
+  context: { field: string; path: string; privateText: string },
 ): PublicSafe {
-  const where = `${context.path}: '${context.field}'`;
-  if (!value.trim()) {
-    throw new Error(`${where} must not be empty — it travels to the model as the note's display ${context.field}.`);
+  return assertPublicSafeString(value, `${context.path}: '${context.field}'`, privateTextMatcher(context.privateText));
+}
+
+function byId<T extends { id: string }>(fragments: readonly T[]): T[] {
+  return [...fragments].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** The text a gist is checked against beyond its own fragment: every fragment
+ *  of the entity in fragment-id order, joined by blank lines. One definition,
+ *  so the drafter at build (src/ingest/gist.ts) and the validator at load
+ *  (src/store.ts) agree on what "the entity's text" is whatever order their
+ *  fragments arrive in. */
+export function entityLintText(fragments: readonly { id: string; text: string }[]): string {
+  return byId(fragments)
+    .map((f) => f.text)
+    .join('\n\n');
+}
+
+/** A fragment whose text opens with the entity's title as its own paragraph
+ *  carries the title as a heading (the note shape: title, blank line, body).
+ *  The body is what follows. */
+function bodyWithoutHeading(text: string, title: string): string {
+  if (text === title) return '';
+  const heading = `${title}\n\n`;
+  return text.startsWith(heading) ? text.slice(heading.length) : text;
+}
+
+/**
+ * The authored strings a hit on a PRIVATE entity carries, each passed through
+ * assertPublicSafeField's rule against the entity's whole private text
+ * (docs/CONTRACT.md §6): the entity's title and version, its creators' names
+ * and roles, its themes; and on every fragment the locator values and the
+ * rendered locator label, the speakers' names and roles, and the fragment's
+ * themes. Structural fields (ids, type, url, identifiers, dates, the empty
+ * value of a `whole` locator) are not prose and are not checked. A public
+ * entity is not checked: its text is public, so its metadata is public by
+ * construction.
+ *
+ * Two exemptions, both the author's act. A fragment whose text opens with the
+ * entity's title as its first paragraph has that heading removed before the
+ * comparison: the title is the string under test, and publishing it is the
+ * author's act; what the lint protects is the body. And an entity whose
+ * `policy.publicTitle` is set has its title skipped altogether: the title is
+ * public by construction (a published page's, a feed item's), so a transcript
+ * whose host reads the episode title aloud is not a leak. The title is still
+ * bounded to one line of PUBLIC_SAFE_MAX_CHARS.
+ *
+ * The window is the entity's `policy.lint` where set, the shipped constants
+ * otherwise, so the index carries the terms it is checked under. Runs at index
+ * build and at every load of a private index (src/store.ts). Throws with the
+ * path, the field, and the position of the offending run, never its words.
+ */
+export function assertPublicSafeMetadata(
+  entity: Pick<Entity, 'id' | 'title' | 'version' | 'attribution' | 'themes' | 'policy'>,
+  fragments: readonly Pick<Fragment, 'id' | 'text' | 'locator' | 'attribution' | 'themes'>[],
+  context: { path: string },
+): void {
+  const body = byId(fragments)
+    .map((f) => bodyWithoutHeading(f.text, entity.title))
+    .join('\n\n');
+  const sharedRun = privateTextMatcher(body, {
+    ngramWords: entity.policy?.lint?.ngramWords,
+    ngramChars: entity.policy?.lint?.ngramChars,
+  });
+  const check = (value: string | undefined, where: string): void => {
+    if (value === undefined || value === '') return;
+    assertPublicSafeString(value, where, sharedRun);
+  };
+
+  const at = `${context.path}: entity '${entity.id}'`;
+  if (entity.policy?.publicTitle) {
+    // Declared public: shape only, no run check against the text.
+    assertPublicSafeString(entity.title, `${at}: 'title'`, () => null);
+  } else {
+    check(entity.title, `${at}: 'title'`);
   }
-  if (/[\r\n]/.test(value)) {
-    throw new Error(`${where} must be a single line; a traveling field is a display string, not prose.`);
+  check(entity.version, `${at}: 'version'`);
+  for (const a of entity.attribution) {
+    check(a.name, `${at}: 'creator name'`);
+    check(a.role, `${at}: 'creator role'`);
   }
-  if (value.length > PUBLIC_SAFE_MAX_CHARS) {
-    throw new Error(
-      `${where} is ${value.length} chars (max ${PUBLIC_SAFE_MAX_CHARS}); a traveling field is a display string, not prose.`,
+  for (const theme of entity.themes ?? []) check(theme, `${at}: 'theme'`);
+
+  for (const f of fragments) {
+    const here = `${context.path}: fragment '${f.id}'`;
+    for (const l of f.locator) {
+      check(l.value, `${here}: 'locator value (${l.scheme})'`);
+      check(l.end, `${here}: 'locator end (${l.scheme})'`);
+    }
+    check(renderLocatorLabel(f.locator), `${here}: 'locator label'`);
+    for (const a of f.attribution ?? []) {
+      check(a.name, `${here}: 'speaker name'`);
+      check(a.role, `${here}: 'speaker role'`);
+    }
+    for (const theme of f.themes ?? []) check(theme, `${here}: 'theme'`);
+  }
+}
+
+/**
+ * The sole constructor of LintedGist: the build-time lint a semantic
+ * projection passes before a policy may release it (docs/CONTRACT.md §6).
+ * Checks, each failing loudly with the path: non-empty; one paragraph; at
+ * most `maxChars`; no run of `ngramWords` consecutive words shared with the
+ * fragment's text, and none shared with the whole entity's text when it is
+ * supplied (so the gist of one page cannot quote the page before it). For
+ * text in a script without word spacing the run is counted in characters.
+ *
+ * Like assertPublicSafeField, this is a tripwire, not a classifier: close
+ * paraphrase, plot, a name, a number, and a run shorter than the window all
+ * pass it. Those are owned by the exposure policy, the veto, review, and the
+ * evaluation's canaries (CONTRACT.md §11, §13), not by this function.
+ *
+ * Throws PublicSafeLintError, so a caller can tell a lint failure (fix the
+ * gist, or let the drafter retry) from a malformed file. The message names the
+ * source and the position of the run in the gist, never the run.
+ */
+export function assertSemanticProjection(
+  gist: string,
+  context: {
+    path: string;
+    fragmentText: string;
+    entityText?: string;
+    maxChars?: number;
+    ngramWords?: number;
+    ngramChars?: number;
+  },
+): LintedGist {
+  const where = `${context.path}: gist`;
+  const maxChars = context.maxChars ?? GIST_MAX_CHARS;
+  const ngramWords = context.ngramWords ?? GIST_NGRAM_WORDS;
+  const ngramChars = context.ngramChars ?? GIST_NGRAM_CHARS;
+  if (!gist.trim()) {
+    throw new PublicSafeLintError(`${where} must not be empty; a fragment with no gist resolves to 'locator' instead.`);
+  }
+  if (/[\r\n]/.test(gist)) {
+    throw new PublicSafeLintError(`${where} must be one paragraph (no line breaks).`);
+  }
+  if (gist.length > maxChars) {
+    throw new PublicSafeLintError(
+      `${where} is ${gist.length} chars (max ${maxChars}); a gist describes a passage, it does not retell it.`,
     );
   }
-  const fieldWords = normalizeWords(value);
-  if (fieldWords.length >= PUBLIC_SAFE_NGRAM_WORDS) {
-    const bodyWords = normalizeWords(context.privateText);
-    const bodyGrams = new Set<string>();
-    for (let i = 0; i + PUBLIC_SAFE_NGRAM_WORDS <= bodyWords.length; i++) {
-      bodyGrams.add(bodyWords.slice(i, i + PUBLIC_SAFE_NGRAM_WORDS).join(' '));
-    }
-    for (let i = 0; i + PUBLIC_SAFE_NGRAM_WORDS <= fieldWords.length; i++) {
-      const gram = fieldWords.slice(i, i + PUBLIC_SAFE_NGRAM_WORDS).join(' ');
-      if (bodyGrams.has(gram)) {
-        throw new Error(
-          `${where} quotes the note's private body ("${gram}"). ` +
-            `A traveling field must not contain ${PUBLIC_SAFE_NGRAM_WORDS} consecutive words of private text — reword it to point, not quote.`,
-        );
-      }
+  const sources: Array<[string, string]> = [['fragment', context.fragmentText]];
+  if (context.entityText !== undefined) sources.push(['entity', context.entityText]);
+  for (const [name, text] of sources) {
+    const run = privateTextMatcher(text, { ngramWords, ngramChars })(gist);
+    if (run !== null) {
+      throw new PublicSafeLintError(
+        `${where} quotes the ${name}'s text at ${describeRun(run)}: a projection must not contain ` +
+          `${run.n} consecutive ${run.unit} of the source. Describe, do not quote.`,
+      );
     }
   }
-  return value as PublicSafe;
+  return gist as LintedGist;
 }
 
 /**
  * Deterministic related-material prose, built ONLY from the cited hints'
- * public-safe fields (label, locator). No model prose survives into this
- * mode, which is what turns "route, don't restate" from a prompt instruction
- * into a structural guarantee: a confabulated summary of a private note is
- * inexpressible, not merely discouraged.
+ * linted fields (label, locator) and, for a hint whose fragment is exposed as
+ * `semantic`, the lint-passed gist the author authorized. No model prose
+ * survives into this mode, which is what turns "route, don't restate" from a
+ * prompt instruction into a structural guarantee: a confabulated summary of a
+ * private note is inexpressible, not merely discouraged. The gist arrives
+ * here through project() and toAnswerEvidence, never through the prompt
+ * (docs/CONTRACT.md §9).
  *
  * Deliberately NO raw URL in the prose — the citation object carries the
  * link, and the gold suite forbids URLs in this mode's answer (q07).
@@ -94,6 +375,7 @@ export function assertPublicSafeField(
 export function renderRelatedMaterialAnswer(
   citations: readonly Citation[],
   hints: readonly RoutingHint[],
+  gists: Readonly<Record<string, LintedGist>> = {},
 ): string {
   const cited = citations.filter((c) => c.kind === 'hint');
   if (cited.length === 0) {
@@ -104,11 +386,15 @@ export function renderRelatedMaterialAnswer(
     if (!hint) {
       throw new Error(`related-material citation '${c.hintId}' matches no hint in evidence`);
     }
-    return `${hint.label} (${hint.locator})`;
+    return { ref: `${hint.label} (${hint.locator})`, gist: gists[c.hintId] };
   });
   const tail =
     refs.length === 1
       ? 'the citation links to the public page it belongs to'
       : 'the citations link to the public pages they belong to';
-  return `There is private material related to this: ${refs.join('; ')}. It can't be quoted here — ${tail}.`;
+  const routed = `There is private material related to this: ${refs.map((r) => r.ref).join('; ')}. It can't be quoted here — ${tail}.`;
+  const described = refs
+    .filter((r) => r.gist !== undefined)
+    .map((r) => ` What ${r.ref} is about, as a description the author authorized (not a quotation): ${r.gist}`);
+  return routed + described.join('');
 }

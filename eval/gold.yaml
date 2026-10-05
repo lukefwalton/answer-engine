@@ -35,6 +35,23 @@
 #
 # These queries run against the bundled example-content/. When you point the
 # engine at your own corpus, replace them with your own — keep the refusals.
+#
+# `canaries` is the same idea, swept KEYLESSLY over every gist the index would
+# serve (docs/CONTRACT.md §11): a note whose frontmatter asks for
+# `exposure: semantic` gets a machine-drafted description, and a retrieval-only
+# consumer can surface any of them, so every served gist is checked against
+# every canary, and each entity's gists are checked together for a phrase that
+# straddles two. The list below is the private-notebook wording the queries
+# forbid, in one place. An archive holding text in a script without word
+# spacing adds at least one canary in that script.
+
+canaries:
+  - modulated
+  - whole step
+  - lighthouse keeper
+  - ferry horn
+  - magazine that ran
+  - grudge
 
 queries:
   # ── Questions the archive answers ────────────────────────────────────────

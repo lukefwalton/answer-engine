@@ -1,22 +1,88 @@
 {
-  "name": "answer-engine",
+  "name": "@lukefwalton/answer-engine",
   "version": "2.1.0",
-  "private": true,
   "type": "module",
-  "description": "Teaching example: site-level search over a personal archive where every claim cites its source. Clone and run — not published to npm.",
+  "description": "A retrieval substrate for a personal archive: every fragment carries a disclosure policy, hits carry provenance, and the only object a consumer hands to a model or a caller cannot hold more than that policy allows. Clone and run the teaching commands, or import it.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lukefwalton/answer-engine.git"
+  },
+  "homepage": "https://github.com/lukefwalton/answer-engine#readme",
+  "bugs": {
+    "url": "https://github.com/lukefwalton/answer-engine/issues"
+  },
   "engines": {
     "node": ">=22"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./contract": {
+      "types": "./dist/contract.d.ts",
+      "default": "./dist/contract.js"
+    },
+    "./retrieve": {
+      "types": "./dist/retrieve.d.ts",
+      "default": "./dist/retrieve.js"
+    },
+    "./boosts": {
+      "types": "./dist/boosts.d.ts",
+      "default": "./dist/boosts.js"
+    },
+    "./no-leak": {
+      "types": "./dist/no-leak.d.ts",
+      "default": "./dist/no-leak.js"
+    },
+    "./wire": {
+      "types": "./dist/wire.d.ts",
+      "default": "./dist/wire.js"
+    },
+    "./store": {
+      "types": "./dist/store.d.ts",
+      "default": "./dist/store.js"
+    },
+    "./ingest": {
+      "types": "./dist/ingest/index.d.ts",
+      "default": "./dist/ingest/index.js"
+    },
+    "./eval": {
+      "types": "./dist/evaluate.d.ts",
+      "default": "./dist/evaluate.js"
+    },
+    "./public-safe": {
+      "types": "./dist/public-safe.d.ts",
+      "default": "./dist/public-safe.js"
+    },
+    "./locator": {
+      "types": "./dist/locator.d.ts",
+      "default": "./dist/locator.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "docs/CONTRACT.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "index": "node --env-file-if-exists=.env --import tsx src/cli/build-index.ts",
+    "migrate:index": "node --import tsx scripts/migrate-index-v3-v4.ts",
     "ask": "node --env-file-if-exists=.env --import tsx src/cli/ask.ts",
     "eval": "node --env-file-if-exists=.env --import tsx src/cli/eval.ts",
     "demo:build": "node --env-file-if-exists=.env --import tsx demo/build.ts",
     "demo:run": "node --env-file-if-exists=.env --import tsx demo/run.ts",
     "demo:test": "node --import tsx --test demo/*.test.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "test:dist": "npm run build && node scripts/smoke-dist.mjs",
+    "prepare": "npm run build",
     "test": "node --import tsx --test test/*.test.ts demo/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && node scripts/smoke-dist.mjs"
   },
   "dependencies": {
     "gray-matter": "^4.0.3",

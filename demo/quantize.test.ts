@@ -7,8 +7,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { cosine } from '../src/retrieve.js';
+import { buildRetrievalIndex, cosine, retrieve } from '../src/retrieve.js';
 import { assertPublicSafeField } from '../src/public-safe.js';
+import { indexFileFromLegacyEntries } from '../src/store.js';
 import type { ArchiveRecord, IndexEntry, PrivateNote } from '../src/types.js';
 import type { GoldQuery } from '../src/evaluate.js';
 import { dequantize, levelFor, quantize, requantizeVector } from './quantize.js';
@@ -52,6 +53,11 @@ function recordEntry(id: string, vector: number[], extra: Partial<ArchiveRecord>
 
 function noteEntry(id: string, vector: number[]): IndexEntry {
   return { model: 'text-embedding-3-large', dimensions: vector.length, vector, contentHash: 'h', sourceType: 'note', note: makeNote(id) };
+}
+
+/** Legacy record/note entries → the retrieval index the harness scans. */
+function indexOf(entries: IndexEntry[]) {
+  return buildRetrievalIndex(indexFileFromLegacyEntries(entries));
 }
 
 // Two fillers near-orthogonal to Q, so they stay below the floor in every
@@ -103,27 +109,27 @@ test('harness: spearmanRho on known orderings, with ties', () => {
 });
 
 test('harness: requantizeIndex keeps every field but the vector', () => {
-  const index = [recordEntry('work:a', VR), noteEntry('note:b', VN)];
+  const index = indexOf([recordEntry('work:a', VR), noteEntry('note:b', VN)]);
   const q = requantizeIndex(index, 8);
-  assert.equal(q.length, 2);
-  assert.equal(q[0]!.sourceType, 'record');
-  assert.equal(q[0]!.dimensions, 24);
-  assert.notDeepEqual(q[0]!.vector, index[0]!.vector); // lossy
-  assert.equal(q[0]!.contentHash, index[0]!.contentHash); // untouched
+  assert.equal(q.entries.length, 2);
+  assert.equal(q.entries[0]!.fragment.disclosure.raw, 'public');
+  assert.equal(q.dimensions, 24);
+  assert.notDeepEqual(q.entries[0]!.vector, index.entries[0]!.vector); // lossy
+  assert.deepEqual(q.entries[0]!.fragment, index.entries[0]!.fragment); // untouched
+  assert.equal(q.entities, index.entities);
 });
 
-test('harness: topSource picks the highest score across both streams', () => {
-  const result = {
-    records: [{ record: makeRecord('work:r'), score: 0.71, semantic: 0.71 }],
-    notes: [{ note: makeNote('note:n'), score: 0.73, semantic: 0.73 }],
-  };
-  assert.equal(topSource(result)?.id, 'note:n');
-  assert.equal(topSource(result)?.kind, 'note');
-  assert.equal(topSource({ records: [], notes: [] }), null);
+test('harness: topSource picks the highest score across both layers', () => {
+  // FP: the note (VN) outranks the record (VR) for Q, so it is the top source.
+  const hits = retrieve(Q, 'zzz qqq', indexOf([recordEntry('work:r', VR), noteEntry('note:n', VN)]));
+  assert.equal(topSource(hits)?.id, 'note:n');
+  assert.equal(topSource(hits)?.raw, 'private');
+  assert.equal(topSource(hits)?.fragmentId, 'note:n#sermon');
+  assert.equal(topSource([]), null);
 });
 
 test('harness: int8 preserves the FP ranking better than int4 (rank correlation)', () => {
-  const index = [noteEntry('note:n', VN), recordEntry('work:r', VR), recordEntry('work:f1', filler1), recordEntry('work:f2', filler2)];
+  const index = indexOf([noteEntry('note:n', VN), recordEntry('work:r', VR), recordEntry('work:f1', filler1), recordEntry('work:f2', filler2)]);
   const rho8 = rankCorrelation(index, requantizeIndex(index, 8), Q);
   const rho4 = rankCorrelation(index, requantizeIndex(index, 4), Q);
   assert.ok(rho8 >= rho4, `int8 rho (${rho8}) >= int4 rho (${rho4})`);
@@ -133,11 +139,11 @@ test('harness: int8 preserves the FP ranking better than int4 (rank correlation)
 test('the payload: the gate certifies int8 and rejects int4 on the route case', () => {
   // The note (VN) must win the top slot; that is the route. A query with no
   // title/theme overlap, so the contest is pure cosine, not boosts.
-  const index: IndexEntry[] = [
+  const index = indexOf([
     noteEntry('note:syn-amos-justice-margin', VN),
     recordEntry('george-adam-smith:twelve-prophets-amos', VR, { title: 'unrelated phrasing' }),
     recordEntry('work:f1', filler1),
-  ];
+  ]);
   const gold: GoldQuery = {
     id: 'route-margin',
     query: 'zzz qqq no token overlap with any title or theme',
@@ -168,10 +174,10 @@ test('disambiguation: the keyless gate catches a partial-mode flip (right Smith 
   // Smith (VN) outranks the wrong Smith (VR) at full precision and int8, and int4
   // swaps them. A partial case is presence-checked by judgeRetrieval, so without
   // the top-slot check the flipped disambiguation verdict would pass keyless.
-  const index: IndexEntry[] = [
+  const index = indexOf([
     recordEntry('adam-smith:theory-of-moral-sentiments-justice', VN, { title: 'unrelated phrasing' }),
     recordEntry('george-adam-smith:twelve-prophets-amos', VR, { title: 'unrelated phrasing' }),
-  ];
+  ]);
   const gold: GoldQuery = {
     id: 'econ-justice',
     query: 'zzz qqq no token overlap with any title or theme',
@@ -200,7 +206,7 @@ test('the payload, directly: cosine ordering flips between int8 and int4', () =>
 });
 
 test('evaluateQuery: a refuse case with nothing above the floor stays not-found', () => {
-  const index = [recordEntry('work:f1', filler1), recordEntry('work:f2', filler2)];
+  const index = indexOf([recordEntry('work:f1', filler1), recordEntry('work:f2', filler2)]);
   const gold: GoldQuery = { id: 'refuse', query: 'zzz qqq', expectAnswerMode: 'not-found', forbidSources: ['work:f1', 'work:f2'] };
   const res = evaluateQuery(gold, index, requantizeIndex(index, 8), Q);
   assert.equal(res.pass, true, 'fillers stay below the floor, so nothing is forbidden-surfaced');
@@ -210,7 +216,7 @@ test('the top-slot contract: a non-refusal case must name exactly one expected s
   // The gate guards expectSources[0] as the required top-slot winner. Two entries
   // (which must rank #1?) or none would let a flip past silently, so the harness
   // refuses to evaluate them rather than guess. Refusals are exempt.
-  const index = [recordEntry('work:a', VR), noteEntry('note:b', VN)];
+  const index = indexOf([recordEntry('work:a', VR), noteEntry('note:b', VN)]);
   const qIndex = requantizeIndex(index, 8);
 
   const twoSources: GoldQuery = { id: 'two', query: 'q', expectAnswerMode: 'partial', expectSources: ['work:a', 'note:b'] };
