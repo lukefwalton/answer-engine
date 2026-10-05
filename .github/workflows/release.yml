@@ -1,8 +1,7 @@
 name: release
 
 # Intentional releases only — not on every green CI run.
-# Each GitHub release can trigger a new Zenodo archive and citable DOI, and
-# publishes the package to npm.
+# Each GitHub release can trigger a new Zenodo archive and citable DOI.
 on:
   workflow_dispatch:
     inputs:
@@ -31,8 +30,6 @@ concurrency:
 
 permissions:
   contents: write
-  # npm trusted publishing (OIDC). Harmless when an NPM_TOKEN secret is used instead.
-  id-token: write
 
 jobs:
   release:
@@ -123,25 +120,5 @@ jobs:
             ${{ inputs.notes }}
 
             ---
-            Archived on Zenodo after publish. Cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773) for latest, or this release's version DOI to pin the snapshot. Published to npm as `@lukefwalton/answer-engine@${{ steps.version.outputs.next }}`.
+            Archived on Zenodo after publish. Cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773) for latest, or this release's version DOI to pin the snapshot.
           generate_release_notes: true
-
-      # Publishing. Two ways to authenticate, either is enough:
-      #   1. npm trusted publishing: on npmjs.com, add this repository and this
-      #      workflow file as a trusted publisher for @lukefwalton/answer-engine;
-      #      the id-token permission above lets npm (>= 11.5, Node 24) mint the
-      #      token itself. No secret.
-      #   2. An NPM_TOKEN repository secret (an automation token), written to
-      #      ~/.npmrc here. If both exist the token wins.
-      # Pre-releases publish under the `next` dist-tag so `npm install
-      # @lukefwalton/answer-engine` keeps resolving to the latest release.
-      - name: Publish to npm
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -n "$NPM_TOKEN" ]; then
-            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
-          fi
-          tag=latest
-          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then tag=next; fi
-          npm publish --provenance --access public --tag "$tag"

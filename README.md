@@ -276,7 +276,7 @@ npm run index          # build/refresh artifacts/index.json and artifacts/projec
 npm run migrate:index  # schema 3 → 4 for an index file, in place, keyless
 npm run ask            # ask one question, get a cited answer
 npm run eval           # canary sweep (keyless), then the gold set's retrieval checks (-- --full for answers; prefer --ids / --from-report)
-npm run build          # compile the package to dist/ (what npm publish ships)
+npm run build          # compile the package to dist/
 npm run test:dist      # build, then import the package by name and smoke it
 npm test               # offline, deterministic engine tests — no API key
 npm run typecheck      # tsc --noEmit
@@ -385,11 +385,8 @@ Checked-in metadata must match the latest `v*` tag on the remote (`v2.1.0`
 today — the tag already exists). The workflow queues concurrent runs, builds
 and smoke-imports the package, bumps semver via
 [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
-pushes `main` and the new tag atomically, creates the GitHub release Zenodo
-archives (pre-releases are marked as such), then publishes
-`@lukefwalton/answer-engine` to npm with provenance (pre-releases under the
-`next` dist-tag). Publishing authenticates through npm trusted publishing or an
-`NPM_TOKEN` secret; the workflow file says how to set up either. `CITATION.cff`
+pushes `main` and the new tag atomically, and creates the GitHub release Zenodo
+archives (pre-releases are marked as such). `CITATION.cff`
 and `.zenodo.json` both use the concept DOI for citation; Zenodo assigns a
 version DOI per release on its own.
 If the workflow pushes refs but GitHub release creation fails, create the release
