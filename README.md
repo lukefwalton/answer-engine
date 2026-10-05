@@ -381,7 +381,7 @@ required when a new release lands.
 (patch/minor/major, or `premajor` to start a pre-release line such as
 `3.0.0-alpha.1` and `prerelease` to continue it; patch/minor/major on a
 pre-release finalize it — [`scripts/next-version.mjs`](./scripts/next-version.mjs)).
-Checked-in metadata must match the latest `v*` tag on the remote (`v2.1.0`
+Checked-in metadata must match the latest `v*` tag on the remote (`v3.0.0-alpha.1`
 today — the tag already exists). The workflow queues concurrent runs, builds
 and smoke-imports the package, bumps semver via
 [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
