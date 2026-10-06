@@ -5,6 +5,10 @@ All notable changes to this repository are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Releases are cut by the `release`
 workflow and archived on Zenodo under the concept DOI
 [10.5281/zenodo.20676773](https://doi.org/10.5281/zenodo.20676773).
+`@lukefwalton/answer-engine@3.0.0-alpha.1` is published on npm, with both
+`latest` and `next` pointing at it. Later publishes from Actions need a
+trusted publisher for `release.yml` with publish allowed; the granular
+`NPM_TOKEN` secret cannot pass npm's two-factor check.
 
 ## [Unreleased]
 
@@ -109,9 +113,12 @@ workflow and archived on Zenodo under the concept DOI
   CI. The release workflow learns pre-releases (`premajor` starts
   `3.0.0-alpha.1`, `prerelease` continues the line, patch/minor/major finalize
   it; `scripts/next-version.mjs`, tested), sorts tags so a finalized release
-  outranks its pre-releases, builds and smokes before any ref is pushed, marks
-  GitHub pre-releases, and publishes to npm with provenance (`NPM_TOKEN`;
-  pre-releases under the `next` dist-tag). Zenodo archives the GitHub release.
+  outranks its pre-releases, builds and smokes before any ref is pushed, and marks
+  GitHub pre-releases. Zenodo archives the GitHub release. The workflow's npm
+  step publishes with provenance under `next` for a pre-release, using
+  `NPM_TOKEN`. Actions cannot finish that step with the granular token.
+  `3.0.0-alpha.1` was published from a logged-in CLI after a security-key
+  approval, and the first publish set both `latest` and `next`.
   `scripts/sync-release-metadata.mjs` accepts pre-release versions.
   `.github/STANDARDS.md` is re-chartered for the substrate (`project()` as the
   one crossing, exposure resolved at build, the linted-not-typed metadata rule,

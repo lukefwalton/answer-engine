@@ -29,7 +29,10 @@ five ideas, laid out below in the order the data flows.
 teaching commands (`npm install`, `npm run …`) on the bundled example corpus;
 or, from 3.0.0, import it (`@lukefwalton/answer-engine`) as the substrate
 under your own consumer: a question-answering product, or a retrieval-only
-endpoint whose caller brings its own model. It is deliberately not a
+endpoint whose caller brings its own model. The published package is
+[`@lukefwalton/answer-engine@3.0.0-alpha.1`](https://www.npmjs.com/package/@lukefwalton/answer-engine).
+`npm install @lukefwalton/answer-engine` installs that alpha: the first
+publish set both the `latest` and `next` dist-tags to it. It is deliberately not a
 framework, hosted app, chatbot UI, or vector-database starter. It is the
 smallest useful version of the answer contract: what may travel from each
 piece of an archive, what must stay behind, how citations are grounded, and
@@ -385,12 +388,23 @@ Checked-in metadata must match the latest `v*` tag on the remote (`v3.0.0-alpha.
 today — the tag already exists). The workflow queues concurrent runs, builds
 and smoke-imports the package, bumps semver via
 [`scripts/sync-release-metadata.mjs`](./scripts/sync-release-metadata.mjs),
-pushes `main` and the new tag atomically, creates the GitHub release Zenodo
-archives (pre-releases are marked as such), then publishes
-`@lukefwalton/answer-engine` to npm with provenance (pre-releases under the
-`next` dist-tag) using the `NPM_TOKEN` repository secret. `CITATION.cff`
+pushes `main` and the new tag atomically, and creates the GitHub release Zenodo
+archives (pre-releases are marked as such). `CITATION.cff`
 and `.zenodo.json` both use the concept DOI for citation; Zenodo assigns a
-version DOI per release on its own.
+version DOI per release on its own. `v3.0.0-alpha.1` is that release on GitHub,
+on Zenodo (the concept DOI resolves to it), and on npm.
+
+The workflow then publishes to npm with provenance, under `next` for a
+pre-release and `latest` otherwise, using the `NPM_TOKEN` secret. That step
+fails from Actions. npm requires a security-key approval for the publish, and
+it will not enable two-factor bypass on the granular token in `NPM_TOKEN`.
+`3.0.0-alpha.1` was published from a logged-in CLI after that approval. Before
+the next release, trust GitHub Actions on the package for repository
+`lukefwalton/answer-engine` and workflow filename `release.yml`, with npm
+publish allowed, and publish with that trust. Then revoke the granular token.
+Do not dispatch **Actions → publish** or re-run **Actions → release** to retry
+this version: the publish workflow uploads the version already on npm, and a
+release rerun bumps semver.
 If the workflow pushes refs but GitHub release creation fails, create the release
 manually from the existing tag in the GitHub UI — **do not re-run** this workflow:
 a rerun would bump semver again (e.g. skip `v1.4.0` and cut `v1.4.1`) because
