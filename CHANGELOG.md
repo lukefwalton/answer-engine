@@ -110,7 +110,8 @@ workflow and archived on Zenodo under the concept DOI
   `3.0.0-alpha.1`, `prerelease` continues the line, patch/minor/major finalize
   it; `scripts/next-version.mjs`, tested), sorts tags so a finalized release
   outranks its pre-releases, builds and smokes before any ref is pushed, marks
-  GitHub pre-releases. Zenodo archives the GitHub release.
+  GitHub pre-releases, and publishes to npm with provenance (`NPM_TOKEN`;
+  pre-releases under the `next` dist-tag). Zenodo archives the GitHub release.
   `scripts/sync-release-metadata.mjs` accepts pre-release versions.
   `.github/STANDARDS.md` is re-chartered for the substrate (`project()` as the
   one crossing, exposure resolved at build, the linted-not-typed metadata rule,

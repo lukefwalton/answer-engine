@@ -1,7 +1,8 @@
 name: release
 
 # Intentional releases only — not on every green CI run.
-# Each GitHub release can trigger a new Zenodo archive and citable DOI.
+# Each GitHub release can trigger a new Zenodo archive and citable DOI, and
+# publishes the package to npm.
 on:
   workflow_dispatch:
     inputs:
@@ -30,6 +31,8 @@ concurrency:
 
 permissions:
   contents: write
+  # npm provenance. Publishing authenticates with the NPM_TOKEN secret.
+  id-token: write
 
 jobs:
   release:
@@ -120,5 +123,20 @@ jobs:
             ${{ inputs.notes }}
 
             ---
-            Archived on Zenodo after publish. Cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773) for latest, or this release's version DOI to pin the snapshot.
+            Archived on Zenodo after publish. Cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773) for latest, or this release's version DOI to pin the snapshot. Published to npm as `@lukefwalton/answer-engine@${{ steps.version.outputs.next }}`.
           generate_release_notes: true
+
+      # Pre-releases publish under the `next` dist-tag so `npm install
+      # @lukefwalton/answer-engine` keeps resolving to the latest release.
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "NPM_TOKEN secret is not set."
+            exit 1
+          fi
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+          tag=latest
+          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then tag=next; fi
+          npm publish --provenance --access public --tag "$tag"
