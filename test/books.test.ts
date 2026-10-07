@@ -256,6 +256,19 @@ test('books: a title that quotes the text is refused before any build, unless th
     (err: unknown) =>
       err instanceof Error && /pieces 1 and 2 of 2 share a 'page' locator/.test(err.message) && !/unguessable/.test(err.message),
   );
+  // A page marker's token becomes a locator value and so part of the fragment
+  // id. It is public surface by contract and goes through the metadata lint
+  // before the id goes anywhere: a token the lint bounds out is refused here,
+  // named by field and never echoed.
+  const oversized = 'x'.repeat(130);
+  const [bounded] = read({ 'w.md': `---\ntitle: W\nabout: https://example.com/w/\nfragmentBy: pages\n---\n<<<page ${oversized}>>>\none\n` });
+  assert.equal(bounded!.pieces[0]!.locator[0]!.value, oversized);
+  assert.throws(
+    () => fromPrivateBook(bounded!),
+    (err: unknown) => err instanceof Error && /'locator value \(page\)'/.test(err.message) && !/xxxxxxxx/.test(err.message),
+  );
+  const [plain] = read({ 'w.md': `---\ntitle: W\nabout: https://example.com/w/\nfragmentBy: pages\n---\n<<<page 184>>>\none\n` });
+  assert.equal(fromPrivateBook(plain!)[0]!.fragment.id, 'book:w#p184');
 });
 
 test('books: through the store, a book serves locators and never its text', () => {
