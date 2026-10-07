@@ -1,14 +1,19 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { test } from 'node:test';
 
-import { embedText, noteEmbedText } from '../src/corpus.js';
-import { truncateForEmbedding } from '../src/embedding.js';
+import { embedStringFor } from '../src/embed-string.js';
 import { loadGold } from '../src/evaluate.js';
-import { entrySourceId, readIndexFile } from '../src/store.js';
+import { readIndex } from '../src/store.js';
+import { contentHash } from './build-lib.js';
 import { readQueryVectors } from './query-vectors.js';
 
-const EXPECTED_NATURAL_SOURCES = [
+const NATURAL = 'demo/corpus/index.json';
+const SYNTHETIC = 'demo/corpus/index.synthetic.json';
+const BOOK = 'demo/corpus/index.book.json';
+const AUTHOR = 'Smith Collection';
+
+const EXPECTED_NATURAL_ENTITIES = [
   'adam-smith:theory-of-moral-sentiments-justice',
   'adam-smith:theory-of-moral-sentiments-sympathy',
   'adam-smith:wealth-of-nations-division-of-labour',
@@ -23,41 +28,45 @@ const EXPECTED_NATURAL_SOURCES = [
 ].sort();
 
 test('committed demo index matches the public-domain source allowlist', () => {
-  const natural = readIndexFile('demo/corpus/index.json');
-  const actual = natural
-    .map((entry) => (entry.sourceType === 'record' ? entry.record.id : entry.note.id))
-    .sort();
+  const natural = readIndex(NATURAL);
+  const entities = natural.entities.map((e) => e.id).sort();
   assert.deepEqual(
-    actual,
-    EXPECTED_NATURAL_SOURCES,
-    `committed demo index source ids changed; update the public-domain provenance and allowlist deliberately\n` +
-      `actual: ${actual.join(', ')}`,
+    entities,
+    EXPECTED_NATURAL_ENTITIES,
+    `committed demo index entities changed; update the public-domain provenance and allowlist deliberately\n` +
+      `actual: ${entities.join(', ')}`,
   );
+  // Whole records and whole sermons: one fragment per entity, nothing split.
+  assert.deepEqual(natural.entries.map((e) => e.fragment.entityId).sort(), EXPECTED_NATURAL_ENTITIES);
 
-  const synthetic = readIndexFile('demo/corpus/index.synthetic.json');
+  const synthetic = readIndex(SYNTHETIC);
   assert.deepEqual(
-    synthetic.map((entry) => (entry.sourceType === 'note' ? entry.note.id : entry.record.id)),
+    synthetic.entities.map((e) => e.id),
     ['note:syn-amos-justice-margin'],
     'committed synthetic spire changed; keep it to the single flagged near-tie unless the demo is recalibrated',
   );
+  assert.deepEqual(synthetic.entries.map((e) => e.fragment.entityId), ['note:syn-amos-justice-margin']);
 });
 
-test('committed demo hashes match the current embed-text derivation', () => {
-  // Mirrors contentHash in demo/build.ts (that file runs its keyed build on
-  // import, so it can't be imported here). This pins the schema-v3 migration
-  // invariant: the committed vectors were embedded from label+body at v2, and
-  // today's derivation (noteEmbedText = title+body, embedText for records)
-  // must reproduce the exact bytes those hashes were taken over. Drift in the
-  // migration or the derivation fails here, keylessly — not at re-embed time.
-  const hash = (text: string) =>
-    createHash('sha1').update(truncateForEmbedding(text)).digest('hex').slice(0, 16);
-  for (const path of ['demo/corpus/index.json', 'demo/corpus/index.synthetic.json']) {
-    for (const entry of readIndexFile(path)) {
-      const text = entry.sourceType === 'note' ? noteEmbedText(entry.note) : embedText(entry.record);
+test('committed demo hashes match the current embed-string derivation', () => {
+  // The committed vectors were embedded from label+body at v2 and carried
+  // through the schema-3 and schema-4 migrations without re-embedding. This
+  // pins that invariant: the embed string the adapters produce today
+  // (src/embed-string.ts) must reproduce the exact bytes those hashes were
+  // taken over, so drift in an adapter or the derivation fails here,
+  // keylessly, not at re-embed time. The book layer, when built, is held to
+  // the same rule.
+  const layers = [NATURAL, SYNTHETIC, ...(existsSync(BOOK) ? [BOOK] : [])];
+  for (const path of layers) {
+    const file = readIndex(path);
+    const entities = new Map(file.entities.map((e) => [e.id, e]));
+    for (const entry of file.entries) {
+      const entity = entities.get(entry.fragment.entityId);
+      assert.ok(entity, `fragment '${entry.fragment.id}' names an unknown entity in ${path}`);
       assert.equal(
         entry.contentHash,
-        hash(text),
-        `contentHash drift for '${entrySourceId(entry)}' in ${path}`,
+        contentHash(embedStringFor(entry.fragment, entity)),
+        `contentHash drift for '${entry.fragment.id}' in ${path}`,
       );
     }
   }
@@ -65,8 +74,9 @@ test('committed demo hashes match the current embed-text derivation', () => {
 
 test('committed demo query vectors match the gold suite ids', () => {
   const gold = [
-    ...loadGold('demo/gold.yaml', 'Smith Collection'),
-    ...loadGold('demo/gold.synthetic.yaml', 'Smith Collection'),
+    ...loadGold('demo/gold.yaml', AUTHOR),
+    ...loadGold('demo/gold.synthetic.yaml', AUTHOR),
+    ...(existsSync(BOOK) ? loadGold('demo/gold.book.yaml', AUTHOR) : []),
   ];
   const queryVectors = readQueryVectors('demo/corpus/query-vectors.json');
   assert.ok(queryVectors);

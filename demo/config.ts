@@ -42,6 +42,29 @@ export const config: ArchiveConfig = {
   // homogeneity invariant (src/store.ts) rejects them.
   embeddingModel: 'text-embedding-3-large',
   answerModel: 'gpt-4o-mini',
+  // The book layer's gists (docs/CONTRACT.md §5). The names the drafter may
+  // use are the novel's principals: it was published in 1900, so a name is
+  // not a spoiler here. A pre-publication manuscript would list none.
+  gist: {
+    model: 'gpt-4o-mini',
+    allowedNames: {
+      'book:the-wonderful-wizard-of-oz': [
+        'Dorothy',
+        'Toto',
+        'Aunt Em',
+        'Uncle Henry',
+        'the Scarecrow',
+        'the Tin Woodman',
+        'the Cowardly Lion',
+        'Oz',
+        'the Emerald City',
+        'Kansas',
+        'Glinda',
+        'the Wicked Witch of the West',
+        'the Winged Monkeys',
+      ],
+    },
+  },
 };
 
 // The quarantined synthetic spire (demo/corpus/synthetic/) is loaded as an
@@ -50,3 +73,11 @@ export const config: ArchiveConfig = {
 // frontmatter (a second flag the PrivateNote type ignores): nothing in
 // demo/corpus/synthetic/ is real George text. See demo/run.ts and README §3.
 export const SYNTHETIC_NOTES_DIR = './demo/corpus/synthetic';
+
+// The book layer (demo/corpus/private-books/): one public-domain novel as a
+// PRIVATE entity whose chapters are served as gists the build drafted and the
+// author released (`exposure: semantic`). Loaded as an additional layer only
+// under --natural+book, never into the headline. The text is not in the repo
+// until someone runs scripts/prepare-gutenberg-book.mjs on the Gutenberg file
+// (build-handoff.md §6); the layer is absent, not broken, until then.
+export const BOOK_DIR = './demo/corpus/private-books';

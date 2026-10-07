@@ -199,6 +199,21 @@ npm trusts this repository's `release.yml`.
   share a locator are refused by position and scheme. `npm run index` reads the books
   beside the records and the notes; a book's `semantic` request is drafted per
   fragment against the whole book's text, as CONTRACT §12 describes.
+- The demo's book layer (`npm run demo:run -- --natural+book`): *The Wonderful
+  Wizard of Oz* (Project Gutenberg #55) as one private entity, a fragment per
+  chapter, served as gists (`exposure: semantic`). `demo/build.ts` now runs the
+  schema-4 pipeline through `demo/build-lib.ts` (adapters, `collectEntities`,
+  gist drafting into `demo/corpus/projections.json`, policy resolution, vectors
+  reused by content hash so a Smith is never re-embedded, gold-query vectors
+  reused by id), and the tests run the same functions keyless with a fake
+  embedder and a scripted drafter (`demo/build.test.ts`). The runner checks the
+  layer's served view and sweeps every released gist against the canaries in
+  `demo/gold.book.yaml` before the gate; `demo/book.test.ts` holds the committed
+  layer to one fragment per chapter, every chapter served as a gist, and a
+  clean sweep (skipped until the keyed build has run).
+  `scripts/prepare-gutenberg-book.mjs` turns the Gutenberg text into the book
+  file without rewriting a word. The headline (`--natural`) does not include
+  the book and is unchanged.
 
 ### Removed
 

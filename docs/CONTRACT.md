@@ -855,9 +855,11 @@ body are, the frontmatter's `publicTitle` and `requireReview` on the entity's
 `policy`, and the section 6 metadata lint run over the whole book before the
 build drafts or embeds anything; `collectEntities` then groups the pairs, comparing
 two descriptions of one entity by content with keys sorted at every level, not
-by property order. The example content does not change. The demo gains one
-entity that exercises `semantic` in a following release: a public-domain novel
-with its chapter gists committed beside the vectors, which needs a keyed build.
+by property order. The example content does not change. The demo's book layer
+(`demo/`, `--natural+book`) exercises `semantic`: a public-domain novel as one
+private entity with a fragment per chapter, its gists drafted by the keyed
+build and committed beside the vectors, its served view checked and every
+released gist swept against canaries, keylessly, before the gate runs.
 
 ## 13. What remains owned rather than guaranteed
 
