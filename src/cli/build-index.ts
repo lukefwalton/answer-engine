@@ -1,4 +1,5 @@
-// npm run index — read both layers, draft the gists the author asked for,
+// npm run index — read the public collections, the private notes, and the
+// private books; draft the gists the author asked for,
 // resolve each fragment's exposure, embed what changed, and write the private
 // index (artifacts/index.json) and the author's projections file
 // (artifacts/projections.json). Both are private material and gitignored.
@@ -25,9 +26,9 @@ import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 
 import { config } from '../../archive.config.js';
-import { fromArchiveRecord, fromPrivateNote } from '../adapters/teaching.js';
+import { fromArchiveRecord, fromPrivateBook, fromPrivateNote } from '../adapters/teaching.js';
 import type { Entity, EntityPolicy, Fragment, SemanticProjection } from '../contract.js';
-import { buildCorpus, buildPrivateNotes } from '../corpus.js';
+import { buildCorpus, buildPrivateBooks, buildPrivateNotes } from '../corpus.js';
 import { embedStringFor } from '../embed-string.js';
 import { batchInputs, embedBatch, truncateForEmbedding } from '../embedding.js';
 import { collectEntities } from '../ingest/collect.js';
@@ -107,9 +108,15 @@ async function main(): Promise<void> {
     );
   }
   const notes = buildPrivateNotes(config);
-  console.log(`Corpus: ${records.length} records, ${notes.length} private notes`);
+  const books = buildPrivateBooks(config);
+  console.log(`Corpus: ${records.length} records, ${notes.length} private notes, ${books.length} private books`);
 
-  const sources: Source[] = [...records.map(fromArchiveRecord), ...notes.map(fromPrivateNote)];
+  // A record or a note is one fragment; a book is one entity with many.
+  const sources: Source[] = [
+    ...records.map(fromArchiveRecord),
+    ...notes.map(fromPrivateNote),
+    ...books.flatMap(fromPrivateBook),
+  ];
   const lint = lintPolicy(config.gist);
   if (lint) for (const { entity } of sources) entity.policy = { ...entity.policy, lint };
   // Entities once, every fragment under its entity (CONTRACT.md §12). The

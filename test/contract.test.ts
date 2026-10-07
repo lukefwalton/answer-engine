@@ -488,3 +488,60 @@ test('collectEntities: entities once, many fragments; an id described two ways o
     /fragment 'book:x#p1' names entity 'book:x' but was produced under 'essay:y'/,
   );
 });
+
+test('collectEntities: one entity in two property orders is one entity; array order is content', () => {
+  const page = (n: number): Fragment => ({
+    id: `book:x#p${n}`,
+    entityId: 'book:x',
+    locator: [{ scheme: 'page', value: String(n) }],
+    text: `page ${n}`,
+    disclosure: { raw: 'private', exposure: 'locator' },
+  });
+  // The same description, assigned in another order at every level (the
+  // entity, its policy, the lint window, a creator, an identifier): two
+  // adapters, or one adapter run twice, may well differ in insertion order.
+  const first: Entity = {
+    id: 'book:x',
+    type: 'book',
+    title: 'X',
+    attribution: [{ name: 'A. Author', role: 'author', identifiers: [{ scheme: 'orcid', value: '0000' }] }],
+    url: 'https://example.com/x/',
+    identifiers: [{ scheme: 'isbn', value: '1' }],
+    disclosure: { raw: 'private', exposure: 'locator' },
+    policy: { requireReview: true, lint: { ngramWords: 5, gistMaxChars: 300 } },
+  };
+  const second: Entity = {
+    policy: { lint: { gistMaxChars: 300, ngramWords: 5 }, requireReview: true },
+    disclosure: { exposure: 'locator', raw: 'private' },
+    identifiers: [{ value: '1', scheme: 'isbn' }],
+    url: 'https://example.com/x/',
+    attribution: [{ identifiers: [{ value: '0000', scheme: 'orcid' }], role: 'author', name: 'A. Author' }],
+    title: 'X',
+    type: 'book',
+    id: 'book:x',
+  };
+  assert.notEqual(JSON.stringify(first), JSON.stringify(second), 'the fixture must differ in order');
+  const grouped = collectEntities([
+    { entity: first, fragment: page(1) },
+    { entity: second, fragment: page(2) },
+  ]);
+  assert.equal(grouped.entities.get('book:x'), first, 'the first description is the one kept');
+  assert.deepEqual(grouped.fragments.get('book:x')!.map((f) => f.id), ['book:x#p1', 'book:x#p2']);
+
+  // Order inside a list is content: creators listed the other way round, or
+  // identifiers, describe the entity differently and are still refused.
+  const creators = (names: string[]): Entity => ({ ...first, attribution: names.map((name) => ({ name, role: 'author' })) });
+  assert.throws(
+    () => collectEntities([{ entity: creators(['A', 'B']), fragment: page(1) }, { entity: creators(['B', 'A']), fragment: page(2) }]),
+    /entity 'book:x' is described two ways/,
+  );
+  // And a real difference under a reordered key is still a difference.
+  assert.throws(
+    () =>
+      collectEntities([
+        { entity: first, fragment: page(1) },
+        { entity: { ...second, policy: { lint: { gistMaxChars: 300, ngramWords: 4 }, requireReview: true } }, fragment: page(2) },
+      ]),
+    /entity 'book:x' is described two ways/,
+  );
+});

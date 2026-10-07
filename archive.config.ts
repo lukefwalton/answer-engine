@@ -23,6 +23,10 @@ export const config: ArchiveConfig = {
   // production this is chunked podcast transcripts; here, notebook entries.
   // Remove the line to run public-only.
   privateNotesDir: './example-content/notebook',
+  // Private books: one markdown file per book, cut into fragments on its
+  // chapter headings (or page markers), served as where a moment is or as a
+  // gist the author authorizes, never as text. See README "Make it yours".
+  // privateBooksDir: './example-content/books',
   embeddingModel: 'text-embedding-3-large',
   // Default is a widely available chat model. Swap for any Responses-API model
   // you have access to (e.g. a reasoning model — see src/answer.ts).

@@ -65,8 +65,11 @@ notebook in `example-content/notebook/` is the private layer. Each note
 declares the public page it routes to (`about`), where the moment lives
 (`locator`), a linted display name (`label`), and, optionally, the `exposure`
 it wants; its `title` and body stay private, embedded so retrieval can find the
-moment. The teaching adapters (`src/adapters/teaching.ts`) turn those files
-into entities and fragments; a consumer writes its own.
+moment. A private **book** (`privateBooksDir`, off by default) is one entity
+with many fragments: the file is cut on its chapter headings or page markers,
+and each piece travels as where it is (`ch. 12`, `p. 184`) or as its gist,
+never as text. The teaching adapters (`src/adapters/teaching.ts`) turn those
+files into entities and fragments; a consumer writes its own.
 
 > In production ([Ask the Archive](https://lukefwalton.com/ask/)), published
 > podcast passages are public fragments while unpublished transcript text is
@@ -269,8 +272,29 @@ get `temperature: 0`).
    index it without ever serving it — see `docs/CONTRACT.md` §3 and §5. No
    private layer? Remove `privateNotesDir` from the config and the engine runs
    public-only.
-4. Replace `example-content/` with your corpus and rerun `npm run index`.
-5. Rewrite `eval/gold.yaml` for your corpus — keep the refusals.
+4. A private book is one markdown file in `privateBooksDir` (set it in the
+   config; it is off by default). The frontmatter is the book's public
+   surface: `title` (required; checked against the text unless
+   `publicTitle: true` says it is public by construction), `about` (the public
+   URL a hit routes to, required), and optionally `authors` (names, or
+   `{ name, role }` entries), `identifiers` (`{ scheme, value }`: isbn, doi),
+   `date`, `version` ("manuscript"), `themes`, `exposure` (`locator` by
+   default; `semantic` has `npm run index` draft one gist per fragment for you
+   to authorize in `artifacts/projections.json`; `none`), and
+   `requireReview: true` to serve no gist you have not marked reviewed. The
+   body is the private text. It is cut into fragments on its `#`/`##` headings
+   (`fragmentBy: headings`, the default: "Chapter 12" is `ch. 12`, any other
+   heading is counted among them; a leading `# Title` that repeats the
+   frontmatter title is the title page, not a chapter) or on page markers
+   (`fragmentBy: pages`: a `<<<page 184>>>` line, or a form feed with
+   `firstPage`); pieces longer than `maxFragmentChars` (6000) are sub-split on
+   paragraphs (`ch. 12, §3`). The locator is the only authored-looking thing a
+   hit carries about a chapter, and it is structural; the heading goes into the
+   embedding and nowhere else. The same build-time lint that checks a note's
+   label checks the book's title, version, and creators against the whole book
+   before anything is drafted or embedded.
+5. Replace `example-content/` with your corpus and rerun `npm run index`.
+6. Rewrite `eval/gold.yaml` for your corpus — keep the refusals.
 
 ## Commands
 

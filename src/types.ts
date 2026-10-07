@@ -2,6 +2,8 @@
 // AnswerEvidence: RoutingHint has no field for private text, which makes
 // the privacy boundary a compile-time constraint rather than a review note.
 
+import type { Attribution, Identifier } from './contract.js';
+import type { FragmentPiece } from './ingest/fragment.js';
 import type { LintedGist } from './public-safe.js';
 
 /** One piece of the PUBLIC archive — quotable, citable, body travels. */
@@ -62,6 +64,51 @@ export interface PrivateNote {
    *  draft a gist the author then authorizes; `none` is indexed, never served.
    *  `text` is not an option for private material. */
   exposure?: 'semantic' | 'locator' | 'none';
+}
+
+/**
+ * One book of the PRIVATE layer: a manuscript, a thesis, a novel the archive
+ * holds but may not quote (docs/CONTRACT.md §8). Unlike a note, it is one
+ * entity with many fragments: the markdown body is split on chapter headings
+ * (or page markers) at read time, and each piece becomes a fragment whose
+ * locator is structural ("ch. 12", "p. 184"), never authored prose. The text
+ * is embedded so retrieval can find the moment; what travels about it is the
+ * entity's exposure: where it is (`locator`, the default), a gist the author
+ * authorized (`semantic`), or nothing (`none`).
+ */
+export interface PrivateBook {
+  /** Stable id: `${type}:${slug}`; `type` is frontmatter `type`, default `book`. */
+  id: string;
+  type: string;
+  slug: string;
+  /** Frontmatter `title`. It travels on every hit as the entity title, so it
+   *  is checked against the book's text at build unless `publicTitle` says the
+   *  title is public by construction (a published book's is). */
+  title: string;
+  /** Frontmatter `publicTitle: true`: skip the quote check on the title (the
+   *  one-line bound still holds). The author's declaration (CONTRACT.md §6). */
+  publicTitle?: boolean;
+  /** The PUBLIC page a citation routes the reader to (frontmatter `about`). */
+  url: string;
+  /** Frontmatter `authors`: names, or `{ name, role }` entries. */
+  attribution: Attribution[];
+  /** Frontmatter `identifiers`: `{ scheme, value }` entries (isbn, doi, ...). */
+  identifiers: Identifier[];
+  date?: string;
+  /** Frontmatter `version`: "manuscript", an edition, a draft number. */
+  version?: string;
+  themes: string[];
+  /** Frontmatter `exposure`; absent means `locator`. `text` is not an option
+   *  for private material (CONTRACT.md §3). */
+  exposure?: 'semantic' | 'locator' | 'none';
+  /** Frontmatter `requireReview: true`: a gist is servable only once the
+   *  author marks it reviewed in artifacts/projections.json. */
+  requireReview?: boolean;
+  /** The pieces in source order, as the corpus reader cut them (a structural
+   *  locator, the private text with markdown stripped, and the heading that
+   *  opened the piece, kept apart so the adapter can put it in the embedding
+   *  and nowhere else); never empty. */
+  pieces: FragmentPiece[];
 }
 
 /**
@@ -141,6 +188,12 @@ export interface ArchiveConfig {
   /** Directory of private notes (frontmatter: title, about, locator; body =
    *  private text). Omit it and the engine runs public-only. */
   privateNotesDir?: string;
+  /** Directory of private books, one markdown file per book (frontmatter:
+   *  title, about, and optionally authors, identifiers, date, version, themes,
+   *  exposure, publicTitle, requireReview, fragmentBy, maxFragmentChars,
+   *  firstPage; body = the private text, split into fragments on its chapter
+   *  headings or page markers). Omit it and no book is indexed. */
+  privateBooksDir?: string;
   /** OpenAI embedding model. Changing it re-embeds everything on next index run. */
   embeddingModel: string;
   /** OpenAI model that writes the answer. */
