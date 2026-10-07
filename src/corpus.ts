@@ -295,9 +295,12 @@ export function buildPrivateBooks(config: ArchiveConfig): PrivateBook[] {
     for (const [i, piece] of cut.entries()) {
       // A page marker's token becomes a locator value and so part of the
       // fragment id, both of which are printed by every refusal that names a
-      // fragment. It is bounded here to a short label of label characters, so
-      // an id is structural by construction; the message names the piece by
-      // position, never the token (STANDARDS §4).
+      // fragment. It is an authored string, so it stays in the linted bucket
+      // (STANDARDS §1, §4): the adapter's metadata lint checks it against the
+      // book before any public surface exists. What this bound adds is a safe
+      // error surface: a token the lint would name in a message is short and
+      // made of label characters, and one that is not is refused here by
+      // piece position, never echoed.
       for (const l of piece.locator) {
         if (l.scheme === 'page' && !PAGE_LABEL.test(l.value)) {
           throw new Error(

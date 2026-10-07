@@ -152,13 +152,15 @@ export function fromPrivateBook(book: PrivateBook): { entity: Entity; fragment: 
       );
     }
     keys.set(key, index);
-    // The key carries the locator values (ch12, p184, p184.s2). A locator is
-    // public surface by contract (CONTRACT.md §1: structural, on every hit as
-    // the label), and the metadata lint below checks every value and label
-    // against the whole book before this id goes anywhere, so an id is safe to
-    // print by the same construction as the hit's locatorLabel. A page
-    // marker's token is one such value, bounded to a short label by the
-    // reader (src/corpus.ts) before it reaches this id.
+    // The key carries the locator values (ch12, p184, p184.s2). A chapter or
+    // section value is a parsed number or an ordinal; a page value is the
+    // author's marker token, an authored string in the linted bucket
+    // (STANDARDS §1, §4). The metadata lint below checks every locator value
+    // and label against the whole book before this id goes anywhere, so an id
+    // is safe to print for the same reason the hit's locatorLabel is: linted,
+    // not trusted. The reader (src/corpus.ts) additionally bounds a page token
+    // to a short label, so the lint's own refusal, which names the id, has a
+    // safe error surface.
     fragments.push({
       id: `${book.id}#${key}`,
       entityId: book.id,

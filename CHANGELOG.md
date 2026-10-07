@@ -214,9 +214,11 @@ npm trusts this repository's `release.yml`.
   every level; the order inside a list (creators, identifiers) is still
   content. A regression test pins both.
 - A private book's page marker (`<<<page N>>>`) is bounded by the reader to a
-  short label of letters, digits, `.` and `-`, so a page locator value, and
-  the fragment id built from it, is structural by construction; a marker
-  outside that is refused by piece position, never echoed.
+  short label of letters, digits, `.` and `-` before it becomes a locator
+  value and part of a fragment id, so the refusals that name a fragment have
+  a safe error surface; the value stays linted metadata, checked against the
+  book by the adapter's metadata lint. A marker outside the bound is refused
+  by piece position, never echoed.
 - A bare year in frontmatter (`date: 1900`, which YAML reads as a number) was
   dropped silently by every reader; it is now the date at year precision.
 
