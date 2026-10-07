@@ -213,6 +213,10 @@ npm trusts this repository's `release.yml`.
   "described two ways". It now compares by content, with object keys sorted at
   every level; the order inside a list (creators, identifiers) is still
   content. A regression test pins both.
+- A private book's page marker (`<<<page N>>>`) is bounded by the reader to a
+  short label of letters, digits, `.` and `-`, so a page locator value, and
+  the fragment id built from it, is structural by construction; a marker
+  outside that is refused by piece position, never echoed.
 - A bare year in frontmatter (`date: 1900`, which YAML reads as a number) was
   dropped silently by every reader; it is now the date at year precision.
 

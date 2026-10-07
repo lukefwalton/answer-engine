@@ -188,6 +188,8 @@ export function buildPrivateNotes(config: ArchiveConfig): PrivateNote[] {
 }
 
 const ID_TOKEN = /^[A-Za-z0-9_-]+$/;
+const PAGE_LABEL_MAX = 32;
+const PAGE_LABEL = /^[\p{L}\p{N}.-]{1,32}$/u;
 
 /** Frontmatter `authors`: a list of names, or of `{ name, role? }` entries.
  *  Malformed entries name the file and the field, never their value. */
@@ -290,7 +292,19 @@ export function buildPrivateBooks(config: ArchiveConfig): PrivateBook[] {
         ? fragmentByPageMarkers(body, { ...options, ...(firstPage !== undefined ? { firstPage } : {}) })
         : fragmentByHeadings(body, options);
     const pieces: FragmentPiece[] = [];
-    for (const piece of cut) {
+    for (const [i, piece] of cut.entries()) {
+      // A page marker's token becomes a locator value and so part of the
+      // fragment id, both of which are printed by every refusal that names a
+      // fragment. It is bounded here to a short label of label characters, so
+      // an id is structural by construction; the message names the piece by
+      // position, never the token (STANDARDS §4).
+      for (const l of piece.locator) {
+        if (l.scheme === 'page' && !PAGE_LABEL.test(l.value)) {
+          throw new Error(
+            `${path}: piece ${i + 1}'s page marker is not a short label (letters, digits, '.', '-', at most ${PAGE_LABEL_MAX} characters).`,
+          );
+        }
+      }
       const text = stripMarkdown(piece.text);
       if (!text) continue;
       pieces.push({ locator: piece.locator, text, ...(piece.heading !== undefined ? { heading: piece.heading } : {}) });

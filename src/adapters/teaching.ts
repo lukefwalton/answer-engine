@@ -157,7 +157,8 @@ export function fromPrivateBook(book: PrivateBook): { entity: Entity; fragment: 
     // the label), and the metadata lint below checks every value and label
     // against the whole book before this id goes anywhere, so an id is safe to
     // print by the same construction as the hit's locatorLabel. A page
-    // marker's token is one such value: bounded and linted, not trusted.
+    // marker's token is one such value, bounded to a short label by the
+    // reader (src/corpus.ts) before it reaches this id.
     fragments.push({
       id: `${book.id}#${key}`,
       entityId: book.id,

@@ -257,18 +257,25 @@ test('books: a title that quotes the text is refused before any build, unless th
       err instanceof Error && /pieces 1 and 2 of 2 share a 'page' locator/.test(err.message) && !/unguessable/.test(err.message),
   );
   // A page marker's token becomes a locator value and so part of the fragment
-  // id. It is public surface by contract and goes through the metadata lint
-  // before the id goes anywhere: a token the lint bounds out is refused here,
-  // named by field and never echoed.
-  const oversized = 'x'.repeat(130);
-  const [bounded] = read({ 'w.md': `---\ntitle: W\nabout: https://example.com/w/\nfragmentBy: pages\n---\n<<<page ${oversized}>>>\none\n` });
-  assert.equal(bounded!.pieces[0]!.locator[0]!.value, oversized);
-  assert.throws(
-    () => fromPrivateBook(bounded!),
-    (err: unknown) => err instanceof Error && /'locator value \(page\)'/.test(err.message) && !/xxxxxxxx/.test(err.message),
-  );
-  const [plain] = read({ 'w.md': `---\ntitle: W\nabout: https://example.com/w/\nfragmentBy: pages\n---\n<<<page 184>>>\none\n` });
-  assert.equal(fromPrivateBook(plain!)[0]!.fragment.id, 'book:w#p184');
+  // id, both printed by every refusal that names a fragment. The reader bounds
+  // it to a short label before either exists, named by piece position and
+  // never echoed, so an id is structural by construction.
+  const pages = (marker: string) => `---\ntitle: W\nabout: https://example.com/w/\nfragmentBy: pages\n---\n<<<page ${marker}>>>\none\n`;
+  for (const marker of ['x'.repeat(33), 'a_b', 'p;1', '184>>>']) {
+    assert.throws(
+      () => read({ 'w.md': pages(marker) }),
+      (err: unknown) =>
+        err instanceof Error && /w\.md: piece 1's page marker is not a short label/.test(err.message) && !err.message.includes(marker),
+    );
+  }
+  for (const [marker, key] of [
+    ['184', 'p184'],
+    ['xii', 'pxii'],
+    ['A-12', 'pA-12'],
+    ['3.2', 'p3.2'],
+  ]) {
+    assert.equal(fromPrivateBook(read({ 'w.md': pages(marker!) })[0]!)[0]!.fragment.id, `book:w#${key}`);
+  }
 });
 
 test('books: through the store, a book serves locators and never its text', () => {
