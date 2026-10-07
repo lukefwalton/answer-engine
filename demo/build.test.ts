@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -307,6 +307,40 @@ test('demo build: a draft that quotes fails the lint and resolves to locator; a 
   };
   const hit = sweepCanaries(leaking, ['tin box under the stairs']);
   assert.deepEqual(hit, { pass: false, issues: ["canaries[0] appears in the served gist of 'book:x#ch1'"], gists: 1 });
+});
+
+test('demo build: a layer whose artifacts exist but whose sources are gone is refused before anything is written', async () => {
+  const f = fixture();
+  const gists = { 'book:the-lantern-ledger#ch1': GIST_1, 'book:the-lantern-ledger#ch2': GIST_2 };
+  await build(f, fakeEmbedder(), scriptedDrafter(gists));
+  const snapshot = () =>
+    Object.fromEntries(
+      Object.values(f.paths)
+        .filter((p) => p.startsWith(join(f.root, 'out')))
+        .map((p) => [p, readFileSync(p, 'utf8')]),
+    );
+  const before = snapshot();
+
+  // The book directory vanishes (a partial checkout): its index and its
+  // gists exist, so the build refuses rather than clearing the gists and
+  // leaving the index stale.
+  rmSync(join(f.root, 'books'), { recursive: true });
+  const embed = fakeEmbedder();
+  await assert.rejects(build(f, embed, scriptedDrafter(gists)), /the book layer has no sources .* but its index exists/);
+  assert.equal(embed.calls.length, 0);
+  assert.deepEqual(snapshot(), before, 'nothing was written');
+
+  // A re-cut that drops a chapter leaves its gist orphaned: named by id, refused.
+  mkdirSync(join(f.root, 'books'));
+  writeFileSync(
+    join(f.root, 'books', 'the-lantern-ledger.md'),
+    `---\ntitle: The Lantern Ledger\nabout: https://example.com/books/the-lantern-ledger/\nauthors: [Person A]\nexposure: semantic\npublicTitle: true\n---\n## Chapter 1\n\n${CH1}\n`,
+  );
+  await assert.rejects(
+    build(f, fakeEmbedder(), scriptedDrafter(gists)),
+    /carries gists for 1 fragment\(s\) that no source produces: book:the-lantern-ledger#ch2\./,
+  );
+  assert.deepEqual(snapshot(), before, 'nothing was written');
 });
 
 test('demo build: a layer whose directory is absent is empty, not an error', async () => {

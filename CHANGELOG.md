@@ -206,7 +206,9 @@ npm trusts this repository's `release.yml`.
   gist drafting into `demo/corpus/projections.json`, policy resolution, vectors
   reused by content hash so a Smith is never re-embedded, gold-query vectors
   reused by id and by a hash of the query text, so an edited query is
-  re-embedded and `demo:run` refuses a stale one), and the tests run the same functions keyless with a fake
+  re-embedded and `demo:run` refuses a stale one; a layer whose artifacts
+  exist but whose sources are gone, or a stored gist no source produces, is
+  refused before anything is written), and the tests run the same functions keyless with a fake
   embedder and a scripted drafter (`demo/build.test.ts`). The runner checks the
   layer's served view and sweeps every released gist against the canaries in
   `demo/gold.book.yaml` before the gate; `demo/book.test.ts` holds the committed

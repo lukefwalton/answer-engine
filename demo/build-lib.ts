@@ -249,6 +249,34 @@ export function assertUniqueGoldIds(gold: GoldQuery[]): GoldQuery[] {
   return gold;
 }
 
+/** A layer with no sources whose index file exists cannot be rebuilt and
+ *  would go stale beside the others. Refused by name, with the remedy. */
+export function assertLayerNotOrphaned(layer: string, sourceCount: number, dir: string, indexPath: string): void {
+  if (sourceCount > 0 || !existsSync(indexPath)) return;
+  throw new Error(
+    `the ${layer} layer has no sources (${dir} is absent or empty) but its index exists at ${indexPath}; ` +
+      `a build would leave it stale. Restore the directory, or delete the file deliberately and rerun.`,
+  );
+}
+
+/** A stored projection whose fragment no source produces is an orphan: a
+ *  layer missing from this checkout, or a fragment renamed by a re-cut. The
+ *  author-facing file is never silently cleared of it; the ids are named (ids
+ *  are safe to print) and the author decides. */
+export function assertNoOrphanedProjections(
+  stored: ReadonlyMap<string, SemanticProjection>,
+  sources: readonly Source[],
+  projectionsPath: string,
+): void {
+  const live = new Set(sources.map((s) => s.fragment.id));
+  const orphans = [...stored.keys()].filter((id) => !live.has(id));
+  if (orphans.length === 0) return;
+  throw new Error(
+    `${projectionsPath} carries gists for ${orphans.length} fragment(s) that no source produces: ${orphans.join(', ')}. ` +
+      `Restore their source, or delete those entries deliberately and rerun.`,
+  );
+}
+
 export async function buildDemo(options: DemoBuildOptions): Promise<DemoBuildSummary> {
   const { config, paths } = options;
   const log = options.log ?? (() => undefined);
@@ -260,8 +288,17 @@ export async function buildDemo(options: DemoBuildOptions): Promise<DemoBuildSum
       `(${sources.book.length} book fragments)`,
   );
 
+  // A layer whose directory is absent is empty, not an error, unless its
+  // artifacts already exist: a rebuild would then leave the layer's index
+  // stale or clear the author-facing projections while it stayed. That state
+  // is refused before anything is written, as `npm run index` refuses an
+  // artifact it would not load: fail closed, never partial.
+  assertLayerNotOrphaned('synthetic notes', sources.spire.length, options.syntheticNotesDir, paths.synthetic);
+  assertLayerNotOrphaned('book', sources.book.length, options.bookDir, paths.book);
+
   // Projections: draft where a fragment asks for a gist, keep edits, carry the rest.
   const stored = readProjections(paths.projections);
+  assertNoOrphanedProjections(stored, [...sources.natural, ...sources.spire, ...sources.book], paths.projections);
   const drafts = await draftAll([...sources.natural, ...sources.spire, ...sources.book], options.drafter, stored, config);
   if (drafts.projections.size > 0 || stored.size > 0) {
     writeProjections(drafts.projections, paths.projections);
