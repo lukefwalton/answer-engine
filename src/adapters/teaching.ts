@@ -11,10 +11,10 @@
 // the same two shapes reconstructed losslessly, so today's retrieval, prompt,
 // eval and demo code keep running on a schema-4 index without changes.
 
-import type { Entity, Fragment } from '../contract.js';
+import type { Entity, EntityPolicy, Fragment } from '../contract.js';
 import { locatorKey, renderLocatorLabel } from '../locator.js';
-import { assertPublicSafeField } from '../public-safe.js';
-import type { ArchiveRecord, PrivateNote } from '../types.js';
+import { assertPublicSafeField, assertPublicSafeMetadata } from '../public-safe.js';
+import type { ArchiveRecord, PrivateBook, PrivateNote } from '../types.js';
 
 export const WHOLE_LOCATOR = { scheme: 'whole', value: '' } as const;
 
@@ -94,6 +94,69 @@ export function fromPrivateNote(note: PrivateNote): { entity: Entity; fragment: 
     disclosure: entity.disclosure,
   };
   return { entity, fragment };
+}
+
+/**
+ * A private book is one entity with many fragments (CONTRACT.md §8, §12): one
+ * per piece the corpus reader cut, ids `${entityId}#${locatorKey}` (book:x#ch12,
+ * book:x#ch12.s3, book:x#p184), each fragment's text its heading and its piece
+ * joined as a note's title and body are, so a chapter title is in the
+ * embedding and never leaves `text`. The entity default is the exposure the
+ * frontmatter asked for, carried on every fragment as a request until the
+ * build resolves it against a projection. The frontmatter's `publicTitle` and
+ * `requireReview` become the entity's policy.
+ *
+ * The strings a hit on the book would carry (title, version, creators,
+ * themes, locator labels) go through the metadata lint here, against the whole
+ * book, before anything is drafted or embedded: a quoting title fails in the
+ * reader's output, not after a paid build. The store runs the same lint again
+ * at every load (CONTRACT.md §12).
+ */
+export function fromPrivateBook(book: PrivateBook): { entity: Entity; fragment: Fragment }[] {
+  const disclosure = { raw: 'private', exposure: book.exposure ?? 'locator' } as const;
+  const policy: EntityPolicy = {
+    ...(book.publicTitle ? { publicTitle: true } : {}),
+    ...(book.requireReview ? { requireReview: true } : {}),
+  };
+  const entity: Entity = {
+    id: book.id,
+    type: book.type,
+    title: book.title,
+    attribution: book.attribution,
+    ...(book.date ? { date: book.date } : {}),
+    ...(book.version ? { version: book.version } : {}),
+    url: book.url,
+    identifiers: book.identifiers,
+    ...(book.themes.length > 0 ? { themes: book.themes } : {}),
+    disclosure,
+    ...(Object.keys(policy).length > 0 ? { policy } : {}),
+  };
+  if (book.pieces.length === 0) {
+    throw new Error(`private book '${book.id}' has no pieces; a book is at least one fragment.`);
+  }
+  const fragments: Fragment[] = [];
+  const keys = new Set<string>();
+  for (const piece of book.pieces) {
+    const key = locatorKey(piece.locator);
+    if (keys.has(key)) {
+      // Two chapters numbered the same, or two pages marked the same: the
+      // locator is the id, so the author fixes the source, named by locator.
+      throw new Error(
+        `private book '${book.id}': two pieces share the locator '${renderLocatorLabel(piece.locator)}'; ` +
+          `each chapter heading or page marker must be distinct.`,
+      );
+    }
+    keys.add(key);
+    fragments.push({
+      id: `${book.id}#${key}`,
+      entityId: book.id,
+      locator: piece.locator,
+      text: joinNoteText(piece.heading ?? '', piece.text),
+      disclosure,
+    });
+  }
+  assertPublicSafeMetadata(entity, fragments, { path: `private book '${book.id}'` });
+  return fragments.map((fragment) => ({ entity, fragment }));
 }
 
 /**

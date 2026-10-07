@@ -35,6 +35,8 @@ for (const name of [
   'answerQuestion',
   'fromArchiveRecord',
   'fromPrivateNote',
+  'fromPrivateBook',
+  'buildPrivateBooks',
 ]) {
   assert.equal(typeof root[name], 'function', `missing export: ${name}`);
 }

@@ -8,8 +8,11 @@
 import matter from 'gray-matter';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { Attribution, Identifier } from './contract.js';
+import { fragmentByHeadings, fragmentByPageMarkers } from './ingest/fragment.js';
+import type { FragmentPiece } from './ingest/fragment.js';
 import { assertPublicSafeField } from './public-safe.js';
-import type { ArchiveConfig, ArchiveRecord, CollectionConfig, PrivateNote } from './types.js';
+import type { ArchiveConfig, ArchiveRecord, CollectionConfig, PrivateBook, PrivateNote } from './types.js';
 
 /** Reduce markdown to plain text for indexing (link text kept, syntax dropped). */
 export function stripMarkdown(body: string): string {
@@ -38,6 +41,8 @@ function asThemes(data: Record<string, unknown>): string[] {
 
 function asDate(value: unknown): string {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
+  // YAML reads `date: 1900` as a number; a year is a date at its precision.
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) return String(value);
   if (typeof value === 'string' && value.trim()) return value.trim();
   return '';
 }
@@ -180,6 +185,138 @@ export function buildPrivateNotes(config: ArchiveConfig): PrivateNote[] {
     });
   }
   return notes.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+const ID_TOKEN = /^[A-Za-z0-9_-]+$/;
+
+/** Frontmatter `authors`: a list of names, or of `{ name, role? }` entries.
+ *  Malformed entries name the file and the field, never their value. */
+function asAttribution(value: unknown, path: string): Attribution[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error(`${path}: 'authors' must be a list of names or of { name, role } entries.`);
+  return value.map((entry): Attribution => {
+    if (typeof entry === 'string' && entry.trim()) return { name: entry.trim(), role: 'author' };
+    if (entry && typeof entry === 'object') {
+      const { name, role } = entry as { name?: unknown; role?: unknown };
+      if (typeof name !== 'string' || !name.trim()) throw new Error(`${path}: an 'authors' entry needs a 'name'.`);
+      if (role !== undefined && typeof role !== 'string') throw new Error(`${path}: an 'authors' entry's 'role' must be a string.`);
+      return { name: name.trim(), role: role?.trim() || 'author' };
+    }
+    throw new Error(`${path}: 'authors' must be a list of names or of { name, role } entries.`);
+  });
+}
+
+/** Frontmatter `identifiers`: a list of `{ scheme, value }` entries. */
+function asIdentifiers(value: unknown, path: string): Identifier[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error(`${path}: 'identifiers' must be a list of { scheme, value } entries.`);
+  return value.map((entry): Identifier => {
+    const { scheme, value: v } = (entry ?? {}) as { scheme?: unknown; value?: unknown };
+    if (typeof scheme !== 'string' || !scheme.trim() || (typeof v !== 'string' && typeof v !== 'number')) {
+      throw new Error(`${path}: 'identifiers' must be a list of { scheme, value } entries.`);
+    }
+    return { scheme: scheme.trim(), value: String(v).trim() };
+  });
+}
+
+function asOptionalBoolean(value: unknown, field: string, path: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') throw new Error(`${path}: '${field}' must be true or false.`);
+  return value;
+}
+
+function asOptionalPositiveInteger(value: unknown, field: string, path: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`${path}: '${field}' must be a positive whole number.`);
+  }
+  return value;
+}
+
+/** A leading `# Title` that repeats the frontmatter title is the title page,
+ *  not a chapter: dropped, so it neither becomes a fragment of its own nor
+ *  collides with the first chapter's ordinal. */
+function withoutTitleHeading(body: string, title: string): string {
+  const m = /^\s*#\s+(.+?)\s*#*\s*(?:\r?\n|$)/.exec(body);
+  if (!m || m[1]!.trim().toLowerCase() !== title.toLowerCase()) return body;
+  return body.slice(m[0].length);
+}
+
+/** Read the private books. One markdown file per book; the frontmatter is the
+ *  book's public surface (`title`, `about`, and optionally `authors`,
+ *  `identifiers`, `date`, `version`, `themes`, `exposure`, `publicTitle`,
+ *  `requireReview`) plus how to cut it (`fragmentBy: headings | pages`,
+ *  `maxFragmentChars`, `firstPage`); the body is the private text, split
+ *  here into pieces whose locators are structural (docs/CONTRACT.md §8).
+ *  The pieces' text is embedded, never quoted; what the traveling strings may
+ *  say about it is checked by the adapter (src/adapters/teaching.ts) before
+ *  anything is drafted or embedded. */
+export function buildPrivateBooks(config: ArchiveConfig): PrivateBook[] {
+  if (!config.privateBooksDir) return [];
+  const dir = resolve(config.privateBooksDir);
+  const books: PrivateBook[] = [];
+  for (const { slug, path, data, content, title } of readMarkdownDir(dir, 'private books')) {
+    const url = firstString(data.about);
+    if (!url) {
+      throw new Error(`${path} needs 'about' (the public URL a hit on this book routes to) in its frontmatter.`);
+    }
+    const type = firstString(data.type) || 'book';
+    if (!ID_TOKEN.test(type)) {
+      throw new Error(`${path}: 'type' must be a short token (letters, digits, '-' or '_'): it opens the entity id, as 'book' does.`);
+    }
+    const exposure = data.exposure;
+    if (exposure !== undefined && exposure !== 'semantic' && exposure !== 'locator' && exposure !== 'none') {
+      // Named, not echoed: authored frontmatter on a private book (STANDARDS §4).
+      throw new Error(
+        `${path}: 'exposure' must be semantic, locator, or none. ` +
+          `Private text is never exposed as text; see docs/CONTRACT.md §3.`,
+      );
+    }
+    const fragmentBy = data.fragmentBy ?? 'headings';
+    if (fragmentBy !== 'headings' && fragmentBy !== 'pages') {
+      throw new Error(`${path}: 'fragmentBy' must be headings (the default) or pages.`);
+    }
+    const maxFragmentChars = asOptionalPositiveInteger(data.maxFragmentChars, 'maxFragmentChars', path);
+    const firstPage = asOptionalPositiveInteger(data.firstPage, 'firstPage', path);
+    const publicTitle = asOptionalBoolean(data.publicTitle, 'publicTitle', path);
+    const requireReview = asOptionalBoolean(data.requireReview, 'requireReview', path);
+    const version = firstString(data.version);
+    const date = asDate(data.date);
+
+    const body = withoutTitleHeading(content, title);
+    const options = { ...(maxFragmentChars !== undefined ? { maxFragmentChars } : {}) };
+    const cut =
+      fragmentBy === 'pages'
+        ? fragmentByPageMarkers(body, { ...options, ...(firstPage !== undefined ? { firstPage } : {}) })
+        : fragmentByHeadings(body, options);
+    const pieces: FragmentPiece[] = [];
+    for (const piece of cut) {
+      const text = stripMarkdown(piece.text);
+      if (!text) continue;
+      pieces.push({ locator: piece.locator, text, ...(piece.heading !== undefined ? { heading: piece.heading } : {}) });
+    }
+    if (pieces.length === 0) {
+      throw new Error(`${path} has no text after its frontmatter; a private book needs a body to fragment.`);
+    }
+
+    books.push({
+      id: `${type}:${slug}`,
+      type,
+      slug,
+      title,
+      ...(publicTitle !== undefined ? { publicTitle } : {}),
+      url,
+      attribution: asAttribution(data.authors ?? data.creators, path),
+      identifiers: asIdentifiers(data.identifiers, path),
+      ...(date ? { date } : {}),
+      ...(version ? { version } : {}),
+      themes: asThemes(data),
+      ...(exposure !== undefined ? { exposure } : {}),
+      ...(requireReview !== undefined ? { requireReview } : {}),
+      pieces,
+    });
+  }
+  return books.sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** The text the embedding model sees. Themes are included so topic tags

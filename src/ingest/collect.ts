@@ -9,6 +9,18 @@
 
 import type { Entity, Fragment } from '../contract.js';
 
+/** JSON with object keys sorted at every level, so two descriptions of one
+ *  entity compare by content and not by the order an adapter happened to
+ *  assign properties in. Arrays keep their order: two creators listed the
+ *  other way round are two descriptions. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) => {
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return v;
+    const record = v as Record<string, unknown>;
+    return Object.fromEntries(Object.keys(record).sort().map((k) => [k, record[k]]));
+  });
+}
+
 export interface CollectedEntities {
   /** Entities by id, in first-seen order. */
   entities: Map<string, Entity>;
@@ -24,7 +36,7 @@ export function collectEntities(sources: readonly { entity: Entity; fragment: Fr
     const seen = entities.get(entity.id);
     if (seen === undefined) {
       entities.set(entity.id, entity);
-    } else if (JSON.stringify(seen) !== JSON.stringify(entity)) {
+    } else if (canonical(seen) !== canonical(entity)) {
       throw new Error(
         `entity '${entity.id}' is described two ways by its sources; an id names one entity across collections, notes, and fragments.`,
       );

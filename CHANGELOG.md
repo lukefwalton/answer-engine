@@ -183,11 +183,38 @@ npm trusts this repository's `release.yml`.
   legacy view (which drafts nothing) resolves a requested `semantic` to
   `locator` itself. `projectionContentHash` moves to
   `src/ingest/projections.ts`, beside `projectionProblem`.
+- Private books in the teaching corpus: `privateBooksDir` in `archive.config.ts`
+  (off by default; the example content does not change), one markdown file per
+  book. `buildPrivateBooks` (`src/corpus.ts`) reads the frontmatter (`title`,
+  `about`, and optionally `authors`, `identifiers`, `date`, `version`, `themes`,
+  `exposure`, `publicTitle`, `requireReview`, `fragmentBy`, `maxFragmentChars`,
+  `firstPage`) and cuts the body with `fragmentByHeadings` or
+  `fragmentByPageMarkers` into pieces whose locators are structural; a leading
+  `# Title` that repeats the frontmatter title is dropped as the title page.
+  `fromPrivateBook` (`src/adapters/teaching.ts`) yields one private entity with
+  one fragment per piece (`book:x#ch12`, `book:x#ch12.s3`, `book:x#p184`), the
+  heading inside the fragment's text and nowhere else, `publicTitle` and
+  `requireReview` on the entity's policy, and the metadata lint run over the
+  whole book before `npm run index` drafts or embeds anything; two pieces that
+  share a locator are refused by locator. `npm run index` reads the books
+  beside the records and the notes; a book's `semantic` request is drafted per
+  fragment against the whole book's text, as CONTRACT §12 describes.
 
 ### Removed
 
 - `scripts/build-blind-artifact.mjs`. Review is open, not blind; the script's
   anonymized tarball has no remaining use.
+
+### Fixed
+
+- `collectEntities` compared two descriptions of one entity by
+  `JSON.stringify`, so the same entity emitted with its properties in another
+  insertion order (two adapters, or one adapter run twice) was refused as
+  "described two ways". It now compares by content, with object keys sorted at
+  every level; the order inside a list (creators, identifiers) is still
+  content. A regression test pins both.
+- A bare year in frontmatter (`date: 1900`, which YAML reads as a number) was
+  dropped silently by every reader; it is now the date at year precision.
 
 ### Breaking in the 3.0.0 line (summary)
 

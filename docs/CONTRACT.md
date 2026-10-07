@@ -847,9 +847,17 @@ yields an entity with one `text` fragment whose locator is `[{ scheme: 'whole',
 value: '' }]`; `fromPrivateNote` yields a private entity with one `locator`
 fragment whose linted label becomes the entity title and whose locator string
 becomes `[{ scheme: 'note', value }]`, and whose frontmatter may ask for an
-`exposure`. The example content does not change. The demo gains one entity that
-exercises `semantic` in a following release: a public-domain novel with its
-chapter gists committed beside the vectors, which needs a keyed build.
+`exposure`. `fromPrivateBook` yields a private entity with one fragment per
+piece the corpus reader cut (`buildPrivateBooks`: `fragmentByHeadings` or
+`fragmentByPageMarkers`, then `splitLong`), ids `${entityId}#${locatorKey}`,
+each fragment's text its heading and its piece joined as a note's title and
+body are, the frontmatter's `publicTitle` and `requireReview` on the entity's
+`policy`, and the section 6 metadata lint run over the whole book before the
+build drafts or embeds anything; `collectEntities` then groups the pairs, comparing
+two descriptions of one entity by content with keys sorted at every level, not
+by property order. The example content does not change. The demo gains one
+entity that exercises `semantic` in a following release: a public-domain novel
+with its chapter gists committed beside the vectors, which needs a keyed build.
 
 ## 13. What remains owned rather than guaranteed
 
