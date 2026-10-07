@@ -67,7 +67,7 @@ Suggested first spire note: `syn-amos-justice-margin` — a fabricated George no
 `npm run demo:build` (added in `package.json`) reads the corpus through the reused `buildCorpus` / `buildPrivateNotes`, embeds with the configured model, embeds the gold queries, and writes:
 - `demo/corpus/index.json` — natural FP vectors (records + real private notes). The headline source of truth; committed.
 - `demo/corpus/index.synthetic.json` — the spire delta (synthetic notes only), unioned under `--natural+synthetic`.
-- `demo/corpus/query-vectors.json` — the gold-query vectors that make `demo:run` keyless.
+- `demo/corpus/query-vectors.json` — the gold-query vectors that make `demo:run` keyless. Each entry carries the hash of the query text it was embedded from: a gold query edited under the same id is re-embedded by the next build, and `demo:run` refuses to judge a stale one until then.
 
 Commit all three after checking `git status` and `git diff --stat` for unrelated artifacts or secrets. They derive from public-domain text, so committing them exposes nothing private (manifest §2); do not generalize that to private corpora.
 
@@ -83,3 +83,24 @@ Commit all three after checking `git status` and `git diff --stat` for unrelated
 - Fill the delta log rows with what the build actually did. Flag any `paper §5-§6` row immediately (especially row 4 if any unit had to be split).
 - If a rebuild changes the headline, revisit the `NEXT-STEPS.md` reconciliation and the demo README so they describe the measured result, not the old one.
 - Re-run `npm test` and `npm run typecheck`; both stay green.
+
+## 6. The book layer: a private entity served as gists
+
+The layer is optional by presence: until `demo/corpus/private-books/` exists the build skips it, `--natural+book` says it is not built, and the tests that read it skip. Once its artifacts exist, a checkout without the directory is refused by the build rather than built around (the index would go stale and the gists would be cleared); restore the directory, or delete `index.book.json` and the book's entries in `projections.json` deliberately. A stored gist whose fragment no source produces (a dropped or renamed chapter) is refused the same way, by id. Adding it does not touch a Smith vector or the headline (vectors are reused by content hash; the book is unioned only under its flag).
+
+1. Fetch Project Gutenberg #55 (*The Wonderful Wizard of Oz*) as plain text (`55-0.txt`) from gutenberg.org. Keep the raw file outside the repo.
+2. Prepare the book file, chapters only:
+
+   ```
+   node scripts/prepare-gutenberg-book.mjs 55-0.txt \
+     --slug the-wonderful-wizard-of-oz --title "The Wonderful Wizard of Oz" \
+     --author "L. Frank Baum" --date 1900 --gutenberg 55 \
+     --about https://www.gutenberg.org/ebooks/55 --expect 24 \
+     --check-canaries demo/gold.book.yaml \
+     -o demo/corpus/private-books/the-wonderful-wizard-of-oz.md
+   ```
+
+   Read the 24 headings it prints against the table of contents. A canary it reports as absent guards nothing: replace it in `demo/gold.book.yaml` with wording that occurs. The frontmatter it writes raises `maxFragmentChars` so no chapter is sub-split (the gold names `#ch8`, not `#ch8.s2`). Verify the Gutenberg ID, the publication year, and the author's death year against the live source and fill the provenance row in `demo/corpus/README.md`.
+3. `npm run demo:build` (keyed). It drafts a gist per chapter (two attempts each, `gpt-4o-mini` per `demo/config.ts`, the principals' names allowed), writes `demo/corpus/projections.json`, embeds the 24 chapters and the book's gold queries, and leaves every existing vector untouched. Read the `unservable` lines: a chapter whose draft failed the lint twice is served as a locator until its draft in `projections.json` is edited by hand (`source: edited`) and the build rerun; `demo/book.test.ts` holds the layer to every chapter served as a gist.
+4. `npm run demo:run -- --natural+book`: the served-view check, the sweep, then the gate over the natural and the book gold. Both book cases must win their top slot. If one loses, read the printed winner: another chapter means the chapter number in `gold.book.yaml` is wrong; a Smith record means the chapter's embedding is not carrying the query, which is a finding to record in the delta log, not a reason to tune the corpus.
+5. `npm test` (the book tests stop skipping) and `npm run demo:run` (the headline is unchanged: 7/7, rho 1.0000). Commit the book file, `index.book.json`, `projections.json`, and `query-vectors.json`.

@@ -22,6 +22,7 @@ Run it:
 npm run demo:run                                  # int8, real corpus: the headline, keyless
 npm run demo:run -- --natural+synthetic           # add the spire and its gold
 npm run demo:run -- --natural+synthetic --bits 4  # int4: the gate rejects the spire route flips
+npm run demo:run -- --natural+book                # add the book layer: a private entity served as gists (checked and swept first)
 npm run demo:run -- --full                        # also run the answer-mode pass (needs a key)
 ```
 
@@ -78,6 +79,35 @@ Two facts make int8 admissible, and they differ in kind (the §6 split):
 The headline run is **keyless**: it reads committed full-precision vectors and
 committed gold-query vectors, so no embedding call is made. A key is needed only
 to regenerate the vectors (`demo:build`) or to run the `--full` answer pass.
+
+## The book layer: a private entity served as gists
+
+`--natural+book` adds one more layer beside the Smiths: *The Wonderful Wizard
+of Oz* (Project Gutenberg #55) as a **private** entity, one fragment per
+chapter, `exposure: semantic`. Private is the same layer assignment the
+sermons carry (`corpus/README.md` §2): the text is public domain and sits in
+the repo on purpose, and what the layer shows is the contract's other
+exposure. A chapter reaches a consumer as provenance (title, author, year,
+`ch. 8`) plus a one-paragraph description the build drafted and the author
+released, never as text. The descriptions are drafted at `demo:build` (keyed),
+linted so they cannot carry a run of five words from the chapter or from the
+whole book, stored in `corpus/projections.json` as the author-facing file
+(edit, veto, or mark one reviewed there), and committed because they derive
+from public-domain text; a genuinely private corpus commits neither its
+vectors nor its gists.
+
+The run is keyless and does two things before the gate. It checks the layer's
+served view (text blank, gists present, the strip verified by the store's own
+load-time check) and sweeps every gist it would release against the canaries
+in `gold.book.yaml`; a hit is named by index and fails the run. Then the gate
+runs the natural gold and the book's route cases over the union: a chapter
+question must win the top slot for its chapter, and the Smith questions must
+still resolve to their Smiths with the novel beside them. The headline
+(`--natural`) never includes the book; the layer is reported on its own lines.
+The text is not in the repo until someone runs
+`scripts/prepare-gutenberg-book.mjs` on the Gutenberg file
+([`build-handoff.md`](../docs/scaling-demo/build-handoff.md) §6); until then
+the flag says so and the tests that read the layer skip.
 That answer pass exercises route *selection*, which is what quantization moves;
 it does not touch A2, the answer model's confabulation residue, which the
 encoding never exercises.

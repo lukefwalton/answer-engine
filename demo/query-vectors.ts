@@ -10,26 +10,45 @@
 // a different model or width than the index is a meaningless cosine, so the
 // file carries its (model, dimensions) and the runner checks them.
 
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 export const QUERY_VECTORS_PATH = resolve('demo/corpus/query-vectors.json');
-export const QUERY_VECTORS_VERSION = 1;
+/** 2: every entry carries the hash of the query text it was embedded from. */
+export const QUERY_VECTORS_VERSION = 2;
+
+export interface QueryVectorEntry {
+  id: string;
+  vector: number[];
+  /** queryContentHash of the gold query's text at embedding time. */
+  contentHash: string;
+}
 
 export interface QueryVectorsFile {
   version: number;
   model: string;
   dimensions: number;
-  queries: { id: string; vector: number[] }[];
+  queries: QueryVectorEntry[];
 }
 
 export interface LoadedQueryVectors {
   model: string;
   dimensions: number;
   byId: Map<string, number[]>;
+  /** The hash of the text each vector was embedded from, by id. */
+  hashes: Map<string, string>;
 }
 
 const REBUILD = 'Run `npm run demo:build` with an OPENAI_API_KEY (see docs/scaling-demo/build-handoff.md).';
+
+/** The hash a committed query vector carries of the text it embeds, so a
+ *  gold query edited under the same id is re-embedded by the next build and
+ *  refused by the runner until then. First 16 hex of sha1, as a fragment's
+ *  contentHash is. */
+export function queryContentHash(text: string): string {
+  return createHash('sha1').update(text).digest('hex').slice(0, 16);
+}
 
 /** Read the committed query vectors, or null if not built yet. Throws on a
  *  present-but-malformed file so a corrupt artifact fails loudly with a remedy. */
@@ -53,6 +72,7 @@ export function readQueryVectors(path: string = QUERY_VECTORS_PATH): LoadedQuery
     throw new Error(`query vectors at ${path} are not schema version ${QUERY_VECTORS_VERSION}. ${REBUILD}`);
   }
   const byId = new Map<string, number[]>();
+  const hashes = new Map<string, string>();
   for (const q of file.queries) {
     // Validate to the same depth the store does for the index: a corrupt vector
     // must fail loudly at read with the rebuild hint, not later as bad cosine.
@@ -60,20 +80,23 @@ export function readQueryVectors(path: string = QUERY_VECTORS_PATH): LoadedQuery
       typeof q?.id !== 'string' ||
       !Array.isArray(q.vector) ||
       q.vector.length !== file.dimensions ||
-      !q.vector.every((x) => typeof x === 'number' && Number.isFinite(x))
+      !q.vector.every((x) => typeof x === 'number' && Number.isFinite(x)) ||
+      typeof q.contentHash !== 'string' ||
+      !/^[0-9a-f]{16}$/.test(q.contentHash)
     ) {
       const which = typeof q?.id === 'string' ? ` for '${q.id}'` : '';
       throw new Error(`query vectors at ${path} have a malformed entry${which}. ${REBUILD}`);
     }
     byId.set(q.id, q.vector);
+    hashes.set(q.id, q.contentHash);
   }
-  return { model: file.model, dimensions: file.dimensions, byId };
+  return { model: file.model, dimensions: file.dimensions, byId, hashes };
 }
 
 export function writeQueryVectors(
   model: string,
   dimensions: number,
-  queries: { id: string; vector: number[] }[],
+  queries: QueryVectorEntry[],
   path: string = QUERY_VECTORS_PATH,
 ): void {
   mkdirSync(dirname(path), { recursive: true });

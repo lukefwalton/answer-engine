@@ -3,6 +3,8 @@
 //
 //   --natural             (default) real corpus only; owns the headline numbers.
 //   --natural+synthetic   adds the quarantined synthetic spire + its gold.
+//   --natural+book        adds the book layer (a private entity served as gists) + its gold,
+//                         after a keyless check of its served view and a canary sweep.
 //   --bits <n>            quantization width (default 8; 4 is the int4 scalpel).
 //   --full                also run the answer-mode pass (needs OPENAI_API_KEY).
 //
@@ -13,37 +15,50 @@
 
 import { resolve } from 'node:path';
 
-import { loadGold } from '../src/evaluate.js';
+import { loadGold, loadGoldFile, sweepCanaries } from '../src/evaluate.js';
 import type { GoldQuery } from '../src/evaluate.js';
 import { buildRetrievalIndex } from '../src/retrieve.js';
 import type { RetrievalIndex } from '../src/retrieve.js';
-import { readIndex } from '../src/store.js';
+import { readIndex, toServedIndex, validateServedIndex } from '../src/store.js';
 import type { IndexFile } from '../src/store.js';
+import { assertUniqueGoldIds } from './build-lib.js';
 import { requantizeIndex, runGate } from './harness.js';
-import { readQueryVectors } from './query-vectors.js';
+import { queryContentHash, readQueryVectors } from './query-vectors.js';
 
 const NATURAL_INDEX = resolve('demo/corpus/index.json');
 const SYNTHETIC_INDEX = resolve('demo/corpus/index.synthetic.json');
 const NATURAL_GOLD = resolve('demo/gold.yaml');
 const SYNTHETIC_GOLD = resolve('demo/gold.synthetic.yaml');
+const BOOK_INDEX = resolve('demo/corpus/index.book.json');
+const BOOK_GOLD = resolve('demo/gold.book.yaml');
 
 interface RunArgs {
   synthetic: boolean;
+  book: boolean;
   bits: number;
   full: boolean;
 }
 
 function parseArgs(argv: string[]): RunArgs {
-  const args: RunArgs = { synthetic: false, bits: 8, full: false };
+  const args: RunArgs = { synthetic: false, book: false, bits: 8, full: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     switch (arg) {
       case '--natural':
         args.synthetic = false;
+        args.book = false;
         break;
       case '--natural+synthetic':
       case '--synthetic':
         args.synthetic = true;
+        break;
+      case '--natural+book':
+      case '--book':
+        args.book = true;
+        break;
+      case '--natural+synthetic+book':
+        args.synthetic = true;
+        args.book = true;
         break;
       case '--full':
         args.full = true;
@@ -58,9 +73,10 @@ function parseArgs(argv: string[]): RunArgs {
       case '--help':
       case '-h':
         console.log(
-          'demo:run [--natural | --natural+synthetic] [--bits <n>] [--full]\n' +
+          'demo:run [--natural | --natural+synthetic | --natural+book | --natural+synthetic+book] [--bits <n>] [--full]\n' +
             '  --natural             real corpus only (default); owns the headline numbers\n' +
             '  --natural+synthetic   add the quarantined synthetic spire + its gold\n' +
+            '  --natural+book        add the book layer (served as gists) + its gold, after its served-view check and canary sweep\n' +
             '  --bits <n>            quantization width (default 8; 4 is the int4 scalpel)\n' +
             '  --full                also run the answer-mode pass (needs OPENAI_API_KEY)',
         );
@@ -73,46 +89,82 @@ function parseArgs(argv: string[]): RunArgs {
   return args;
 }
 
-function loadIndex(synthetic: boolean): RetrievalIndex {
-  const natural = readIndex(NATURAL_INDEX);
-  if (natural.entries.length === 0) {
+/** A delta layer unioned onto the baseline: same model, same dimensionality
+ *  (buildRetrievalIndex asserts it), and it names no entity the baseline
+ *  already has. */
+function union(base: IndexFile, delta: IndexFile): IndexFile {
+  return {
+    version: 4,
+    entities: [...base.entities, ...delta.entities.filter((e) => !base.entities.some((n) => n.id === e.id))],
+    entries: [...base.entries, ...delta.entries],
+  };
+}
+
+function loadIndex(synthetic: boolean, book: boolean): { index: RetrievalIndex; book?: IndexFile } {
+  let file = readIndex(NATURAL_INDEX);
+  if (file.entries.length === 0) {
     throw new Error(
       `no committed vectors at ${NATURAL_INDEX}. ` +
         'Run `npm run demo:build` with an OPENAI_API_KEY (see docs/scaling-demo/build-handoff.md).',
     );
   }
-  if (!synthetic) return buildRetrievalIndex(natural);
-  const spire = readIndex(SYNTHETIC_INDEX);
-  if (spire.entries.length === 0) {
+  if (synthetic) {
+    const spire = readIndex(SYNTHETIC_INDEX);
+    if (spire.entries.length === 0) {
+      throw new Error(
+        `--natural+synthetic needs the spire at ${SYNTHETIC_INDEX}, which is not built yet ` +
+          '(author the synthetic notes, then `npm run demo:build`).',
+      );
+    }
+    file = union(file, spire);
+  }
+  if (!book) return { index: buildRetrievalIndex(file) };
+  const bookFile = readIndex(BOOK_INDEX);
+  if (bookFile.entries.length === 0) {
     throw new Error(
-      `--natural+synthetic needs the spire at ${SYNTHETIC_INDEX}, which is not built yet ` +
-        '(author the synthetic notes, then `npm run demo:build`).',
+      `--natural+book needs the book layer at ${BOOK_INDEX}, which is not built yet ` +
+        '(prepare the book with scripts/prepare-gutenberg-book.mjs, then `npm run demo:build`; build-handoff.md §6).',
     );
   }
-  // The spire is strictly baseline-plus-delta: same model, same dimensionality
-  // (buildRetrievalIndex asserts it), and it names no entity the natural index
-  // already has.
-  const union: IndexFile = {
-    version: 4,
-    entities: [...natural.entities, ...spire.entities.filter((e) => !natural.entities.some((n) => n.id === e.id))],
-    entries: [...natural.entries, ...spire.entries],
-  };
-  return buildRetrievalIndex(union);
+  return { index: buildRetrievalIndex(union(file, bookFile)), book: bookFile };
 }
 
-function loadGoldSet(synthetic: boolean, author: string): GoldQuery[] {
+function loadGoldSet(synthetic: boolean, book: boolean, author: string): GoldQuery[] {
   const gold = loadGold(NATURAL_GOLD, author);
-  if (!synthetic) return gold;
-  const expanded = loadGold(SYNTHETIC_GOLD, author);
-  return [...gold, ...expanded];
+  if (synthetic) gold.push(...loadGold(SYNTHETIC_GOLD, author));
+  if (book) gold.push(...loadGold(BOOK_GOLD, author));
+  return assertUniqueGoldIds(gold);
+}
+
+/** The book layer's keyless half, before the gate: the served view of the
+ *  layer (what a retrieval-only consumer would hold) must pass the strip
+ *  check, and every gist it would release is swept against the canaries in
+ *  the book's gold file. Prints counts; a canary hit is named by its index
+ *  and fails the run. */
+function checkBookLayer(bookFile: IndexFile, author: string): boolean {
+  const served = validateServedIndex(toServedIndex(bookFile), `${BOOK_INDEX} (served view)`);
+  const { canaries } = loadGoldFile(BOOK_GOLD, author);
+  const sweep = sweepCanaries(served, canaries);
+  const semantic = served.entries.filter((e) => e.fragment.disclosure.exposure === 'semantic').length;
+  console.log(
+    `  book:     ${bookFile.entries.length} fragments of ${bookFile.entities.length} entity; ` +
+      `${semantic} served as a gist, ${bookFile.entries.length - semantic} as a locator; ` +
+      `served view carries no text (checked)`,
+  );
+  console.log(
+    `  sweep:    ${canaries.length} canaries over ${sweep.gists} served gists, ${sweep.issues.length} hit(s)` +
+      (sweep.pass ? '' : ' — a released gist carries private wording; the run FAILS'),
+  );
+  for (const issue of sweep.issues) console.log(`       - ${issue}`);
+  return sweep.pass;
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const { config } = await import('./config.js');
 
-  const index = loadIndex(args.synthetic);
-  const gold = loadGoldSet(args.synthetic, config.authorName);
+  const { index, book } = loadIndex(args.synthetic, args.book);
+  const gold = loadGoldSet(args.synthetic, args.book, config.authorName);
 
   const qv = readQueryVectors();
   if (!qv) {
@@ -127,9 +179,19 @@ async function main(): Promise<void> {
         `(${index.model}/${index.dimensions}); rebuild both with demo:build.`,
     );
   }
+  // A vector must be the embedding of the gold text in tree: a query edited
+  // under the same id, or one with no vector yet, is refused by id rather than
+  // judged against a stale embedding.
+  const stale = gold.filter((g) => qv.hashes.get(g.id) !== queryContentHash(g.query)).map((g) => g.id);
+  if (stale.length > 0) {
+    throw new Error(
+      `committed query vectors are missing or were embedded from other text for: ${stale.join(', ')}. ` +
+        'The gate would judge a stale embedding; rebuild with `npm run demo:build`.',
+    );
+  }
 
   // Say plainly what this run IS, so a reader knows what they are looking at.
-  const label = args.synthetic ? '--natural+synthetic' : '--natural';
+  const label = `--natural${args.synthetic ? '+synthetic' : ''}${args.book ? '+book' : ''}`;
   const shipped = args.bits === 8;
   console.log('demo:run — int8 quantization gate (Smith collection)');
   console.log(
@@ -140,10 +202,12 @@ async function main(): Promise<void> {
   );
   console.log(
     `  corpus:   ${label}  ` +
-      (args.synthetic
-        ? '(real corpus + the fabricated spire; headline still comes from --natural)'
+      (args.synthetic || args.book
+        ? '(real corpus + an added layer; headline still comes from --natural)'
         : '(real corpus only; owns the headline numbers)'),
   );
+  let sweepPassed = true;
+  if (book) sweepPassed = checkBookLayer(book, config.authorName);
   console.log(`  ${gold.length} gold queries, ${index.entries.length} index entries, keyless (committed vectors)\n`);
 
   const report = runGate(gold, index, qv.byId, args.bits);
@@ -185,7 +249,7 @@ async function main(): Promise<void> {
     console.log('(retrieval + route tier only; add --full to run the answer-mode pass with a key)');
   }
 
-  if (report.failed > 0) process.exitCode = 1;
+  if (report.failed > 0 || !sweepPassed) process.exitCode = 1;
 }
 
 /** The keyed bonus: run the answer model on evidence retrieved from the
