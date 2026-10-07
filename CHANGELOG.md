@@ -196,7 +196,7 @@ npm trusts this repository's `release.yml`.
   heading inside the fragment's text and nowhere else, `publicTitle` and
   `requireReview` on the entity's policy, and the metadata lint run over the
   whole book before `npm run index` drafts or embeds anything; two pieces that
-  share a locator are refused by locator. `npm run index` reads the books
+  share a locator are refused by position and scheme. `npm run index` reads the books
   beside the records and the notes; a book's `semantic` request is drafted per
   fragment against the whole book's text, as CONTRACT §12 describes.
 

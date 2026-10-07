@@ -243,9 +243,19 @@ test('books: a title that quotes the text is refused before any build, unless th
   // A creator's name is checked the same way.
   const [creator] = read({ 'w.md': front('publicTitle: true\nauthors: ["the harbour keeps at night, said"]\n') });
   assert.throws(() => fromPrivateBook(creator!), /'creator name' quotes private text/);
-  // Two chapters numbered the same would share an id; the reader's output is refused by locator.
+  // Two chapters numbered the same would share an id; the reader's output is
+  // refused by position and scheme. A page marker's token is the author's own
+  // text, so the message never carries a locator value.
   const [twice] = read({ 'w.md': `---\ntitle: W\nabout: https://example.com/w/\n---\n## Chapter 3\n\none\n\n## Chapter 3\n\ntwo\n` });
-  assert.throws(() => fromPrivateBook(twice!), /private book 'book:w': two pieces share the locator 'ch. 3'/);
+  assert.throws(() => fromPrivateBook(twice!), /private book 'book:w': pieces 1 and 2 of 2 share a 'chapter' locator/);
+  const [marked] = read({
+    'w.md': `---\ntitle: W\nabout: https://example.com/w/\nfragmentBy: pages\n---\n<<<page unguessable-token>>>\none\n<<<page unguessable-token>>>\ntwo\n`,
+  });
+  assert.throws(
+    () => fromPrivateBook(marked!),
+    (err: unknown) =>
+      err instanceof Error && /pieces 1 and 2 of 2 share a 'page' locator/.test(err.message) && !/unguessable/.test(err.message),
+  );
 });
 
 test('books: through the store, a book serves locators and never its text', () => {

@@ -135,18 +135,23 @@ export function fromPrivateBook(book: PrivateBook): { entity: Entity; fragment: 
     throw new Error(`private book '${book.id}' has no pieces; a book is at least one fragment.`);
   }
   const fragments: Fragment[] = [];
-  const keys = new Set<string>();
-  for (const piece of book.pieces) {
+  const keys = new Map<string, number>();
+  for (const [index, piece] of book.pieces.entries()) {
     const key = locatorKey(piece.locator);
-    if (keys.has(key)) {
+    const first = keys.get(key);
+    if (first !== undefined) {
       // Two chapters numbered the same, or two pages marked the same: the
-      // locator is the id, so the author fixes the source, named by locator.
+      // locator is the id, so the author fixes the source. Named by position
+      // and scheme, never by value: a chapter value is a parsed number or an
+      // ordinal, but a page value is the author's own marker token, and this
+      // message is what `npm run index` prints (STANDARDS §4).
+      const schemes = piece.locator.map((l) => l.scheme).join('.');
       throw new Error(
-        `private book '${book.id}': two pieces share the locator '${renderLocatorLabel(piece.locator)}'; ` +
-          `each chapter heading or page marker must be distinct.`,
+        `private book '${book.id}': pieces ${first + 1} and ${index + 1} of ${book.pieces.length} share a ` +
+          `'${schemes}' locator; each chapter heading or page marker must be distinct.`,
       );
     }
-    keys.add(key);
+    keys.set(key, index);
     fragments.push({
       id: `${book.id}#${key}`,
       entityId: book.id,
