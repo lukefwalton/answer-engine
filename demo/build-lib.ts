@@ -234,6 +234,13 @@ export function goldForBuild(paths: DemoBuildPaths, sources: DemoSources, author
   const gold = loadGold(paths.naturalGold, author);
   if (sources.spire.length > 0 && existsSync(paths.syntheticGold)) gold.push(...loadGold(paths.syntheticGold, author));
   if (sources.book.length > 0 && existsSync(paths.bookGold)) gold.push(...loadGold(paths.bookGold, author));
+  return assertUniqueGoldIds(gold);
+}
+
+/** Gold ids are unique across the demo's gold files: one id is one vector and
+ *  one verdict. Shared by the build and the runner so neither can judge two
+ *  cases under one id. */
+export function assertUniqueGoldIds(gold: GoldQuery[]): GoldQuery[] {
   const seen = new Set<string>();
   for (const g of gold) {
     if (seen.has(g.id)) throw new Error(`gold id '${g.id}' appears in more than one demo gold file; ids are unique across them.`);

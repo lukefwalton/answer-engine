@@ -21,6 +21,7 @@ import { buildRetrievalIndex } from '../src/retrieve.js';
 import type { RetrievalIndex } from '../src/retrieve.js';
 import { readIndex, toServedIndex, validateServedIndex } from '../src/store.js';
 import type { IndexFile } from '../src/store.js';
+import { assertUniqueGoldIds } from './build-lib.js';
 import { requantizeIndex, runGate } from './harness.js';
 import { queryContentHash, readQueryVectors } from './query-vectors.js';
 
@@ -132,7 +133,7 @@ function loadGoldSet(synthetic: boolean, book: boolean, author: string): GoldQue
   const gold = loadGold(NATURAL_GOLD, author);
   if (synthetic) gold.push(...loadGold(SYNTHETIC_GOLD, author));
   if (book) gold.push(...loadGold(BOOK_GOLD, author));
-  return gold;
+  return assertUniqueGoldIds(gold);
 }
 
 /** The book layer's keyless half, before the gate: the served view of the

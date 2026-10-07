@@ -11,10 +11,11 @@
 // version 1 and an id the gold files do not carry; a gold id with no vector is
 // left for `npm run demo:build` to embed.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { loadGold } from '../src/evaluate.js';
+import { config } from '../demo/config.js';
 import { queryContentHash, QUERY_VECTORS_PATH, writeQueryVectors } from '../demo/query-vectors.js';
 
 const GOLD_FILES = ['demo/gold.yaml', 'demo/gold.synthetic.yaml', 'demo/gold.book.yaml'];
@@ -33,21 +34,22 @@ function main(): void {
   if (typeof file.model !== 'string' || typeof file.dimensions !== 'number' || !Array.isArray(file.queries)) {
     throw new Error(`${path} is not a query-vectors file.`);
   }
+  // The text as the build embeds it: `{{author}}` substituted with the demo's
+  // configured author, exactly as goldForBuild does. A gold file that does not
+  // exist yet is skipped; one that exists and fails to load throws its own
+  // message, so a malformed file is never mistaken for an absent one.
   const text = new Map<string, string>();
   for (const gold of GOLD_FILES) {
-    let queries;
-    try {
-      queries = loadGold(gold, '');
-    } catch {
-      continue; // a gold file that does not exist yet
+    if (!existsSync(gold)) continue;
+    for (const q of loadGold(gold, config.authorName)) {
+      if (text.has(q.id)) throw new Error(`gold id '${q.id}' appears in more than one demo gold file; ids are unique across them.`);
+      text.set(q.id, q.query);
     }
-    for (const q of queries) text.set(q.id, q.query);
   }
   const stamped = file.queries.map((q) => {
     if (typeof q.id !== 'string' || !Array.isArray(q.vector)) throw new Error(`${path}: malformed entry.`);
     const query = text.get(q.id);
     if (query === undefined) throw new Error(`${path}: '${q.id}' is not in any gold file; remove it or restore the query.`);
-    if (query.includes('{{author}}')) throw new Error(`${path}: '${q.id}' uses {{author}}; stamp from the substituted text instead.`);
     return { id: q.id, vector: q.vector as number[], contentHash: queryContentHash(query) };
   });
   writeQueryVectors(file.model, file.dimensions, stamped, path);
