@@ -86,7 +86,7 @@ Commit all three after checking `git status` and `git diff --stat` for unrelated
 
 ## 6. The book layer: a private entity served as gists
 
-The layer is optional by presence: until `demo/corpus/private-books/` exists the build skips it, `--natural+book` says it is not built, and the tests that read it skip. Adding it does not touch a Smith vector or the headline (vectors are reused by content hash; the book is unioned only under its flag).
+The layer is optional by presence: until `demo/corpus/private-books/` exists the build skips it, `--natural+book` says it is not built, and the tests that read it skip. Once its artifacts exist, a checkout without the directory is refused by the build rather than built around (the index would go stale and the gists would be cleared); restore the directory, or delete `index.book.json` and the book's entries in `projections.json` deliberately. A stored gist whose fragment no source produces (a dropped or renamed chapter) is refused the same way, by id. Adding it does not touch a Smith vector or the headline (vectors are reused by content hash; the book is unioned only under its flag).
 
 1. Fetch Project Gutenberg #55 (*The Wonderful Wizard of Oz*) as plain text (`55-0.txt`) from gutenberg.org. Keep the raw file outside the repo.
 2. Prepare the book file, chapters only:
