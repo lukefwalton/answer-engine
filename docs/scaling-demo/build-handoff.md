@@ -67,7 +67,7 @@ Suggested first spire note: `syn-amos-justice-margin` — a fabricated George no
 `npm run demo:build` (added in `package.json`) reads the corpus through the reused `buildCorpus` / `buildPrivateNotes`, embeds with the configured model, embeds the gold queries, and writes:
 - `demo/corpus/index.json` — natural FP vectors (records + real private notes). The headline source of truth; committed.
 - `demo/corpus/index.synthetic.json` — the spire delta (synthetic notes only), unioned under `--natural+synthetic`.
-- `demo/corpus/query-vectors.json` — the gold-query vectors that make `demo:run` keyless.
+- `demo/corpus/query-vectors.json` — the gold-query vectors that make `demo:run` keyless. Each entry carries the hash of the query text it was embedded from: a gold query edited under the same id is re-embedded by the next build, and `demo:run` refuses to judge a stale one until then.
 
 Commit all three after checking `git status` and `git diff --stat` for unrelated artifacts or secrets. They derive from public-domain text, so committing them exposes nothing private (manifest §2); do not generalize that to private corpora.
 

@@ -37,7 +37,7 @@ import { readProjections, writeProjections } from '../src/ingest/projections.js'
 import { assertHomogeneousEntries, INDEX_SCHEMA_VERSION, readIndex, writeIndex } from '../src/store.js';
 import type { FragmentEntry, IndexFile } from '../src/store.js';
 import type { ArchiveConfig } from '../src/types.js';
-import { readQueryVectors, writeQueryVectors } from './query-vectors.js';
+import { queryContentHash, readQueryVectors, writeQueryVectors } from './query-vectors.js';
 
 export interface Source {
   entity: Entity;
@@ -274,10 +274,18 @@ export async function buildDemo(options: DemoBuildOptions): Promise<DemoBuildSum
     book: planLayer(sources.book, previousEntries(paths.book), model, drafts.projections),
   };
 
-  // Gold queries: reuse committed vectors by id under the same model.
+  // Gold queries: reuse a committed vector only when it was embedded from the
+  // text the gold file carries now, under the same model. An id whose text
+  // was edited is re-embedded, so the gate never judges a stale embedding.
   const gold = goldForBuild(paths, sources, config.authorName);
   const previousQueries = readQueryVectors(paths.queryVectors);
-  const reusableQueries = previousQueries && previousQueries.model === model ? previousQueries.byId : new Map<string, number[]>();
+  const reusableQueries = new Map<string, number[]>();
+  if (previousQueries && previousQueries.model === model) {
+    for (const g of gold) {
+      const vector = previousQueries.byId.get(g.id);
+      if (vector && previousQueries.hashes.get(g.id) === queryContentHash(g.query)) reusableQueries.set(g.id, vector);
+    }
+  }
   const queryJobs: EmbedRequest[] = gold.filter((g) => !reusableQueries.has(g.id)).map((g) => ({ id: `query:${g.id}`, text: g.query }));
 
   const jobs: EmbedRequest[] = [
@@ -287,7 +295,7 @@ export async function buildDemo(options: DemoBuildOptions): Promise<DemoBuildSum
     ...queryJobs,
   ];
   const reusedCount = plans.natural.reused.length + plans.spire.reused.length + plans.book.reused.length;
-  log(`Embedding ${jobs.length} new/changed (${queryJobs.length} gold queries), ${reusedCount + reusableQueries.size} unchanged`);
+  log(`Embedding ${jobs.length} new/changed (${queryJobs.length} gold queries new or edited), ${reusedCount + reusableQueries.size} unchanged`);
   const vectors = jobs.length > 0 ? await options.embed(jobs) : new Map<string, number[]>();
 
   const files: string[] = [];
@@ -318,7 +326,7 @@ export async function buildDemo(options: DemoBuildOptions): Promise<DemoBuildSum
   const queryVectors = gold.map((g) => {
     const vector = reusableQueries.get(g.id) ?? vectors.get(`query:${g.id}`);
     if (!vector) throw new Error(`no embedding returned for gold query '${g.id}'; refusing to write partial query vectors.`);
-    return { id: g.id, vector };
+    return { id: g.id, vector, contentHash: queryContentHash(g.query) };
   });
   const dims = queryVectors[0]?.vector.length ?? natural.entries[0]?.dimensions ?? 0;
   writeQueryVectors(model, dims, queryVectors, paths.queryVectors);

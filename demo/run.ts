@@ -22,7 +22,7 @@ import type { RetrievalIndex } from '../src/retrieve.js';
 import { readIndex, toServedIndex, validateServedIndex } from '../src/store.js';
 import type { IndexFile } from '../src/store.js';
 import { requantizeIndex, runGate } from './harness.js';
-import { readQueryVectors } from './query-vectors.js';
+import { queryContentHash, readQueryVectors } from './query-vectors.js';
 
 const NATURAL_INDEX = resolve('demo/corpus/index.json');
 const SYNTHETIC_INDEX = resolve('demo/corpus/index.synthetic.json');
@@ -176,6 +176,16 @@ async function main(): Promise<void> {
     throw new Error(
       `query vectors (${qv.model}/${qv.dimensions}) do not match the index ` +
         `(${index.model}/${index.dimensions}); rebuild both with demo:build.`,
+    );
+  }
+  // A vector must be the embedding of the gold text in tree: a query edited
+  // under the same id, or one with no vector yet, is refused by id rather than
+  // judged against a stale embedding.
+  const stale = gold.filter((g) => qv.hashes.get(g.id) !== queryContentHash(g.query)).map((g) => g.id);
+  if (stale.length > 0) {
+    throw new Error(
+      `committed query vectors are missing or were embedded from other text for: ${stale.join(', ')}. ` +
+        'The gate would judge a stale embedding; rebuild with `npm run demo:build`.',
     );
   }
 

@@ -6,7 +6,7 @@ import { embedStringFor } from '../src/embed-string.js';
 import { loadGold } from '../src/evaluate.js';
 import { readIndex } from '../src/store.js';
 import { contentHash } from './build-lib.js';
-import { readQueryVectors } from './query-vectors.js';
+import { queryContentHash, readQueryVectors } from './query-vectors.js';
 
 const NATURAL = 'demo/corpus/index.json';
 const SYNTHETIC = 'demo/corpus/index.synthetic.json';
@@ -82,4 +82,10 @@ test('committed demo query vectors match the gold suite ids', () => {
   assert.ok(queryVectors);
 
   assert.deepEqual([...queryVectors.byId.keys()].sort(), gold.map((g) => g.id).sort());
+  // And each vector is the embedding of the query text in tree: an edit to a
+  // gold query under the same id fails here, keylessly, until demo:build
+  // re-embeds it (demo:run refuses the same way).
+  for (const g of gold) {
+    assert.equal(queryVectors.hashes.get(g.id), queryContentHash(g.query), `query vector for '${g.id}' was embedded from other text`);
+  }
 });

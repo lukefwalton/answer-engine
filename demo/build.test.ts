@@ -237,18 +237,26 @@ test('demo build: an edited essay re-embeds that fragment alone; a new gold quer
   const qvBefore = readQueryVectors(f.paths.queryVectors)!;
 
   writeFileSync(join(f.root, 'public', 'essays', 'one.md'), `---\ntitle: On Harbours\nsummary: The quay as a ledger.\nthemes: [harbours]\n---\n${ESSAY_ONE} A second paragraph, added later.\n`);
+  // One new query, and one existing query whose text was edited under its id.
   writeFileSync(
     join(f.root, 'gold.yaml'),
-    readFileSync(join(f.root, 'gold.yaml'), 'utf8') + '  - id: essay-two\n    query: What does the second essay say about knots?\n    expectAnswerMode: partial\n    expectSources: [essay:two]\n',
+    readFileSync(join(f.root, 'gold.yaml'), 'utf8').replace('How should tensor kernels be scheduled?', 'How should GPU kernels be scheduled?') +
+      '  - id: essay-two\n    query: What does the second essay say about knots?\n    expectAnswerMode: partial\n    expectSources: [essay:two]\n',
   );
   const embed = fakeEmbedder();
   const summary = await build(f, embed, scriptedDrafter(gists));
-  assert.deepEqual(embed.calls, [['essay:one#whole', 'query:essay-two']]);
-  assert.deepEqual(summary.embedded, { natural: 1, spire: 0, book: 0, queries: 1 });
+  assert.deepEqual(embed.calls, [['essay:one#whole', 'query:refuse', 'query:essay-two']]);
+  assert.deepEqual(summary.embedded, { natural: 1, spire: 0, book: 0, queries: 2 });
 
-  // The untouched vectors are the committed ones, byte for byte.
+  // The untouched vectors are the committed ones, byte for byte; the edited
+  // query's vector and hash moved with its text.
   const qvAfter = readQueryVectors(f.paths.queryVectors)!;
-  for (const id of qvBefore.byId.keys()) assert.deepEqual(qvAfter.byId.get(id), qvBefore.byId.get(id));
+  for (const id of ['essay-one', 'syn-route', 'book-ch1']) {
+    assert.deepEqual(qvAfter.byId.get(id), qvBefore.byId.get(id));
+    assert.equal(qvAfter.hashes.get(id), qvBefore.hashes.get(id));
+  }
+  assert.notDeepEqual(qvAfter.byId.get('refuse'), qvBefore.byId.get('refuse'));
+  assert.notEqual(qvAfter.hashes.get('refuse'), qvBefore.hashes.get('refuse'));
   assert.ok(qvAfter.byId.has('essay-two'));
   const natural = readIndex(f.paths.natural);
   assert.equal(natural.entries.find((e) => e.fragment.id === 'essay:two#whole')!.contentHash, natural.entries.find((e) => e.fragment.id === 'essay:two#whole')!.contentHash);

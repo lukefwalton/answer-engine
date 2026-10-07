@@ -205,15 +205,19 @@ npm trusts this repository's `release.yml`.
   schema-4 pipeline through `demo/build-lib.ts` (adapters, `collectEntities`,
   gist drafting into `demo/corpus/projections.json`, policy resolution, vectors
   reused by content hash so a Smith is never re-embedded, gold-query vectors
-  reused by id), and the tests run the same functions keyless with a fake
+  reused by id and by a hash of the query text, so an edited query is
+  re-embedded and `demo:run` refuses a stale one), and the tests run the same functions keyless with a fake
   embedder and a scripted drafter (`demo/build.test.ts`). The runner checks the
   layer's served view and sweeps every released gist against the canaries in
   `demo/gold.book.yaml` before the gate; `demo/book.test.ts` holds the committed
   layer to one fragment per chapter, every chapter served as a gist, and a
   clean sweep (skipped until the keyed build has run).
   `scripts/prepare-gutenberg-book.mjs` turns the Gutenberg text into the book
-  file without rewriting a word. The headline (`--natural`) does not include
-  the book and is unchanged.
+  file without rewriting a word. `demo/corpus/query-vectors.json` is schema 2
+  (a text hash per entry); the committed file was stamped keylessly by
+  `scripts/stamp-query-vectors.ts` from the gold text in tree, which had not
+  changed since the vectors were written, and no vector changed. The headline
+  (`--natural`) does not include the book and is unchanged.
 
 ### Removed
 
