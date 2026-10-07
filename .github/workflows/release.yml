@@ -31,7 +31,7 @@ concurrency:
 
 permissions:
   contents: write
-  # npm provenance. Publishing authenticates with the NPM_TOKEN secret.
+  # npm trusted publishing. The package trusts this workflow file.
   id-token: write
 
 jobs:
@@ -47,6 +47,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          registry-url: https://registry.npmjs.org
 
       - name: Require main
         run: |
@@ -126,17 +127,10 @@ jobs:
             Archived on Zenodo after publish. Cite the [concept DOI](https://doi.org/10.5281/zenodo.20676773) for latest, or this release's version DOI to pin the snapshot. Published to npm as `@lukefwalton/answer-engine@${{ steps.version.outputs.next }}`.
           generate_release_notes: true
 
-      # Pre-releases publish under the `next` dist-tag so `npm install
-      # @lukefwalton/answer-engine` keeps resolving to the latest release.
+      # Pre-releases publish under the `next` dist-tag. Auth is the trusted
+      # publisher for this workflow file, not a token in the environment.
       - name: Publish to npm
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          if [ -z "$NPM_TOKEN" ]; then
-            echo "NPM_TOKEN secret is not set."
-            exit 1
-          fi
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
           tag=latest
           if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then tag=next; fi
           npm publish --provenance --access public --tag "$tag"

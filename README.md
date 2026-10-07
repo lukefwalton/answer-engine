@@ -394,17 +394,12 @@ and `.zenodo.json` both use the concept DOI for citation; Zenodo assigns a
 version DOI per release on its own. `v3.0.0-alpha.1` is that release on GitHub,
 on Zenodo (the concept DOI resolves to it), and on npm.
 
-The workflow then publishes to npm with provenance, under `next` for a
-pre-release and `latest` otherwise, using the `NPM_TOKEN` secret. That step
-fails from Actions. npm requires a security-key approval for the publish, and
-it will not enable two-factor bypass on the granular token in `NPM_TOKEN`.
-`3.0.0-alpha.1` was published from a logged-in CLI after that approval. Before
-the next release, trust GitHub Actions on the package for repository
-`lukefwalton/answer-engine` and workflow filename `release.yml`, with npm
-publish allowed, and publish with that trust. Then revoke the granular token.
-Do not dispatch **Actions → publish** or re-run **Actions → release** to retry
-this version: the publish workflow uploads the version already on npm, and a
-release rerun bumps semver.
+The workflow then publishes to npm with provenance. A pre-release goes under
+`next`, and a final release goes under `latest`. npm trusts GitHub Actions for
+this repository's `release.yml`, so the workflow publishes with GitHub's
+identity. `3.0.0-alpha.1` was the first publish: it set both `latest` and
+`next`, and it was uploaded from a logged-in CLI. Do not re-run **Actions →
+release** to publish that version again. A rerun bumps semver.
 If the workflow pushes refs but GitHub release creation fails, create the release
 manually from the existing tag in the GitHub UI — **do not re-run** this workflow:
 a rerun would bump semver again (e.g. skip `v1.4.0` and cut `v1.4.1`) because
