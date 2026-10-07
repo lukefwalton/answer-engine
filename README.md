@@ -395,10 +395,16 @@ the GitHub URL).
 | Code | [github.com/lukefwalton/answer-engine](https://github.com/lukefwalton/answer-engine) |
 | About | [lukefwalton.com/ask/about/](https://lukefwalton.com/ask/about/) |
 
-**Artifact note:** cite [10.5281/zenodo.20710897](https://doi.org/10.5281/zenodo.20710897)
-for v1.2 of the formal write-up ([`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md)).
-Its concept DOI, [10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053),
-is separate from the software archive above and resolves to the latest version.
+**Software paper:** [`paper.md`](./paper.md) (references in [`paper.bib`](./paper.bib))
+describes the v3 substrate: the disclosure-typed contract, its design, and its
+evaluation. It is written in the Journal of Open Source Software form and is not yet
+submitted; until it has a venue, cite the software DOI above.
+
+**Technical note:** cite [10.5281/zenodo.20710897](https://doi.org/10.5281/zenodo.20710897)
+for v1.2 of the earlier technical note on the v1 engine
+([`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md)). Its concept DOI,
+[10.5281/zenodo.20686053](https://doi.org/10.5281/zenodo.20686053), is separate from
+the software archive above and resolves to the latest version.
 
 To pin a specific archived snapshot, pick that release's version DOI on the
 [Zenodo versions page](https://zenodo.org/records/20676773) — no README update
@@ -442,7 +448,8 @@ the latest tag already advanced.
 
 ## Related writing
 
-Formal description of this implementation:
+The software paper for the v3 substrate: [`paper.md`](./paper.md). The earlier
+technical note on the v1 engine:
 [`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md) —
 [DOI](https://doi.org/10.5281/zenodo.20710897) (CC BY-NC-ND 4.0).
 
