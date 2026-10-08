@@ -1,6 +1,6 @@
 {
   "name": "@lukefwalton/answer-engine",
-  "version": "3.0.0-alpha.1",
+  "version": "3.0.0",
   "type": "module",
   "description": "A retrieval substrate for a personal archive: every fragment carries a disclosure policy, hits carry provenance, and the only object a consumer hands to a model or a caller cannot hold more than that policy allows. Clone and run the teaching commands, or import it.",
   "license": "Apache-2.0",
