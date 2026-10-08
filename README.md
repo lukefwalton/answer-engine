@@ -450,8 +450,8 @@ and smoke-imports the package, bumps semver via
 pushes `main` and the new tag atomically, and creates the GitHub release Zenodo
 archives (pre-releases are marked as such). `CITATION.cff`
 and `.zenodo.json` both use the concept DOI for citation; Zenodo assigns a
-version DOI per release on its own. `v3.0.0-alpha.1` is that release on GitHub,
-on Zenodo (the concept DOI resolves to it), and on npm.
+version DOI per release on its own. Each release is one object on GitHub, on
+Zenodo (the concept DOI resolves to the latest), and on npm.
 
 The workflow then publishes to npm with provenance. A pre-release goes under
 `next`, and a final release goes under `latest`. npm trusts GitHub Actions for
