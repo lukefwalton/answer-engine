@@ -5,11 +5,22 @@ All notable changes to this repository are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Releases are cut by the `release`
 workflow and archived on Zenodo under the concept DOI
 [10.5281/zenodo.20676773](https://doi.org/10.5281/zenodo.20676773).
-`@lukefwalton/answer-engine@3.0.0-alpha.1` is published on npm, with both
-`latest` and `next` pointing at it. Later releases publish from Actions.
-npm trusts this repository's `release.yml`.
+Releases publish to npm from Actions; npm trusts this repository's
+`release.yml`.
 
 ## [Unreleased]
+
+## [3.0.0] - 2026-10-08
+
+The archive substrate. One retrieval contract under two consumers: a
+question-answering product that cites or refuses, and a retrieval-only
+endpoint (`GET /api/archive/search`, MCP) whose caller brings its own model.
+Every fragment carries a disclosure policy resolved before any query; the only
+object a consumer may hand to a model or a caller is a hit whose type cannot
+hold more than that policy allows. Since 8 October 2026 this is the retrieval
+under Ask the Archive (lukefwalton.com/ask), with an unpublished novel served
+as a private entity. `paper.md` describes it. Everything below landed between
+2.1.0 and this release; `3.0.0-alpha.1` (5 October 2026) was the first publish.
 
 ### Added
 
@@ -21,9 +32,9 @@ npm trusts this repository's `release.yml`.
   system-generated, author-authorized semantic projections with a build-time
   lint; provenance (date, version, creators, identifiers, locators) on every
   hit; a pluggable retrieval core; and the wire contract `archive-search/1`
-  for a retrieval-only consumer. Documentation only: nothing in it is
-  implemented, and the 2.x code and the gold suite's semantics remain the
-  source of truth until 3.0.0 ships.
+  for a retrieval-only consumer. It landed as documentation first; the
+  implementation followed in the steps below, and the gold suite's semantics
+  gated each one.
 - This changelog.
 - Step 1 of 3.0.0 (additive; no 2.x behaviour changes): `src/contract.ts` with the
   contract types; `assertSemanticProjection` and the `LintedGist` brand in

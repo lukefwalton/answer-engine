@@ -42,9 +42,9 @@ teaching commands (`npm install`, `npm run …`) on the bundled example corpus;
 or, from 3.0.0, import it (`@lukefwalton/answer-engine`) as the substrate
 under your own consumer: a question-answering product, or a retrieval-only
 endpoint whose caller brings its own model. The published package is
-[`@lukefwalton/answer-engine@3.0.0-alpha.1`](https://www.npmjs.com/package/@lukefwalton/answer-engine).
-`npm install @lukefwalton/answer-engine` installs that alpha: the first
-publish set both the `latest` and `next` dist-tags to it. It is deliberately not a
+[`@lukefwalton/answer-engine`](https://www.npmjs.com/package/@lukefwalton/answer-engine);
+`npm install @lukefwalton/answer-engine` installs the latest release
+(`CHANGELOG.md` names it). It is deliberately not a
 framework, hosted app, chatbot UI, or vector-database starter. It is the
 smallest useful version of the answer contract: what may travel from each
 piece of an archive, what must stay behind, how citations are grounded, and
@@ -450,8 +450,8 @@ and smoke-imports the package, bumps semver via
 pushes `main` and the new tag atomically, and creates the GitHub release Zenodo
 archives (pre-releases are marked as such). `CITATION.cff`
 and `.zenodo.json` both use the concept DOI for citation; Zenodo assigns a
-version DOI per release on its own. `v3.0.0-alpha.1` is that release on GitHub,
-on Zenodo (the concept DOI resolves to it), and on npm.
+version DOI per release on its own. Each release is one object on GitHub, on
+Zenodo (the concept DOI resolves to the latest), and on npm.
 
 The workflow then publishes to npm with provenance. A pre-release goes under
 `next`, and a final release goes under `latest`. npm trusts GitHub Actions for
