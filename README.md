@@ -42,9 +42,9 @@ teaching commands (`npm install`, `npm run …`) on the bundled example corpus;
 or, from 3.0.0, import it (`@lukefwalton/answer-engine`) as the substrate
 under your own consumer: a question-answering product, or a retrieval-only
 endpoint whose caller brings its own model. The published package is
-[`@lukefwalton/answer-engine@3.0.0-alpha.1`](https://www.npmjs.com/package/@lukefwalton/answer-engine).
-`npm install @lukefwalton/answer-engine` installs that alpha: the first
-publish set both the `latest` and `next` dist-tags to it. It is deliberately not a
+[`@lukefwalton/answer-engine`](https://www.npmjs.com/package/@lukefwalton/answer-engine);
+`npm install @lukefwalton/answer-engine` installs the latest release
+(`CHANGELOG.md` names it). It is deliberately not a
 framework, hosted app, chatbot UI, or vector-database starter. It is the
 smallest useful version of the answer contract: what may travel from each
 piece of an archive, what must stay behind, how citations are grounded, and
