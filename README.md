@@ -453,12 +453,12 @@ technical note on the v1 engine:
 [`docs/ARTIFACT-NOTE-v1.2.md`](./docs/ARTIFACT-NOTE-v1.2.md) —
 [DOI](https://doi.org/10.5281/zenodo.20710897) (CC BY-NC-ND 4.0).
 
-This repo is a practical companion to the Answerability papers:
+This repo is a practical companion to the Answerability papers. The first three are preprints:
 
-- [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/) — [DOI](https://doi.org/10.5281/zenodo.20622946)
-- [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/) — [DOI](https://doi.org/10.5281/zenodo.20676328)
-- [The Invariant of Answerability](https://lukefwalton.com/writing/the-invariant-of-answerability/) — [DOI](https://doi.org/10.5281/zenodo.20606493)
-- [Building Answerable AI: Why Automation Needs Owned Error](https://lukefwalton.com/writing/building-answerable-ai/) — [DOI](https://doi.org/10.5281/zenodo.20682307)
+- [The Decision No One Authored](https://lukefwalton.com/writing/the-decision-no-one-authored/) — [DOI](https://doi.org/10.5281/zenodo.20614374)
+- [The Captured Oracle](https://lukefwalton.com/writing/the-captured-oracle/) — [DOI](https://doi.org/10.5281/zenodo.20676327)
+- [Pay Me What You Owe Me: On the Indefeasibility of the Demand for an Account](https://lukefwalton.com/writing/pay-me-what-you-owe-me/) — [DOI](https://doi.org/10.5281/zenodo.23112498)
+- [Building Answerable AI: Why Automation Needs Owned Error](https://doi.org/10.5281/zenodo.20682306) — working paper
 
 ## Licenses
 
