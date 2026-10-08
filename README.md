@@ -18,6 +18,18 @@ Question in, cited answer or honest refusal out. A chatbot that's right most
 of the time speaks *for* you; an answer engine that cites or declines speaks
 *from* you.
 
+**The premise.** The archive has an owner, and the owner is the author. What
+enters the archive, how much of each piece may travel, and when the system
+declines are the author's decisions, made before any question arrives. The
+engine's job is to keep those decisions in force at the one place a language
+model would dissolve them: where the model's capacity to produce a plausible
+answer gets mistaken for the authority to give it. The model's competence is
+deliberately greater than its permission. "Who decides what belongs in the
+archive?" is therefore not an open question here; the author does, by
+premise. The question the code answers is whether software can hold the line
+between what an author has authorized and what can plausibly be inferred from
+their work.
+
 This repo is the teaching-sized version of the engine behind "Ask the
 Archive" on [lukefwalton.com](https://lukefwalton.com). It runs out of the
 box on a bundled example corpus (by "Person A" — a placeholder, not a
@@ -156,6 +168,15 @@ Finally, `assertCitationsGroundedInEvidence` verifies every citation is the
 exact (id, url) pair of something actually retrieved. An invented source is
 an error, not a footnote.
 
+**What a refusal means.** `not-found` says the archive authorized no answer:
+nothing retrieved cleared the floor, or nothing that cleared it bears on the
+question. It does not say the question is unanswerable,
+that no evidence exists anywhere, or that the author has no view.
+`related-material` is the case where evidence exists and may only be pointed
+to. A refusal here is a disciplined non-assertion, not a claim to know the
+limits of one's own knowledge, and a reader is meant to trust it as the
+former.
+
 One mode gets a fourth layer. A `related-material` answer's prose is not the
 model's: after grounding, the engine replaces it with a fixed sentence
 rendered from the cited hints' label and locator
@@ -197,7 +218,15 @@ archive, one named author, a bounded corpus. The mechanisms don't depend on
 that smallness (none of them refers to corpus size), but a small demo can't
 prove that holding these boundaries stays affordable at public, plural, or
 contested scale. This repo is the bounded case on purpose, not a proof about
-the unbounded one.
+the unbounded one. Nor is it an open question here who decides what the
+archive holds and what may travel: the author does, by premise. The question
+the code settles is whether those decisions survive contact with a model that
+could infer past them.
+
+The guarantee is about what reaches the model and the wire, not about custody:
+private text already leaves for the embedding provider at ingest, and for the
+gist model when that feature is on ([`SECURITY.md`](./SECURITY.md),
+[`docs/CONTRACT.md`](./docs/CONTRACT.md)).
 
 The limit is narrower than it looks, though. What the engine guarantees is
 **soundness**: nothing enters an answer that isn't grounded in retrieved
